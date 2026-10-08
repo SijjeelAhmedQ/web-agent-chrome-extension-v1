@@ -14,6 +14,16 @@ export interface PromptContext {
  * The agent's operating instructions. Website-independent: everything it knows about a
  * particular site comes from reading the page (or from skills the user wrote).
  */
+/** “Coming days: Fri Oct 9, Sat Oct 10 …” — so relative dates (“next Tuesday”) resolve without arithmetic. */
+export function upcomingDays(now: Date, days = 14): string {
+  const list: string[] = [];
+  for (let i = 1; i <= days; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+    list.push(d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }));
+  }
+  return `Coming days: ${list.join('; ')}.`;
+}
+
 export function buildSystemPrompt(ctx: PromptContext): string {
   const { agent } = ctx;
   const has = (t: string) => ctx.toolNames.includes(t);
@@ -61,7 +71,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
 
   lines.push('', '## Context');
   const now = ctx.now ?? new Date();
-  lines.push(`- Today is ${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.`);
+  lines.push(`- Today is ${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}. ${upcomingDays(now)}`);
   lines.push(`- Current tab: “${ctx.page.title || 'untitled'}” — ${ctx.page.url || 'no page'}`);
   if (ctx.page.note) lines.push(`- ${ctx.page.note}`);
   if (ctx.readOnly) lines.push('- The user has set this site to read-only: you may read and navigate, but not click, type or change anything here.');

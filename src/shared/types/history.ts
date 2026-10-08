@@ -35,4 +35,6 @@ export interface TaskRecord {
   /** Technical detail — shown only in the developer view. */
   errorDetail?: string;
   steps: StepRecord[];
+  /** Set on a team member's task: the team task it belongs to. */
+  parentId?: string;
 }

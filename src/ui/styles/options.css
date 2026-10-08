@@ -1377,3 +1377,11 @@ textarea.mono-area {
 .test-banner span {
   min-width: 0;
 }
+
+.menu-two-line {
+  display: flex;
+  flex-direction: column;
+  max-width: 280px;
+  white-space: normal;
+  line-height: 1.35;
+}

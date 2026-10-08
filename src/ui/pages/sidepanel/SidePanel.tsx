@@ -107,6 +107,7 @@ export function SidePanel() {
                   key={t.id}
                   turn={t}
                   agent={agents.find((a) => a.id === t.agentId)}
+                  agents={agents}
                   showAgent={multiAgent}
                   developer={settings.developerMode}
                   expandActivity={settings.expandActivity}

@@ -1,4 +1,5 @@
 import { BrowserController, PageError, scriptableReason } from '@/extension/browser/controller';
+import type { ForegroundLock } from '@/extension/browser/foreground';
 import { BUILT_IN_TOOL_IDS } from '@/shared/constants/tools';
 import { upsertTask } from '@/shared/storage/historyStore';
 import type { AgentConfig, AppConfig, ProviderConfig } from '@/shared/types/config';
@@ -25,6 +26,10 @@ export interface RunOptions {
   /** Earlier turns of this conversation (user requests and final answers). */
   history: ChatMessage[];
   onEvent: (event: RunEvent) => void;
+  /** Team member runs share the window: browser actions take turns in front (see ForegroundLock). */
+  foreground?: ForegroundLock;
+  /** The team task this run belongs to. */
+  parentId?: string;
 }
 
 export function resolveProvider(agent: AgentConfig, config: AppConfig): { provider: ProviderConfig; model: string } {
@@ -109,6 +114,7 @@ export class AgentRun {
       status: 'running',
       startedAt: Date.now(),
       steps: [],
+      ...(this.options.parentId ? { parentId: this.options.parentId } : {}),
     };
     this.emit({ type: 'task', task: this.task });
     this.persist(true);
@@ -271,7 +277,7 @@ export class AgentRun {
         return blocked.output;
       }
 
-      const approvalNeeded = await this.needsApproval(tool, args, ctx, step.label);
+      const approvalNeeded = await this.inFront(ctx, () => this.needsApproval(tool, args, ctx, step.label));
       if (approvalNeeded) {
         const site = siteOf((await ctx.browser.currentTab().catch(() => null))?.url) || 'this site';
         step = { ...step, status: 'waiting' };
@@ -286,7 +292,7 @@ export class AgentRun {
         this.upsertStep(step);
       }
 
-      const outcome = await tool.execute(args, ctx);
+      const outcome = await this.inFront(ctx, () => tool.execute(args, ctx));
       finish({ status: 'done', note: outcome.note, ...(dev ? { result: clip(outcome.output, 4000) } : {}) });
       return outcome.output;
     } catch (err) {
@@ -301,6 +307,12 @@ export class AgentRun {
       finish({ status: 'failed', note: 'Didn’t work — trying another way', ...(dev ? { error: e.detail ?? e.message } : {}) });
       return `Error: ${e.detail ?? e.userMessage}`;
     }
+  }
+
+  /** Runs browser work with this run's tab in front when sharing the window with other agents. */
+  private inFront<T>(ctx: ToolContext, fn: () => Promise<T>): Promise<T> {
+    const lock = this.options.foreground;
+    return lock ? lock.run(ctx.browser.currentTabId, fn, this.abort.signal) : fn();
   }
 
   private async sitePolicy(tool: AgentTool<any>, args: Record<string, unknown>, ctx: ToolContext): Promise<{ output: string; note: string } | null> {

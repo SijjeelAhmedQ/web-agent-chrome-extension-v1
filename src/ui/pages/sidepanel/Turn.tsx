@@ -8,11 +8,13 @@ import { ActivityCard } from '../../components/Activity';
 import { ApprovalCard } from '../../components/ApprovalCard';
 import { AgentAvatar } from '../../components/Brand';
 import { Markdown } from '../../components/Markdown';
+import { TeamBoard } from '../../components/TeamBoard';
 import { openConfiguration } from '../../utils/navigation';
 
 interface Props {
   turn: Turn;
   agent: AgentConfig | undefined;
+  agents: AgentConfig[];
   showAgent: boolean;
   developer: boolean;
   expandActivity: boolean;
@@ -42,7 +44,7 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-export const TurnView = memo(function TurnView({ turn, agent, showAgent, developer, expandActivity, isLast, onRespond, onRetry }: Props) {
+export const TurnView = memo(function TurnView({ turn, agent, agents, showAgent, developer, expandActivity, isLast, onRespond, onRetry }: Props) {
   const task = turn.task;
   const status = task?.status ?? 'running';
   const code = (task?.errorCode ?? 'unknown') as ErrorCode;
@@ -64,6 +66,8 @@ export const TurnView = memo(function TurnView({ turn, agent, showAgent, develop
         <ActivityCard task={task} thinking={turn.thinking} developer={developer} defaultExpanded={expandActivity} />
 
         {turn.approval && <ApprovalCard prompt={turn.approval} onRespond={(ok) => onRespond(turn.approval!.id, ok)} />}
+
+        {turn.members && turn.members.length > 0 && <TeamBoard members={turn.members} agents={agents} developer={developer} onRespond={onRespond} />}
 
         {status === 'done' && task?.result && (
           <div className="answer">

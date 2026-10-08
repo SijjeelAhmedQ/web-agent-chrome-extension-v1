@@ -13,7 +13,7 @@
   "side_panel": { "default_path": "sidepanel.html" },
   "options_ui": { "page": "options.html", "open_in_tab": true },
   "background": { "service_worker": "background.js", "type": "module" },
-  "permissions": ["sidePanel", "storage", "tabs", "scripting", "webNavigation", "declarativeNetRequestWithHostAccess"],
+  "permissions": ["sidePanel", "storage", "tabs", "tabGroups", "scripting", "webNavigation", "declarativeNetRequestWithHostAccess"],
   "host_permissions": ["<all_urls>"],
   "commands": {
     "open-panel": {

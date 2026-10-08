@@ -1,7 +1,8 @@
 import { App, Button, Dropdown } from 'antd';
-import { Copy, MoreHorizontal, Plus, Star, Trash2 } from 'lucide-react';
+import { ChevronDown, Copy, MoreHorizontal, Plus, Star, Stethoscope, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
 import { DEFAULT_AGENTS } from '@/shared/constants/defaults';
+import { careflowTeam } from '@/shared/constants/templates';
 import type { AgentConfig } from '@/shared/types/config';
 import { uid } from '@/shared/utils';
 import { useAppDispatch, useAppSelector } from '@/store';
@@ -34,6 +35,14 @@ export function AgentsPage() {
     });
   };
 
+  const addCareflowTeam = () => {
+    const kaggle = providers.find((p) => p.preset === 'kaggle');
+    const { skill, agents: members, coordinator } = careflowTeam(kaggle?.id ?? null);
+    dispatch(configActions.upsertSkill({ skill }));
+    for (const a of [...members, coordinator]) dispatch(configActions.upsertAgent(a));
+    message.success(`Added the CareFlow team: ${members.length} specialists and a coordinator${kaggle ? `, using ${kaggle.name}` : ''}`);
+  };
+
   const modelLabel = (a: AgentConfig) => {
     const p = providers.find((x) => x.id === a.providerId) ?? providers.find((x) => x.id === settings.defaultProviderId) ?? providers[0];
     if (!p) return 'No model connected';
@@ -46,9 +55,32 @@ export function AgentsPage() {
         title="Agents"
         description="Each agent has its own instructions, model, tools and skills. Pick one from the side panel."
         actions={
-          <Button type="primary" icon={<Plus size={16} />} onClick={create}>
-            New agent
-          </Button>
+          <Dropdown
+            trigger={['click']}
+            placement="bottomRight"
+            menu={{
+              items: [
+                { key: 'blank', icon: <Plus size={15} />, label: 'Blank agent' },
+                { type: 'divider' },
+                { type: 'group', label: 'Templates' },
+                {
+                  key: 'careflow',
+                  icon: <Stethoscope size={15} />,
+                  label: (
+                    <div className="menu-two-line">
+                      <span>CareFlow team</span>
+                      <span className="muted small">Medication, Diagnosis, Task, Recall and Appointment agents working at the same time</span>
+                    </div>
+                  ),
+                },
+              ],
+              onClick: ({ key }) => (key === 'careflow' ? addCareflowTeam() : create()),
+            }}
+          >
+            <Button type="primary" icon={<Plus size={16} />}>
+              New agent <ChevronDown size={14} />
+            </Button>
+          </Dropdown>
         }
       />
 
@@ -120,6 +152,12 @@ export function AgentsPage() {
               <p className="agent-card-desc">{a.description || 'No description'}</p>
               <div className="agent-card-meta">
                 {settings.defaultAgentId === a.id && <span className="pill success">Default</span>}
+                {a.team?.memberIds.length ? (
+                  <span className="pill success">
+                    <Users size={11} /> Team · {a.team.memberIds.length}
+                    {a.team.parallel ? ' at once' : ''}
+                  </span>
+                ) : null}
                 <span className="pill">{modelLabel(a)}</span>
                 <span className="pill">
                   {toolCount} tool{toolCount === 1 ? '' : 's'}

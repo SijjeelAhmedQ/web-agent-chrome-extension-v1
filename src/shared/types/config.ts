@@ -44,6 +44,19 @@ export interface AgentAvatar {
   color: string;
 }
 
+/**
+ * A team: this agent splits a request between its member agents instead of doing it alone.
+ * With `parallel`, every member works in its own tab at the same time.
+ */
+export interface TeamConfig {
+  memberIds: string[];
+  parallel: boolean;
+  /** How many members work at once (the model server must answer that many requests together). */
+  maxParallel: number;
+  /** When every member is done: close their tabs and reload the page the request came from. */
+  tidyUp: boolean;
+}
+
 export interface AgentConfig {
   id: string;
   name: string;
@@ -61,6 +74,8 @@ export interface AgentConfig {
   /** Built-in tool ids and custom tool ids (prefixed `custom:`). */
   toolIds: string[];
   skillIds: string[];
+  /** Set when this agent coordinates a team. */
+  team?: TeamConfig;
   createdAt: number;
   updatedAt: number;
 }

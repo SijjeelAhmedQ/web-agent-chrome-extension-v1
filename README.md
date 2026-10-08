@@ -16,6 +16,7 @@ A Chrome side-panel agent that reads and works any website for you: search, fill
 | **Generic browser tools** | `read_page`, `find_element`, `click`, `type`, `clear`, `select_option`, `scroll`, `press_key`, `wait`, `navigate`, `go_back`, `go_forward`, `list_tabs`, `open_tab`, `switch_tab`, `close_tab` |
 | **Page understanding** | A compact, semantic view of the page: interactive elements with stable ids, accessible names, values, states, table-row and dialog context, headings and visible text. The model never receives raw HTML. Open shadow roots and same-origin iframes are included. |
 | **Multiple agents** | Each agent has its own name, look, instructions, model, tools, skills, step limit and approval policy. Switch between them from the panel header. |
+| **Teams (multi-agent)** | A team agent splits a request between specialist agents, for example Medication, Diagnosis, Task, Recall and Appointment, and they work **at the same time**, each in its own tab. Their model calls overlap; clicks and typing take quick turns in front. Each member has its own live activity and approvals in the side panel, plus *Approve all*. The **CareFlow team** template sets up all of it in one click. |
 | **Skills** | Reusable instructions, either *always on* or *loaded when relevant* (the agent calls `load_skill`). A skill can be limited to certain sites, for example `localhost:5173` for CareFlow. |
 | **Custom tools** | Connect agents to your own HTTP endpoints (GET/POST, headers, typed parameters, optional approval). |
 | **Models** | Ollama (native API, with a configurable context window), the CareFlow bridge, the **Kaggle GPU notebook** (Qwen 3.5 9B, Ternary Bonsai 2 27B, MedGemma 4B), OpenRouter, OpenAI, Anthropic, LM Studio, llama.cpp, vLLM, or any OpenAI-compatible server. You can test a connection and load its list of models. Models that can't call tools (MedGemma) still work: the agent reads the page and answers. |
@@ -52,6 +53,35 @@ npm run build          # typecheck + build into dist/
 | Other local servers | LM Studio / llama.cpp / vLLM | The server must support tool calling (llama.cpp needs `--jinja`; vLLM needs `--enable-auto-tool-choice`). |
 
 Local servers usually reject requests coming from a `chrome-extension://` origin. The service worker installs a `declarativeNetRequest` rule that removes the `Origin` header from **this extension's own** requests to `localhost`, `127.0.0.1` and `0.0.0.0`, so Ollama needs no `OLLAMA_ORIGINS` setup.
+
+### Teams: agents working at the same time
+
+**Agents → New agent → CareFlow team** creates:
+- Five specialists: Medication, Diagnosis, Task, Recall and Appointment agents. Each knows only its own CareFlow form.
+- A **CareFlow PMS** skill limited to `localhost:5173`, with navigation, dropdowns and the date and time formats.
+- The **CareFlow team** coordinator, set to run every member at once (up to 5). If a Kaggle connection exists, all six use it.
+
+Pick **CareFlow team** in the side panel and send one request. For example:
+
+> Go to patients, select Tom Baker and add medication Metformin, Panadol, Gabapentin, Rituximab 500 mg twice daily for 30 days, add hypertension as a diagnosis, create a task for blood pressure monitoring, recall the patient for neck pain after two weeks, and schedule a follow-up appointment next Tuesday at 3 pm.
+
+How it runs:
+1. The coordinator's model splits the request into one self-contained task per member. Relative dates are written out exactly, e.g. "Tuesday, Oct 13, 2026 at 3:00 PM". Every prompt includes the next 14 days, so small models get them right.
+2. Each member opens its own tab, in a tab group, and does its part.
+3. Model calls run in parallel. Browser actions take turns with their tab in front, because Chrome freezes animations in background tabs and AntD dialogs and dropdowns depend on them.
+4. When all members finish, their tabs close, your page reloads to show the new records, and the panel shows a summary.
+
+Configure any team under **Agents → (agent) → Team**: members, *Run members at the same time*, *Parallel limit* and *Tidy up when done*. Set the parallel limit to what the model server can answer at once:
+
+| Model server | Parallel limit |
+|---|---|
+| Kaggle notebook, T4 ×2 | 5 (its `OLLAMA_NUM_PARALLEL`) |
+| Kaggle notebook, one T4 | 2 |
+| Local Ollama on a small GPU | 1–2 |
+
+With *Ask before important actions*, every Save asks for approval. *Approve all* clears several at once. For a trusted, repetitive workflow you can switch the specialists to *Don't ask*.
+
+Teams are safe for CareFlow because each record type has its own storage (`careflow.medications`, `careflow.diagnoses`, …). Give each record type to only one member, so two tabs never write the same list.
 
 ### Kaggle notebook (models and voice)
 
@@ -147,6 +177,7 @@ End-to-end checks were run in Chrome for Testing with the built extension, drivi
 
 - **Scripted model, local test site:** form filling (text, native select, custom ARIA combobox), approval before Save, search → navigation → back, picking the right table row, a `target=_blank` link opening a new tab, Stop, saved history, and Origin-header removal. All 10 checks pass.
 - **Qwen 3.5 4B on Ollama, test site:** filled and saved the full form, including the custom dropdown, with approval, in about 2 minutes. When the model skipped a required field, the browser's validation feedback led it to fill the field and save again, then confirm the success message.
+- **Teams, against a scripted model on a three-form test page:** the coordinator split the request between 3 members; each worked in its own tab; 3 model calls ran at once (the whole task took 29 s); all four records were saved with an approval for every Save; the summary listed each member; and the tabs were tidied up. All 9 checks pass.
 - **Kaggle GPU and voice, against a mock of the notebook's server API:** the Voice page lists the loaded engines; the fake microphone's audio is transcribed into the message box (Whisper, with the vocabulary); the key travels as `X-CareFlow-Key`; MedGemma reads the page and answers; and an unknown model that rejects tools falls back to read-and-answer. All 5 checks pass. The real notebook wasn't run here: it needs your Kaggle account.
 - **Qwen 3.5 4B on Ollama, CareFlow PMS:** signed in (with approval), opened Patients and listed the first three patients correctly. It also completed *Tom Baker → Medications → Add medication → Paracetamol, 500 mg, twice daily (AntD Select) → Save* (with approval), and the new record appeared in the list.
 

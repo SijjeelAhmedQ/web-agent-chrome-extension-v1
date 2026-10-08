@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { AgentRun } from '@/agent/runtime/agentRun';
+import type { RunEvent } from '@/agent/runtime/events';
+import { TeamRun, type TeamEvent } from '@/agent/runtime/teamRun';
 import { getItem, setItem } from '@/shared/storage/kv';
 import type { TaskRecord } from '@/shared/types/history';
 import { siteOf, uid } from '@/shared/utils';
@@ -18,7 +20,7 @@ const CHAT_KEY = 'wa.chat';
 export function useAgentRunner(tab: ActiveTab) {
   const dispatch = useAppDispatch();
   const store = useStore() as AppStore;
-  const runRef = useRef<AgentRun | null>(null);
+  const runRef = useRef<AgentRun | TeamRun | null>(null);
   const running = useAppSelector((s) => s.chat.running);
 
   // Restore this session's conversation, then keep saving it.
@@ -63,30 +65,33 @@ export function useAgentRunner(tab: ActiveTab) {
         return;
       }
 
-      const run = new AgentRun({
-        request: text,
-        agent,
-        config,
-        windowId: tab.windowId,
-        tabId: tab.id,
-        history: state.chat.memory,
-        onEvent: (event) => {
-          switch (event.type) {
-            case 'task':
-              dispatch(chatActions.taskUpdated({ turnId, task: event.task }));
-              break;
-            case 'step':
-              dispatch(chatActions.stepUpdated({ taskId: event.taskId, step: event.step }));
-              break;
-            case 'thinking':
-              dispatch(chatActions.thinking({ taskId: event.taskId, active: event.active }));
-              break;
-            case 'approval':
-              dispatch(chatActions.approval({ taskId: event.taskId, prompt: event.prompt }));
-              break;
-          }
-        },
-      });
+      const onRunEvent = (event: RunEvent) => {
+        switch (event.type) {
+          case 'task':
+            dispatch(chatActions.taskUpdated({ turnId, task: event.task }));
+            break;
+          case 'step':
+            dispatch(chatActions.stepUpdated({ taskId: event.taskId, step: event.step }));
+            break;
+          case 'thinking':
+            dispatch(chatActions.thinking({ taskId: event.taskId, active: event.active }));
+            break;
+          case 'approval':
+            dispatch(chatActions.approval({ taskId: event.taskId, prompt: event.prompt }));
+            break;
+        }
+      };
+      const base = { request: text, agent, config, windowId: tab.windowId, tabId: tab.id, history: state.chat.memory };
+      const run = agent.team?.memberIds.length
+        ? new TeamRun({
+            ...base,
+            onEvent: (event: TeamEvent) => {
+              if (event.type === 'members') dispatch(chatActions.setMembers({ turnId, members: event.members }));
+              else if (event.type === 'member') dispatch(chatActions.memberEvent({ turnId, key: event.key, event: event.event }));
+              else onRunEvent(event);
+            },
+          })
+        : new AgentRun({ ...base, onEvent: onRunEvent });
       runRef.current = run;
       try {
         const task = await run.start();

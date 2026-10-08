@@ -1,4 +1,4 @@
-import { AutoComplete, Button, Checkbox, Drawer, Input, InputNumber, Select, Slider, Tabs, Tooltip } from 'antd';
+import { AutoComplete, Button, Checkbox, Drawer, Input, InputNumber, Select, Slider, Switch, Tabs, Tooltip } from 'antd';
 import { RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/agent/llm';
@@ -32,7 +32,7 @@ const POLICIES: { value: ConfirmationPolicy; title: string; text: string }[] = [
 ];
 
 export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
-  const { providers, skills, customTools, settings } = useAppSelector((s) => s.config.config);
+  const { providers, skills, customTools, settings, agents } = useAppSelector((s) => s.config.config);
   const [draft, setDraft] = useState<AgentConfig | null>(agent);
   const [tab, setTab] = useState('profile');
   const [models, setModels] = useState<string[]>([]);
@@ -90,7 +90,11 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
         <div className="drawer-foot">
           <span className="muted small">{!valid ? 'Give your agent a name to save it.' : ''}</span>
           <Button onClick={onClose}>Cancel</Button>
-          <Button type="primary" disabled={!valid} onClick={() => onSave({ ...draft, name: draft.name.trim(), description: draft.description.trim() })}>
+          <Button
+            type="primary"
+            disabled={!valid}
+            onClick={() => onSave({ ...draft, name: draft.name.trim(), description: draft.description.trim(), team: draft.team?.memberIds.length ? draft.team : undefined })}
+          >
             {isNew ? 'Create agent' : 'Save changes'}
           </Button>
         </div>
@@ -322,6 +326,69 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
                 ))}
               </div>
             ),
+          },
+          {
+            key: 'team',
+            label: draft.team?.memberIds.length ? `Team · ${draft.team.memberIds.length}` : 'Team',
+            children: (() => {
+              const team = draft.team ?? { memberIds: [], parallel: true, maxParallel: 3, tidyUp: true };
+              const setTeam = (patch: Partial<typeof team>) => set({ team: { ...team, ...patch } });
+              const candidates = agents.filter((a) => a.id !== draft.id && !a.team?.memberIds.length);
+              const leads = team.memberIds.length > 0;
+              return (
+                <div className="form-stack">
+                  <p className="muted small" style={{ margin: 0 }}>
+                    A team agent doesn’t do the work itself: it splits your request into one task per member — for example medications to the Medication agent, diagnoses to the Diagnosis agent — and the members do their parts.
+                  </p>
+                  <div>
+                    <FieldLabel hint={leads ? `${team.memberIds.length} selected` : 'None — works alone'}>Team members</FieldLabel>
+                    <div className="check-list">
+                      {candidates.length === 0 && <div className="muted small pad">Create the member agents first.</div>}
+                      {candidates.map((a) => (
+                        <label key={a.id} className="check-row compact">
+                          <Checkbox
+                            checked={team.memberIds.includes(a.id)}
+                            onChange={(e) => setTeam({ memberIds: e.target.checked ? [...team.memberIds, a.id] : team.memberIds.filter((x) => x !== a.id) })}
+                          />
+                          <AgentAvatar avatar={a.avatar} size={22} />
+                          <span className="check-text">
+                            <span className="check-title">{a.name}</span>
+                            {a.description && <span className="check-desc">{a.description}</span>}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  {leads && (
+                    <>
+                      <div className="setting-row bare">
+                        <div className="setting-text">
+                          <div className="setting-label">Run members at the same time</div>
+                          <div className="setting-desc">Each member works in its own tab. Their thinking overlaps; clicks and typing take quick turns in front. Off: one after another in your tab.</div>
+                        </div>
+                        <Switch checked={team.parallel} onChange={(v) => setTeam({ parallel: v })} aria-label="Run members at the same time" />
+                      </div>
+                      {team.parallel && (
+                        <>
+                          <div>
+                            <FieldLabel hint="Members at once">Parallel limit</FieldLabel>
+                            <InputNumber min={1} max={8} value={team.maxParallel} onChange={(v) => setTeam({ maxParallel: v ?? 3 })} style={{ width: 120 }} />
+                            <div className="field-help">Match your model server: the Kaggle notebook answers 5 requests at once on GPU T4 ×2, 2 on a single T4. Local Ollama: usually 1–2.</div>
+                          </div>
+                          <div className="setting-row bare">
+                            <div className="setting-text">
+                              <div className="setting-label">Tidy up when done</div>
+                              <div className="setting-desc">Close the members’ finished tabs and reload your page so it shows their changes. Tabs of members that failed stay open.</div>
+                            </div>
+                            <Switch checked={team.tidyUp} onChange={(v) => setTeam({ tidyUp: v })} aria-label="Tidy up when done" />
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })(),
           },
           {
             key: 'safety',

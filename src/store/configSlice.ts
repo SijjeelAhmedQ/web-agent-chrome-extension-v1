@@ -45,6 +45,9 @@ export const configSlice = createSlice({
     deleteAgent(state, action: PayloadAction<string>) {
       if (state.config.agents.length <= 1) return;
       state.config.agents = state.config.agents.filter((a) => a.id !== action.payload);
+      for (const agent of state.config.agents) {
+        if (agent.team) agent.team.memberIds = agent.team.memberIds.filter((id) => id !== action.payload);
+      }
       if (state.config.settings.defaultAgentId === action.payload) state.config.settings.defaultAgentId = state.config.agents[0].id;
       touch(state);
     },
