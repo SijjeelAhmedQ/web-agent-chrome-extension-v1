@@ -18,10 +18,11 @@ A Chrome side-panel agent that reads and works any website for you: search, fill
 | **Multiple agents** | Each agent has its own name, look, instructions, model, tools, skills, step limit and approval policy. Switch between them from the panel header. |
 | **Skills** | Reusable instructions, either *always on* or *loaded when relevant* (the agent calls `load_skill`). A skill can be limited to certain sites, for example `localhost:5173` for CareFlow. |
 | **Custom tools** | Connect agents to your own HTTP endpoints (GET/POST, headers, typed parameters, optional approval). |
-| **Models** | Ollama (native API, with a configurable context window), the CareFlow bridge, OpenRouter, OpenAI, Anthropic, LM Studio, llama.cpp, vLLM, or any OpenAI-compatible server. You can test a connection and load its list of models. |
+| **Models** | Ollama (native API, with a configurable context window), the CareFlow bridge, the **Kaggle GPU notebook** (Qwen 3.5 9B, Ternary Bonsai 2 27B, MedGemma 4B), OpenRouter, OpenAI, Anthropic, LM Studio, llama.cpp, vLLM, or any OpenAI-compatible server. You can test a connection and load its list of models. Models that can't call tools (MedGemma) still work: the agent reads the page and answers. |
+| **Voice input** | Push-to-talk in the side panel. Speech is transcribed on the Kaggle GPU by **Whisper large-v3 turbo** (with your vocabulary for names and terms) or **Omi Med STT v1**. The text lands in the message box, or is sent automatically if you turn that on. |
 | **Safety** | Asks before purchases, sending, deleting, submitting forms and entering passwords. Sites can be blocked or made read-only, and text on pages is treated as data, not instructions. |
 | **Activity** | Every task's request, site, status, steps, timing and result, with search and filters. |
-| **Configuration page** | Agents · Skills · Tools · Models · General · Appearance · Agent behavior · Permissions · Privacy · Advanced (developer view, page-reading limits, import/export, reset) · Activity. |
+| **Configuration page** | Agents · Skills · Tools · Models · Voice · General · Appearance · Agent behavior · Permissions · Privacy · Advanced (developer view, page-reading limits, import/export, reset) · Activity. |
 | **Design** | Light and dark themes with an emerald accent on slate neutrals (taken from codeiyo.com), Inter and JetBrains Mono, keyboard-friendly, reduced-motion aware. |
 
 ---
@@ -46,10 +47,23 @@ npm run build          # typecheck + build into dist/
 |---|---|---|
 | Ollama on this PC | **Ollama** | `http://localhost:11434`, `qwen3.5:4b`. Uses the native API so the **context window** can be set (default 12,288 tokens, the same as CareFlow, so the model doesn't reload). **Skip thinking** is on for speed. |
 | CareFlow bridge | **CareFlow bridge** | `http://127.0.0.1:8765/ollama`. For its vLLM or OpenRouter routes, use *Other (OpenAI-compatible)* with `/vllm/v1` or `/openrouter/api/v1`. |
+| Kaggle GPU (free T4) | **Kaggle GPU** | Run [`kaggle/careflow_kaggle.ipynb`](kaggle/careflow_kaggle.ipynb) and paste the address and key it prints (`/vllm/v1` is added for you). Pick a model: **Qwen 3.5 9B** (best default for actions), **Ternary Bonsai 2 27B** (strongest; needs GPU T4 ×2), or **MedGemma 4B** (medical knowledge; answers only, can't click or type). The key is sent as `X-CareFlow-Key`. Saving this connection also sets up Voice. |
 | Cloud | OpenRouter / OpenAI / Anthropic | Paste an API key. Keys stay in this browser. |
 | Other local servers | LM Studio / llama.cpp / vLLM | The server must support tool calling (llama.cpp needs `--jinja`; vLLM needs `--enable-auto-tool-choice`). |
 
 Local servers usually reject requests coming from a `chrome-extension://` origin. The service worker installs a `declarativeNetRequest` rule that removes the `Origin` header from **this extension's own** requests to `localhost`, `127.0.0.1` and `0.0.0.0`, so Ollama needs no `OLLAMA_ORIGINS` setup.
+
+### Kaggle notebook (models and voice)
+
+The [`kaggle/`](kaggle/) folder holds the CareFlow GPU notebook. `careflow_gpu_server.py` is the server, `make_notebook.py` rebuilds the notebook from it, and `careflow_kaggle.ipynb` is the notebook to import into Kaggle.
+
+1. On Kaggle: **File → Import Notebook** → `careflow_kaggle.ipynb`. Under **Settings**, choose Accelerator **GPU T4 ×2** (one T4 works without Bonsai) and switch **Internet** on.
+2. Change `KEY = "CHANGE-ME"` in the second cell to a long secret, then **Run All**. The first run downloads the models and takes a while.
+3. Copy the `https://….trycloudflare.com` address and the key it prints.
+4. In Web Agent: **Models → Add connection → Kaggle GPU**, paste both, and choose a model. **Voice** fills in automatically.
+5. Under **Voice**, click **Allow microphone** once. Chrome can't ask for it inside the side panel. Then choose **Whisper large-v3 turbo** or **Omi Med STT v1**, click **Check server** to see what's loaded, and **Record** to try it.
+
+The tunnel address changes every time the notebook restarts. Update it under Models and Voice when that happens.
 
 > **Sharing one local model with CareFlow:** CareFlow's in-app assistant also uses Ollama and warms the model up when its dashboard loads. On a 4 GB GPU both apps queue behind each other. Expect slow steps while CareFlow's assistant is busy, or point one of them at a different model or server.
 
@@ -133,6 +147,7 @@ End-to-end checks were run in Chrome for Testing with the built extension, drivi
 
 - **Scripted model, local test site:** form filling (text, native select, custom ARIA combobox), approval before Save, search → navigation → back, picking the right table row, a `target=_blank` link opening a new tab, Stop, saved history, and Origin-header removal. All 10 checks pass.
 - **Qwen 3.5 4B on Ollama, test site:** filled and saved the full form, including the custom dropdown, with approval, in about 2 minutes. When the model skipped a required field, the browser's validation feedback led it to fill the field and save again, then confirm the success message.
+- **Kaggle GPU and voice, against a mock of the notebook's server API:** the Voice page lists the loaded engines; the fake microphone's audio is transcribed into the message box (Whisper, with the vocabulary); the key travels as `X-CareFlow-Key`; MedGemma reads the page and answers; and an unknown model that rejects tools falls back to read-and-answer. All 5 checks pass. The real notebook wasn't run here: it needs your Kaggle account.
 - **Qwen 3.5 4B on Ollama, CareFlow PMS:** signed in (with approval), opened Patients and listed the first three patients correctly. It also completed *Tom Baker → Medications → Add medication → Paracetamol, 500 mg, twice daily (AntD Select) → Save* (with approval), and the new record appeared in the list.
 
 ## Known limitations
@@ -140,7 +155,7 @@ End-to-end checks were run in Chrome for Testing with the built extension, drivi
 - Content in **cross-origin iframes** and **closed shadow roots** can't be read. The agent is told such frames exist.
 - Events are synthetic (`isTrusted: false`). A few sites ignore untrusted events. Chrome DevTools Protocol input (`chrome.debugger`) would fix this but shows a “being debugged” banner, so it is not used.
 - Small local models (≈4B) work but are slow on a 4 GB GPU and may need more steps. Larger or cloud models are much faster and more reliable on complex sites.
-- **Voice input** shows as *coming soon* in the composer. It is not implemented yet.
+- Voice input needs the Kaggle notebook (or another server with the same `/transcribe` API). Speech is recorded only while the microphone button is on, for at most 60 seconds per request.
 
 ## Extending
 

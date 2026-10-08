@@ -1047,3 +1047,83 @@ body {
   color: var(--text-secondary) !important;
   background: none;
 }
+
+/* ---------- Voice input ---------- */
+
+.composer.is-recording {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+  box-shadow: var(--shadow-md), 0 0 0 3px color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.voice-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 10px 10px 4px 14px;
+  color: var(--text-secondary);
+}
+
+.voice-label {
+  font-weight: 550;
+  color: var(--text);
+}
+
+.rec-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+.voice-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+}
+
+.voice-meter span {
+  width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--danger);
+  transform-origin: center;
+  transition: transform 90ms linear;
+}
+
+.voice-time {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.voice-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 8px 2px 14px;
+  font-size: 12.5px;
+  color: var(--warning);
+}
+
+.voice-note > span {
+  flex: 1;
+}
+
+.mic-btn.on {
+  background: var(--danger);
+  color: #fff;
+}
+
+.mic-btn.on:hover {
+  background: var(--danger);
+  color: #fff;
+  opacity: 0.9;
+}
+
+:root[data-motion='reduce'] .rec-dot {
+  animation: none;
+}

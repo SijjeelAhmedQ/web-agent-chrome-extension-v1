@@ -52,7 +52,10 @@ export class OpenAICompatibleClient implements LlmClient {
 
   private headers(): Record<string, string> {
     const h: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (this.provider.apiKey) h.Authorization = `Bearer ${this.provider.apiKey}`;
+    if (this.provider.apiKey) {
+      if (this.provider.keyHeader) h[this.provider.keyHeader] = this.provider.apiKey;
+      else h.Authorization = `Bearer ${this.provider.apiKey}`;
+    }
     if (/openrouter\.ai/.test(this.provider.baseUrl)) {
       h['HTTP-Referer'] = 'https://github.com/web-agent-chrome-extension';
       h['X-Title'] = 'Web Agent';
@@ -78,7 +81,7 @@ export class OpenAICompatibleClient implements LlmClient {
         headers: this.headers(),
         body: JSON.stringify(body),
         signal: req.signal,
-        timeoutMs: isLocal(this.provider.baseUrl) ? 300_000 : 180_000,
+        timeoutMs: this.provider.timeoutMs ?? (isLocal(this.provider.baseUrl) ? 300_000 : 180_000),
       });
     let data: OpenAIResponse;
     try {

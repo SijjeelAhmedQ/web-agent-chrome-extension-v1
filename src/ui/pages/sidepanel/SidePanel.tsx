@@ -121,7 +121,7 @@ export function SidePanel() {
       )}
 
       <footer className="panel-foot">
-        <Composer ref={composer} tab={tab} running={running} disabled={false} siteMode={siteMode} onSend={onSend} onStop={stop} />
+        <Composer ref={composer} tab={tab} running={running} disabled={false} siteMode={siteMode} voice={settings.voice} onSend={onSend} onStop={stop} />
       </footer>
     </div>
   );

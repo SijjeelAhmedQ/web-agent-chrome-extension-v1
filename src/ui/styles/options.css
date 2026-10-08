@@ -1323,3 +1323,57 @@ textarea.mono-area {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* ---------- Model choices (Kaggle) ---------- */
+
+.model-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.model-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+
+.model-option:hover {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+}
+
+.model-option.on {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.model-option-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.model-option-name {
+  font-weight: 600;
+}
+
+.model-option-note {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.test-banner span {
+  min-width: 0;
+}

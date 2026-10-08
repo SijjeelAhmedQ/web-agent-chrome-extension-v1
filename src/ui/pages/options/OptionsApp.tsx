@@ -5,6 +5,7 @@ import {
   Bot,
   Cpu,
   Lock,
+  Mic,
   Monitor,
   Moon,
   Palette,
@@ -26,6 +27,7 @@ import { ModelsPage } from './ModelsPage';
 import { AdvancedPage, AppearancePage, BehaviorPage, GeneralPage, PermissionsPage, PrivacyPage } from './PreferencePages';
 import { SkillsPage } from './SkillsPage';
 import { ToolsPage } from './ToolsPage';
+import { VoicePage } from './VoicePage';
 
 const NAV = [
   {
@@ -35,6 +37,7 @@ const NAV = [
       { to: '/skills', label: 'Skills', icon: Sparkles },
       { to: '/tools', label: 'Tools', icon: Wrench },
       { to: '/models', label: 'Models', icon: Cpu },
+      { to: '/voice', label: 'Voice', icon: Mic },
     ],
   },
   {
@@ -112,6 +115,7 @@ export function OptionsApp() {
                 <Route path="/skills" element={<SkillsPage />} />
                 <Route path="/tools" element={<ToolsPage />} />
                 <Route path="/models" element={<ModelsPage />} />
+                <Route path="/voice" element={<VoicePage />} />
                 <Route path="/general" element={<GeneralPage />} />
                 <Route path="/appearance" element={<AppearancePage />} />
                 <Route path="/behavior" element={<BehaviorPage />} />

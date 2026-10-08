@@ -25,6 +25,10 @@ export interface ProviderConfig {
   skipThinking?: boolean;
   /** Ollama only: context window in tokens (`num_ctx`). */
   contextWindow?: number;
+  /** Send the API key in this header instead of `Authorization: Bearer` (e.g. `X-CareFlow-Key`). */
+  keyHeader?: string;
+  /** How long to wait for one answer. Remote GPUs behind a tunnel can take minutes to load a model. */
+  timeoutMs?: number;
   createdAt: number;
 }
 
@@ -103,6 +107,21 @@ export interface CustomToolConfig {
   updatedAt: number;
 }
 
+export type SpeechEngine = 'whisper' | 'omi';
+
+/** Voice input: speech is recorded in the side panel and transcribed by a speech server (the Kaggle notebook). */
+export interface VoiceSettings {
+  enabled: boolean;
+  /** Address of the speech server, e.g. https://xyz.trycloudflare.com */
+  serverUrl: string;
+  key: string;
+  engine: SpeechEngine;
+  /** Names and terms to expect (Whisper only) — patients, drugs, products… */
+  vocabulary: string;
+  /** Send the request as soon as the speech is transcribed. */
+  autoSend: boolean;
+}
+
 export interface Settings {
   theme: ThemeMode;
   textSize: TextSize;
@@ -121,6 +140,7 @@ export interface Settings {
   disabledToolIds: string[];
   maxElements: number;
   maxTextChars: number;
+  voice: VoiceSettings;
 }
 
 export interface AppConfig {

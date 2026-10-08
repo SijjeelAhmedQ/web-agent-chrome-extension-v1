@@ -107,6 +107,7 @@ export const DEFAULT_SETTINGS: Settings = {
   disabledToolIds: [],
   maxElements: 250,
   maxTextChars: 12000,
+  voice: { enabled: false, serverUrl: '', key: '', engine: 'whisper', vocabulary: '', autoSend: false },
 };
 
 export function defaultConfig(): AppConfig {

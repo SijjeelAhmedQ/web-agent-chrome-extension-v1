@@ -14,7 +14,7 @@ export function normalizeConfig(raw: Partial<AppConfig> | undefined): AppConfig 
     agents: Array.isArray(raw.agents) && raw.agents.length ? raw.agents : base.agents,
     skills: Array.isArray(raw.skills) ? raw.skills : base.skills,
     customTools: Array.isArray(raw.customTools) ? raw.customTools : base.customTools,
-    settings: { ...DEFAULT_SETTINGS, ...(raw.settings ?? {}) },
+    settings: { ...DEFAULT_SETTINGS, ...(raw.settings ?? {}), voice: { ...DEFAULT_SETTINGS.voice, ...(raw.settings?.voice ?? {}) } },
   };
   if (!config.agents.some((a) => a.id === config.settings.defaultAgentId)) {
     config.settings.defaultAgentId = config.agents[0].id;

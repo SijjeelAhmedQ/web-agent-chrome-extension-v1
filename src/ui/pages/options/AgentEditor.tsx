@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/agent/llm';
 import { AGENT_COLORS, AGENT_ICONS } from '@/shared/constants/defaults';
 import { BUILT_IN_TOOLS, CUSTOM_PREFIX, TOOL_CATEGORIES, type ToolCategory } from '@/shared/constants/tools';
+import { knownModel, presetById } from '@/shared/constants/providers';
 import type { AgentConfig, ConfirmationPolicy } from '@/shared/types/config';
 import { toAgentError } from '@/shared/utils/errors';
 import { useAppSelector } from '@/store';
@@ -194,7 +195,10 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
                       style={{ flex: 1 }}
                       value={draft.model}
                       onChange={(v) => set({ model: v })}
-                      options={models.map((m) => ({ value: m }))}
+                      options={[...new Set([...(provider ? presetById(provider.preset).models?.map((m) => m.id) ?? [] : []), ...models])].map((m) => ({
+                        value: m,
+                        label: knownModel(m) ? `${knownModel(m)!.label} — ${m}` : m,
+                      }))}
                       filterOption={(input, option) => (option?.value ?? '').toLowerCase().includes(input.toLowerCase())}
                       placeholder={provider?.defaultModel || 'Model name'}
                       allowClear
@@ -205,6 +209,11 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
                   </div>
                   {modelError && <div className="field-error">{modelError}</div>}
                   {models.length > 0 && <div className="field-help">{models.length} models available — start typing to filter.</div>}
+                  {knownModel(draft.model || provider?.defaultModel || '')?.tools === false && (
+                    <div className="inline-note warning" style={{ marginTop: 8 }}>
+                      {knownModel(draft.model || provider?.defaultModel || '')!.label} can’t use tools: this agent will read the page and answer, but can’t click, type or navigate.
+                    </div>
+                  )}
                 </div>
                 <div>
                   <FieldLabel hint={draft.temperature.toFixed(1)}>Creativity</FieldLabel>

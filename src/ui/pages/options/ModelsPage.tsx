@@ -3,7 +3,8 @@ import { DEFAULT_CONTEXT_WINDOW } from '@/agent/llm/ollama';
 import { CheckCircle2, ExternalLink, Laptop, MoreHorizontal, Plus, RefreshCw, Star, Trash2, XCircle, Zap } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/agent/llm';
-import { PROVIDER_PRESETS, presetById, type ProviderPreset } from '@/shared/constants/providers';
+import { PROVIDER_PRESETS, presetById, withApiPath, type ProviderPreset } from '@/shared/constants/providers';
+import { speechBase } from '@/shared/voice/speech';
 import type { ProviderConfig } from '@/shared/types/config';
 import { uid } from '@/shared/utils';
 import { toAgentError } from '@/shared/utils/errors';
@@ -39,6 +40,7 @@ function PresetBadge({ preset, size = 36 }: { preset: ProviderPreset; size?: num
 
 export function ModelsPage() {
   const { providers, settings, agents } = useAppSelector((s) => s.config.config);
+  const voice = settings.voice;
   const dispatch = useAppDispatch();
   const { modal, message } = App.useApp();
   const [editing, setEditing] = useState<{ provider: ProviderConfig; isNew: boolean } | null>(null);
@@ -58,6 +60,8 @@ export function ModelsPage() {
         apiKey: '',
         defaultModel: preset.model,
         skipThinking: preset.skipThinking ?? false,
+        ...(preset.keyHeader ? { keyHeader: preset.keyHeader } : {}),
+        ...(preset.timeoutMs ? { timeoutMs: preset.timeoutMs } : {}),
         ...(preset.kind === 'ollama' ? { contextWindow: DEFAULT_CONTEXT_WINDOW } : {}),
         createdAt: Date.now(),
       },
@@ -176,6 +180,10 @@ export function ModelsPage() {
         onClose={() => setEditing(null)}
         onSave={(p) => {
           dispatch(configActions.upsertProvider(p));
+          // The Kaggle notebook also serves speech: set voice up from the same address and key.
+          if (p.preset === 'kaggle' && (!voice.serverUrl.trim() || speechBase(voice.serverUrl) === speechBase(p.baseUrl))) {
+            dispatch(configActions.updateSettings({ voice: { ...voice, serverUrl: speechBase(p.baseUrl), key: p.apiKey, enabled: voice.enabled || !voice.serverUrl.trim() } }));
+          }
           message.success(editing?.isNew ? 'Connection added' : 'Changes saved');
           setEditing(null);
         }}
@@ -275,7 +283,7 @@ function ProviderEditor({ value, onClose, onSave }: { value: { provider: Provide
           </Button>
           <span className="spacer" />
           <Button onClick={onClose}>Cancel</Button>
-          <Button type="primary" disabled={!valid} onClick={() => onSave({ ...draft, name: draft.name.trim(), baseUrl: draft.baseUrl.trim(), defaultModel: draft.defaultModel.trim() })}>
+          <Button type="primary" disabled={!valid} onClick={() => onSave({ ...draft, name: draft.name.trim(), baseUrl: withApiPath(draft.baseUrl, preset.apiPath), defaultModel: draft.defaultModel.trim() })}>
             {value.isNew ? 'Add connection' : 'Save'}
           </Button>
         </div>
@@ -289,7 +297,16 @@ function ProviderEditor({ value, onClose, onSave }: { value: { provider: Provide
         </div>
         <div>
           <FieldLabel htmlFor="prov-url">Address</FieldLabel>
-          <Input id="prov-url" className="mono" value={draft.baseUrl} onChange={(e) => set({ baseUrl: e.target.value })} placeholder={preset.baseUrl || "http://localhost:8000/v1"} status={draft.baseUrl && !urlOk ? 'error' : undefined} />
+          <Input
+            id="prov-url"
+            className="mono"
+            value={draft.baseUrl}
+            onChange={(e) => set({ baseUrl: e.target.value })}
+            onBlur={() => preset.apiPath && set({ baseUrl: withApiPath(draft.baseUrl, preset.apiPath) })}
+            placeholder={preset.id === 'kaggle' ? 'https://xxxx.trycloudflare.com' : preset.baseUrl || 'http://localhost:8000/v1'}
+            status={draft.baseUrl && !urlOk ? 'error' : undefined}
+          />
+          {preset.apiPath && <div className="field-help">Paste the address the notebook prints — {preset.apiPath} is added for you. It changes every time the notebook restarts.</div>}
         </div>
         {(preset.needsKey || preset.id === 'custom' || draft.apiKey) && (
           <div>
@@ -300,14 +317,14 @@ function ProviderEditor({ value, onClose, onSave }: { value: { provider: Provide
                   <a href={preset.keyUrl} target="_blank" rel="noreferrer">
                     Get a key <ExternalLink size={11} />
                   </a>
-                ) : (
+                ) : preset.needsKey ? undefined : (
                   'Optional'
                 )
               }
             >
-              API key
+              {preset.keyLabel ?? 'API key'}
             </FieldLabel>
-            <Input.Password id="prov-key" value={draft.apiKey} onChange={(e) => set({ apiKey: e.target.value })} placeholder="Paste your key" autoComplete="off" />
+            <Input.Password id="prov-key" value={draft.apiKey} onChange={(e) => set({ apiKey: e.target.value })} placeholder={preset.keyHeader ? 'The KEY printed by the notebook' : 'Paste your key'} autoComplete="off" />
           </div>
         )}
         <div>
@@ -327,7 +344,21 @@ function ProviderEditor({ value, onClose, onSave }: { value: { provider: Provide
               </Button>
             </Tooltip>
           </div>
-          <div className="field-help">Choose a model that supports tool calling.</div>
+          {preset.models ? (
+            <div className="model-options" role="radiogroup" aria-label="Models on this server">
+              {preset.models.map((m) => (
+                <button key={m.id} type="button" role="radio" aria-checked={draft.defaultModel === m.id} className={`model-option ${draft.defaultModel === m.id ? 'on' : ''}`} onClick={() => set({ defaultModel: m.id })}>
+                  <span className="model-option-head">
+                    <span className="model-option-name">{m.label}</span>
+                    <span className={`pill ${m.tools ? 'success' : 'warning'}`}>{m.tools ? 'Can act' : 'Answers only'}</span>
+                  </span>
+                  <span className="model-option-note">{m.note}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="field-help">Choose a model that supports tool calling.</div>
+          )}
         </div>
         {draft.kind === 'ollama' && (
           <div className="setting-row bare">
