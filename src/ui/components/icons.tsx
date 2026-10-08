@@ -1,0 +1,49 @@
+import {
+  ArrowDownUp,
+  ArrowLeft,
+  ArrowLeftRight,
+  ArrowRight,
+  BookOpen,
+  Bot,
+  Briefcase,
+  ClipboardList,
+  ClipboardPen,
+  Compass,
+  CornerDownLeft,
+  Eraser,
+  FileText,
+  Globe,
+  Hourglass,
+  Keyboard,
+  Layers,
+  ListChecks,
+  Mail,
+  MousePointerClick,
+  PenLine,
+  Plug,
+  ScanText,
+  Search,
+  Shield,
+  ShoppingBag,
+  Sparkles,
+  SquarePlus,
+  SquareX,
+  Stethoscope,
+  TextSearch,
+  Wand,
+  Webhook,
+  type LucideIcon,
+  type LucideProps,
+} from 'lucide-react';
+
+/** Icons referenced by name from config (agent avatars, tool catalogue, suggestions). */
+const ICONS: Record<string, LucideIcon> = {
+  ArrowDownUp, ArrowLeft, ArrowLeftRight, ArrowRight, BookOpen, Bot, Briefcase, ClipboardList, ClipboardPen, Compass,
+  CornerDownLeft, Eraser, FileText, Globe, Hourglass, Keyboard, Layers, ListChecks, Mail, MousePointerClick, PenLine,
+  Plug, ScanText, Search, Shield, ShoppingBag, Sparkles, SquarePlus, SquareX, Stethoscope, TextSearch, Wand, Webhook,
+};
+
+export function NamedIcon({ name, ...props }: { name: string } & LucideProps) {
+  const Icon = ICONS[name] ?? Sparkles;
+  return <Icon aria-hidden {...props} />;
+}

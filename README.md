@@ -1,1 +1,149 @@
-# web-agent-chrome-extension
+# Web Agent — a universal AI agent for Chrome
+
+A Chrome side-panel agent that reads and works any website for you: search, fill in forms, click through multi-step flows, read tables and summarize pages. It works on ordinary sites (Google, GitHub, shops, CRMs, dashboards) and on our own CareFlow PMS, and contains no code written for any particular site.
+
+> “I tell it what I want, and it handles the website.”
+
+**Stack:** React 18 · TypeScript · Vite 6 · Ant Design 5 · Redux Toolkit · Zod · lucide-react · Chrome Manifest V3 (side panel, content script, service worker). This is the same stack as CareFlow.
+
+---
+
+## Features
+
+| | |
+|---|---|
+| **Side panel** | Chat with the agent next to any page. It knows which page you're on, shows a live step-by-step activity timeline, and has a prominent **Stop** button (also `Esc`). |
+| **Generic browser tools** | `read_page`, `find_element`, `click`, `type`, `clear`, `select_option`, `scroll`, `press_key`, `wait`, `navigate`, `go_back`, `go_forward`, `list_tabs`, `open_tab`, `switch_tab`, `close_tab` |
+| **Page understanding** | A compact, semantic view of the page: interactive elements with stable ids, accessible names, values, states, table-row and dialog context, headings and visible text. The model never receives raw HTML. Open shadow roots and same-origin iframes are included. |
+| **Multiple agents** | Each agent has its own name, look, instructions, model, tools, skills, step limit and approval policy. Switch between them from the panel header. |
+| **Skills** | Reusable instructions, either *always on* or *loaded when relevant* (the agent calls `load_skill`). A skill can be limited to certain sites, for example `localhost:5173` for CareFlow. |
+| **Custom tools** | Connect agents to your own HTTP endpoints (GET/POST, headers, typed parameters, optional approval). |
+| **Models** | Ollama (native API, with a configurable context window), the CareFlow bridge, OpenRouter, OpenAI, Anthropic, LM Studio, llama.cpp, vLLM, or any OpenAI-compatible server. You can test a connection and load its list of models. |
+| **Safety** | Asks before purchases, sending, deleting, submitting forms and entering passwords. Sites can be blocked or made read-only, and text on pages is treated as data, not instructions. |
+| **Activity** | Every task's request, site, status, steps, timing and result, with search and filters. |
+| **Configuration page** | Agents · Skills · Tools · Models · General · Appearance · Agent behavior · Permissions · Privacy · Advanced (developer view, page-reading limits, import/export, reset) · Activity. |
+| **Design** | Light and dark themes with an emerald accent on slate neutrals (taken from codeiyo.com), Inter and JetBrains Mono, keyboard-friendly, reduced-motion aware. |
+
+---
+
+## Install (development)
+
+```bash
+npm install
+npm run build          # typecheck + build into dist/
+```
+
+1. Open `chrome://extensions` and switch on **Developer mode**.
+2. Click **Load unpacked** and select the `dist/` folder.
+3. The configuration page opens automatically. Go to **Models** and connect a model.
+4. Click the toolbar icon (or press `Alt+Shift+A`) to open the side panel.
+
+`npm run dev` rebuilds on change. After a rebuild, click ↻ on the extension card.
+
+### Connecting a model
+
+| Where the model runs | Preset | Notes |
+|---|---|---|
+| Ollama on this PC | **Ollama** | `http://localhost:11434`, `qwen3.5:4b`. Uses the native API so the **context window** can be set (default 12,288 tokens, the same as CareFlow, so the model doesn't reload). **Skip thinking** is on for speed. |
+| CareFlow bridge | **CareFlow bridge** | `http://127.0.0.1:8765/ollama`. For its vLLM or OpenRouter routes, use *Other (OpenAI-compatible)* with `/vllm/v1` or `/openrouter/api/v1`. |
+| Cloud | OpenRouter / OpenAI / Anthropic | Paste an API key. Keys stay in this browser. |
+| Other local servers | LM Studio / llama.cpp / vLLM | The server must support tool calling (llama.cpp needs `--jinja`; vLLM needs `--enable-auto-tool-choice`). |
+
+Local servers usually reject requests coming from a `chrome-extension://` origin. The service worker installs a `declarativeNetRequest` rule that removes the `Origin` header from **this extension's own** requests to `localhost`, `127.0.0.1` and `0.0.0.0`, so Ollama needs no `OLLAMA_ORIGINS` setup.
+
+> **Sharing one local model with CareFlow:** CareFlow's in-app assistant also uses Ollama and warms the model up when its dashboard loads. On a 4 GB GPU both apps queue behind each other. Expect slow steps while CareFlow's assistant is busy, or point one of them at a different model or server.
+
+---
+
+## Architecture
+
+```
+ Side panel (React)                         Page (any website)
+ ┌──────────────────────────────┐          ┌──────────────────────────────┐
+ │ UI: chat, activity, approvals │          │ content.js (injected on use) │
+ │            │ events           │ messages │  · page understanding        │
+ │ Agent runtime (AgentRun)      │◄────────►│  · actions (click/type/…)    │
+ │  planner → LLM → tools        │ typed    │  · highlight + presence glow │
+ │  · site rules · approvals     │ protocol └──────────────────────────────┘
+ │  · context pruning · history  │
+ │            │ fetch            │          Background service worker
+ │ LLM adapters: OpenAI-compat · │          · toolbar → side panel, Alt+Shift+A
+ │   Ollama native · Anthropic   │          · Origin rule for local model servers
+ └──────────────────────────────┘
+          ▲  chrome.storage (config, history) ▼
+ Configuration page (React) — agents, skills, tools, models, preferences, activity
+```
+
+### Decisions
+
+- **The agent runs in the side panel, not the service worker.** MV3 service workers are stopped when idle, so a long model call could be killed mid-task. The panel is an extension page with full `chrome.*` access and stays alive while it is open. Closing it stops the task, which is also the safest behaviour. Tasks interrupted that way are marked “Interrupted” in history.
+- **The content script is injected on demand** (`chrome.scripting`), not on every page. Nothing runs on a site until you give the agent a task there.
+- **Element ids live in a `WeakMap`.** The page DOM is never modified, ids stay stable for the life of a document, and stale ids produce a clear error that tells the model to read the page again.
+- **Events are dispatched the way frameworks expect.** Clicks use a pointer/mouse sequence followed by `click()`. Typing uses the native value setter plus `input`/`change`, so React/AntD controlled inputs register. Rich editors use `execCommand('insertText')`. Pressing Enter in a field calls `requestSubmit()`. Links with `target=_blank` are opened by the agent itself, because pop-ups opened by scripts are blocked.
+- **After an action, the agent waits for the page.** If a navigation starts it waits for the load; otherwise it waits until the DOM has been quiet for 350 ms (at most 2.5 s).
+- **Context is kept small.** Only the two latest page snapshots stay in full, older ones are replaced with a note, and long histories are trimmed. Follow-up requests carry only earlier requests and final answers, not tool traces.
+- **Approvals are decided by generic rules** (`agent/execution/riskPolicy.ts`). They look at what a control says and the form it belongs to (password fields, payment fields, search forms), never at which site it is.
+- **Small local models are supported.** Arguments are coerced (for example `"12"` becomes `12`), sloppy JSON is repaired, tool calls written as text (`<tool_call>…</tool_call>`) are recovered, `<think>` blocks are stripped, and repeating the same action three times triggers a nudge.
+
+### Project structure
+
+```
+src/
+  extension/
+    background/        service worker
+    content/           page understanding (elements, snapshot), actions, overlay
+    browser/           BrowserController: tabs, injection, waiting, navigation
+    messaging/         typed side panel ↔ content protocol
+  agent/
+    runtime/           AgentRun loop, events, context pruning
+    planner/           system prompt
+    execution/         risk policy (approvals)
+    tools/             browser tools, custom HTTP tools, load_skill, registry, formatting
+    llm/               provider-neutral types + OpenAI-compatible, Ollama, Anthropic adapters
+  ui/
+    app/               entry points, theme root
+    pages/sidepanel/   chat, composer, agent switcher, activity history
+    pages/options/     configuration pages and editors
+    components/        activity timeline, approval card, markdown, brand, icons
+    theme/ styles/     design tokens, Ant Design theme, CSS
+  shared/              types, constants (tools catalogue, presets, defaults), storage, utils
+  store/               Redux slices (config, chat, history) + chrome.storage sync
+```
+
+---
+
+## Safety model
+
+- **Approvals.** Each agent has its own policy: *Ask before important actions* (default), *Ask before every action*, or *Don't ask*. Custom tools can always ask before each use.
+- **Site rules** in Permissions apply to every agent. *Blocked* sites can't be read or acted on. *Read-only* sites can be read but not changed.
+- **Prompt injection.** The system prompt tells the model that page text is content, not instructions. Model output is rendered as Markdown with HTML and images switched off.
+- **Privacy.** Pages are read only during a task, and only the model you chose sees them. Settings, keys and history stay in `chrome.storage.local`. Export leaves keys out unless you ask for them.
+- **Browser limits.** Chrome doesn't allow extensions on `chrome://` pages, the Web Store or the built-in PDF viewer. The agent says so and can navigate somewhere else.
+
+---
+
+## Testing
+
+```bash
+npm test            # unit tests: site matching, risk policy, output parsing, schemas, context, formatting
+npm run typecheck
+```
+
+End-to-end checks were run in Chrome for Testing with the built extension, driving the real side panel:
+
+- **Scripted model, local test site:** form filling (text, native select, custom ARIA combobox), approval before Save, search → navigation → back, picking the right table row, a `target=_blank` link opening a new tab, Stop, saved history, and Origin-header removal. All 10 checks pass.
+- **Qwen 3.5 4B on Ollama, test site:** filled and saved the full form, including the custom dropdown, with approval, in about 2 minutes. When the model skipped a required field, the browser's validation feedback led it to fill the field and save again, then confirm the success message.
+- **Qwen 3.5 4B on Ollama, CareFlow PMS:** signed in (with approval), opened Patients and listed the first three patients correctly. It also completed *Tom Baker → Medications → Add medication → Paracetamol, 500 mg, twice daily (AntD Select) → Save* (with approval), and the new record appeared in the list.
+
+## Known limitations
+
+- Content in **cross-origin iframes** and **closed shadow roots** can't be read. The agent is told such frames exist.
+- Events are synthetic (`isTrusted: false`). A few sites ignore untrusted events. Chrome DevTools Protocol input (`chrome.debugger`) would fix this but shows a “being debugged” banner, so it is not used.
+- Small local models (≈4B) work but are slow on a 4 GB GPU and may need more steps. Larger or cloud models are much faster and more reliable on complex sites.
+- **Voice input** shows as *coming soon* in the composer. It is not implemented yet.
+
+## Extending
+
+- **A browser tool:** add its metadata to `shared/constants/tools.ts` and its implementation to `agent/tools/browserTools.ts` (zod schema, `label`, optional `assess`, `execute`). It then appears in Tools and in agent editors automatically.
+- **A model provider:** implement `LlmClient` (`agent/llm/types.ts`) and register it in `agent/llm/index.ts` and `shared/constants/providers.ts`.
+- **App-specific know-how** (for example CareFlow's navigation) belongs in a **skill** limited to that site, not in code.
