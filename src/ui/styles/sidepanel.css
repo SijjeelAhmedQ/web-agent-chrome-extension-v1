@@ -1423,3 +1423,86 @@ body {
   display: block;
   margin: 10px auto 0;
 }
+
+/* ---------- Hands-free voice ---------- */
+
+.live-bar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 8px 8px 0;
+  padding: 7px 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--danger) 7%, var(--bg-subtle));
+  font-size: 12.5px;
+  min-height: 34px;
+}
+
+.live-bar.hearing {
+  background: color-mix(in srgb, var(--danger) 12%, var(--bg-subtle));
+}
+
+.live-bar .rec-dot {
+  flex: none;
+}
+
+.live-bar.listening .rec-dot {
+  animation-duration: 2.4s;
+  opacity: 0.75;
+}
+
+.live-text {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-partial {
+  color: var(--text);
+  font-style: italic;
+}
+
+.live-last {
+  color: var(--text);
+}
+
+.live-hint {
+  color: var(--text-muted);
+}
+
+.live-bar .voice-meter {
+  height: 16px;
+}
+
+.mic-btn.live {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+
+.queued-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 4px 6px;
+  padding: 4px 6px 4px 10px;
+  border-radius: 10px;
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.queued-note > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-ask {
+  color: var(--warning);
+  font-weight: 600;
+}

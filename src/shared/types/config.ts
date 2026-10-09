@@ -135,8 +135,19 @@ export interface VoiceSettings {
   engine: SpeechEngine;
   /** Names and terms to expect (Whisper only) — patients, drugs, products… */
   vocabulary: string;
-  /** Send the request as soon as the speech is transcribed. */
+  /** Send the request as soon as the speech is transcribed (push-to-talk). */
   autoSend: boolean;
+  /**
+   * push      – click to start, click to stop
+   * handsfree – the microphone stays on; each pause ends a command, which runs by itself
+   */
+  mode: 'push' | 'handsfree';
+  /** Hands-free: how long a pause ends a command (ms). */
+  pauseMs: number;
+  /** Hands-free: show the words while you are still speaking. */
+  livePartials: boolean;
+  /** Hands-free: say “confirm” / “cancel” to answer approvals, “stop” to stop the agent. */
+  voiceCommands: boolean;
 }
 
 export interface Settings {

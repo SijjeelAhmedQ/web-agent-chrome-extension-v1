@@ -63,8 +63,10 @@ async function call(url: string, init: RequestInit, signal?: AbortSignal): Promi
   throw new AgentError('model_error', `The speech server returned an error (${res.status}).`, detail);
 }
 
-export async function transcribe(voice: VoiceSettings, pcm: Int16Array, signal?: AbortSignal): Promise<Transcript> {
+export async function transcribe(voice: VoiceSettings, pcm: Int16Array, signal?: AbortSignal, options: { partial?: boolean } = {}): Promise<Transcript> {
   const params = new URLSearchParams({ engine: voice.engine });
+  // Live text while still speaking; servers that don't know the flag simply ignore it.
+  if (options.partial) params.set('partial', '1');
   if (voice.engine === 'whisper' && voice.vocabulary.trim()) params.set('prompt', voice.vocabulary.trim().slice(0, 1500));
   const res = await call(
     `${speechBase(voice.serverUrl)}/transcribe?${params}`,

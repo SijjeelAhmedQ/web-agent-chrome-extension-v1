@@ -1,4 +1,4 @@
-import { Button, Input, Switch } from 'antd';
+import { Button, Input, Slider, Switch } from 'antd';
 import { CheckCircle2, Mic, Square, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { VoiceSettings } from '@/shared/types/config';
@@ -127,13 +127,45 @@ export function VoicePage() {
         </div>
       </Section>
 
-      <Section title="Behavior">
+      <Section title="How you talk">
+        <div className="pad-block">
+          <div className="radio-cards two" role="radiogroup" aria-label="Voice mode">
+            {(
+              [
+                ['handsfree', 'Hands-free', 'Click the microphone once. It keeps listening; every pause sends what you said as a command, and the words appear live while you speak.'],
+                ['push', 'Push to talk', 'Click to start, click to stop. Good for noisy rooms.'],
+              ] as const
+            ).map(([value, title, text]) => (
+              <button key={value} type="button" role="radio" aria-checked={voice.mode === value} className={`radio-card ${voice.mode === value ? 'on' : ''}`} onClick={() => update({ mode: value })}>
+                <span className="radio-dot" aria-hidden />
+                <span>
+                  <span className="radio-title">{title}</span>
+                  <span className="radio-text">{text}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
         <SettingRow label="Voice input" description="Shows a working microphone button in the side panel.">
           <Switch checked={voice.enabled} onChange={(v) => update({ enabled: v })} aria-label="Voice input" />
         </SettingRow>
-        <SettingRow label="Send automatically" description="Send the request as soon as your speech is transcribed. Off: the text lands in the message box so you can check it first.">
-          <Switch checked={voice.autoSend} onChange={(v) => update({ autoSend: v })} aria-label="Send automatically" />
-        </SettingRow>
+        {voice.mode === 'handsfree' ? (
+          <>
+            <SettingRow label="Pause before sending" description={`A command is sent after ${(voice.pauseMs / 1000).toFixed(1)} s of silence. Longer lets you think mid-sentence; shorter feels snappier.`} stacked>
+              <Slider min={500} max={2500} step={100} value={voice.pauseMs} onChange={(v) => update({ pauseMs: v })} tooltip={{ formatter: (v) => `${((v ?? 0) / 1000).toFixed(1)} s` }} aria-label="Pause before sending" />
+            </SettingRow>
+            <SettingRow label="Live text while speaking" description="Shows your words as you say them. Sends the audio to the server every ~1 s while you speak.">
+              <Switch checked={voice.livePartials} onChange={(v) => update({ livePartials: v })} aria-label="Live text while speaking" />
+            </SettingRow>
+            <SettingRow label="Voice replies" description="Say “confirm” or “cancel” to answer an approval, “approve all” for several, and “stop” to stop the agent. Anything else is a new request; requests made while the agent is busy wait their turn.">
+              <Switch checked={voice.voiceCommands} onChange={(v) => update({ voiceCommands: v })} aria-label="Voice replies" />
+            </SettingRow>
+          </>
+        ) : (
+          <SettingRow label="Send automatically" description="Send the request as soon as your speech is transcribed. Off: the text lands in the message box so you can check it first.">
+            <Switch checked={voice.autoSend} onChange={(v) => update({ autoSend: v })} aria-label="Send automatically" />
+          </SettingRow>
+        )}
       </Section>
 
       <Section title="Microphone" description="Chrome can't ask for the microphone inside the side panel, so allow it once here.">

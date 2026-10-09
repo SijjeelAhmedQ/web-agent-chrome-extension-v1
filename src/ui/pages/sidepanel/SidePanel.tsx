@@ -1,4 +1,5 @@
-import { History, Settings2, SquarePen } from 'lucide-react';
+import { History, ListOrdered, Settings2, SquarePen, X } from 'lucide-react';
+import { parseVoiceCommand } from '@/shared/voice/commands';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { matchesSite } from '@/shared/utils';
 import { useAppDispatch, useAppSelector } from '@/store';
@@ -65,6 +66,44 @@ export function SidePanel() {
     [send],
   );
 
+  // ---- Hands-free voice: replies steer the agent, anything else is a new request.
+  const [queued, setQueued] = useState<string[]>([]);
+  const pendingApprovals = (() => {
+    const t = turns[turns.length - 1];
+    if (!t) return [];
+    return [t.approval, ...(t.members ?? []).map((m) => m.approval)].filter((a): a is NonNullable<typeof a> => !!a);
+  })();
+
+  const onVoiceCommand = (text: string) => {
+    const intent = settings.voice.voiceCommands ? parseVoiceCommand(text, { approvalPending: pendingApprovals.length > 0, running }) : { kind: 'request' as const, text };
+    switch (intent.kind) {
+      case 'approve':
+        respond(pendingApprovals[0].id, true);
+        return;
+      case 'approve-all':
+        pendingApprovals.forEach((a) => respond(a.id, true));
+        return;
+      case 'decline':
+        respond(pendingApprovals[0].id, false);
+        return;
+      case 'stop':
+        setQueued([]);
+        stop();
+        return;
+      default:
+        if (running) setQueued((q) => [...q, intent.text]);
+        else onSend(intent.text);
+    }
+  };
+
+  // Commands spoken while the agent was busy run, in order, as soon as it's free.
+  useEffect(() => {
+    if (running || !queued.length) return;
+    const [next, ...rest] = queued;
+    setQueued(rest);
+    onSend(next);
+  }, [running, queued, onSend]);
+
   const newChat = () => {
     if (running) return;
     dispatch(chatActions.clear());
@@ -124,7 +163,18 @@ export function SidePanel() {
       )}
 
       <footer className="panel-foot">
-        <Composer ref={composer} tab={tab} running={running} disabled={false} siteMode={siteMode} voice={settings.voice} onSend={onSend} onStop={stop} />
+        {queued.length > 0 && (
+          <div className="queued-note" role="status">
+            <ListOrdered size={13} aria-hidden />
+            <span>
+              Next: “{queued[0]}”{queued.length > 1 ? ` and ${queued.length - 1} more` : ''}
+            </span>
+            <button type="button" className="icon-btn small" aria-label="Clear queued commands" onClick={() => setQueued([])}>
+              <X size={13} />
+            </button>
+          </div>
+        )}
+        <Composer ref={composer} tab={tab} running={running} disabled={false} siteMode={siteMode} voice={settings.voice} onSend={onSend} onStop={stop} onVoiceCommand={onVoiceCommand} approvalPending={pendingApprovals.length > 0} />
       </footer>
     </div>
   );

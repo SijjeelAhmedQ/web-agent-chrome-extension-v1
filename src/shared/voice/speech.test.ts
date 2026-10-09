@@ -79,3 +79,26 @@ describe('speech server client', () => {
     expect(voiceReady({ ...voice, enabled: false })).toBe(false);
   });
 });
+
+describe('hands-free voice replies', () => {
+  it('treats short replies as approvals, stop or a new request', async () => {
+    const { parseVoiceCommand } = await import('./commands');
+    const waiting = { approvalPending: true, running: true };
+    expect(parseVoiceCommand('Confirm.', waiting)).toEqual({ kind: 'approve' });
+    expect(parseVoiceCommand('Yes, please', waiting)).toEqual({ kind: 'approve' });
+    expect(parseVoiceCommand('Approve all', waiting)).toEqual({ kind: 'approve-all' });
+    expect(parseVoiceCommand('No.', waiting)).toEqual({ kind: 'decline' });
+    expect(parseVoiceCommand('Stop!', { approvalPending: false, running: true })).toEqual({ kind: 'stop' });
+    expect(parseVoiceCommand('Cancel', { approvalPending: false, running: true })).toEqual({ kind: 'stop' });
+    // Whole utterances only: these are requests.
+    expect(parseVoiceCommand('Confirm the booking for Friday', waiting).kind).toBe('request');
+    expect(parseVoiceCommand('Stop', { approvalPending: false, running: false }).kind).toBe('request');
+    expect(parseVoiceCommand('yes', { approvalPending: false, running: false }).kind).toBe('request');
+  });
+  it('ignores what speech models hear in silence', async () => {
+    const { isFiller } = await import('@/ui/hooks/useHandsFree');
+    expect(isFiller('Thank you.')).toBe(true);
+    expect(isFiller(' you ')).toBe(true);
+    expect(isFiller('Open Tom Baker')).toBe(false);
+  });
+});
