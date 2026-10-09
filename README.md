@@ -13,6 +13,7 @@ A Chrome side-panel agent that reads and works any website for you: search, fill
 | | |
 |---|---|
 | **Side panel** | Chat with the agent next to any page. It knows which page you're on, shows a live step-by-step activity timeline, and has a prominent **Stop** button (also `Esc`). |
+| **Running on** | A bar under the panel header shows what powers the agent and where it runs: the actions model (e.g. *Qwen 3.5 9B · Kaggle*) and the voice engine (e.g. *Whisper turbo v3 · Kaggle*), each with a live status dot. Click it to see details: *This computer · Ollama* or *Kaggle GPU · hosted* with the tunnel address, the GPU, and whether the model is loaded. On first run, the panel finds Ollama on this computer and connects it in one click. |
 | **Generic browser tools** | `read_page`, `find_element`, `click`, `type`, `clear`, `select_option`, `scroll`, `press_key`, `wait`, `navigate`, `go_back`, `go_forward`, `list_tabs`, `open_tab`, `switch_tab`, `close_tab` |
 | **Page understanding** | A compact, semantic view of the page: interactive elements with stable ids, accessible names, values, states, table-row and dialog context, headings and visible text. The model never receives raw HTML. Open shadow roots and same-origin iframes are included. |
 | **Multiple agents** | Each agent has its own name, look, instructions, model, tools, skills, step limit and approval policy. Switch between them from the panel header. |

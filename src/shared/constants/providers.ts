@@ -29,6 +29,12 @@ export interface ProviderPreset {
   apiPath?: string;
 }
 
+/** Qwen models people run in Ollama on their own computer. */
+export const OLLAMA_MODELS: ModelOption[] = [
+  { id: 'qwen3.5:9b', label: 'Qwen 3.5 9B', note: 'Better at multi-step tasks. Needs about 7 GB of GPU memory.', tools: true },
+  { id: 'qwen3.5:4b', label: 'Qwen 3.5 4B', note: 'Runs on a 4 GB GPU. Slower and less reliable on complex sites.', tools: true },
+];
+
 /** The models the CareFlow Kaggle notebook (kaggle/careflow_kaggle.ipynb) serves. */
 export const KAGGLE_MODELS: ModelOption[] = [
   { id: 'qwen3.5:9b', label: 'Qwen 3.5 9B', note: 'Calls tools reliably — the best default for actions.', tools: true },
@@ -47,6 +53,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     needsKey: false,
     local: true,
     skipThinking: true,
+    models: OLLAMA_MODELS,
     hint: 'Runs on this computer. Use a model that supports tool calling (Qwen 3, Llama 3.1+, Mistral).',
   },
   {
@@ -163,6 +170,33 @@ export const knownModel = (id: string): ModelOption | undefined => {
   }
   return /medgemma/.test(name) ? KAGGLE_MODELS[2] : undefined;
 };
+
+/** “Qwen 3.5 9B” for known models, the model id as it is otherwise. */
+export const modelLabel = (id: string): string => knownModel(id)?.label ?? id;
+
+export type Location = 'kaggle' | 'local' | 'cloud' | 'server';
+
+const LOCAL_HOST = /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])$/;
+
+/** Where a server runs, in words: “This computer · Ollama”, “Kaggle GPU · hosted”, “Cloud · OpenRouter”. */
+export function locationOf(url: string, preset?: string): { kind: Location; label: string; host: string } {
+  let host = '';
+  let hostname = '';
+  try {
+    const u = new URL(url);
+    host = u.host;
+    hostname = u.hostname;
+  } catch {
+    /* not a URL */
+  }
+  if (preset === 'kaggle' || /\.trycloudflare\.com$|kaggle/i.test(hostname)) return { kind: 'kaggle', label: 'Kaggle GPU · hosted', host };
+  if (LOCAL_HOST.test(hostname)) {
+    const what = preset === 'careflow-bridge' ? 'CareFlow bridge' : preset && preset !== 'custom' ? presetById(preset).label : /:11434$/.test(host) ? 'Ollama' : 'local server';
+    return { kind: 'local', label: `This computer · ${what}`, host };
+  }
+  const cloud = preset && ['openrouter', 'openai', 'anthropic'].includes(preset) ? presetById(preset).label : '';
+  return cloud ? { kind: 'cloud', label: `Cloud · ${cloud}`, host } : { kind: 'server', label: host || 'Server', host };
+}
 
 /** A pasted server address with the preset's API path added when it has none. */
 export function withApiPath(url: string, apiPath?: string): string {

@@ -4,6 +4,7 @@ import { matchesSite } from '@/shared/utils';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { chatActions } from '@/store/chatSlice';
 import { IconButton } from '../../components/IconButton';
+import { RuntimeBar } from '../../components/RuntimeBar';
 import { useActiveTab } from '../../hooks/useActiveTab';
 import { useAgentRunner } from '../../hooks/useAgentRunner';
 import { openConfiguration } from '../../utils/navigation';
@@ -87,6 +88,7 @@ export function SidePanel() {
           <Settings2 size={16} />
         </IconButton>
       </header>
+      {providers.length > 0 && <RuntimeBar agent={agent} config={config} />}
 
       {view === 'history' ? (
         <HistoryView onBack={() => setView('chat')} onRunAgain={onSend} />

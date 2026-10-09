@@ -8,9 +8,9 @@ import { AgentError } from '../utils/errors';
  * Every request carries `X-CareFlow-Key`.
  */
 
-export const SPEECH_ENGINES: { id: SpeechEngine; label: string; note: string }[] = [
-  { id: 'whisper', label: 'Whisper large-v3 turbo', note: 'Best with non-US accents, and uses your vocabulary to spell names right.' },
-  { id: 'omi', label: 'Omi Med STT v1', note: 'A speech model trained for medical dictation.' },
+export const SPEECH_ENGINES: { id: SpeechEngine; label: string; short: string; note: string }[] = [
+  { id: 'whisper', label: 'Whisper large-v3 turbo', short: 'Whisper turbo v3', note: 'Best with non-US accents, and uses your vocabulary to spell names right.' },
+  { id: 'omi', label: 'Omi Med STT v1', short: 'Omi Med STT', note: 'A speech model trained for medical dictation.' },
 ];
 
 export const SAMPLE_RATE = 16000;
