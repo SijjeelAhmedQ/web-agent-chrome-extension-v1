@@ -165,7 +165,11 @@ export class AgentRun {
       page: { title: tab?.title ?? '', url, note: pageNote ? `${pageNote} Navigate to a website if the task needs one.` : undefined },
       readOnly: matchesSite(url, config.settings.readOnlySites),
     });
-    const messages: ChatMessage[] = [{ role: 'system', content: system }, ...this.options.history.slice(-12), { role: 'user', content: request }];
+    // Earlier answers are context, not facts about the page now.
+    const history = this.options.history.slice(-12).map((m): ChatMessage => (m.role === 'assistant' ? { ...m, content: `(Earlier answer — may be out of date)\n${m.content}` } : m));
+    const messages: ChatMessage[] = [{ role: 'system', content: system }, ...history, { role: 'user', content: request }];
+    let verified = false;
+    let checkedAnswer: string | null = null;
 
     void browser.setPresence(true);
     const recent: string[] = [];
@@ -187,7 +191,21 @@ export class AgentRun {
       this.throwIfCancelled();
 
       if (!response.toolCalls.length) {
-        return response.content.trim() || 'Done.';
+        const answer = response.content.trim() || 'Done.';
+        // The double-check came back clean: the user gets the answer that was checked.
+        if (checkedAnswer && /^\W*confirmed\b/i.test(answer)) return checkedAnswer;
+        // A claim that something was done gets checked against the page before the user sees it.
+        if (!verified && agent.verify !== false && byName.has('read_page') && claimsDone(answer)) {
+          verified = true;
+          const page = await this.checkPage(ctx);
+          if (page) {
+            checkedAnswer = answer;
+            messages.push({ role: 'assistant', content: answer });
+            messages.push({ role: 'user', content: verifyPrompt(page) });
+            continue;
+          }
+        }
+        return answer;
       }
       messages.push({ role: 'assistant', content: response.content, toolCalls: response.toolCalls });
 
@@ -238,6 +256,22 @@ export class AgentRun {
     });
     this.emit({ type: 'thinking', taskId: this.id, active: false });
     return response.content.trim() || 'Done.';
+  }
+
+  /** Reads the page for the double-check, shown as its own step. Null when the page can't be read. */
+  private async checkPage(ctx: ToolContext): Promise<string | null> {
+    let step: StepRecord = { id: uid('step_'), label: 'Double-checking the result on the page', status: 'running', tool: 'verify', startedAt: Date.now() };
+    this.upsertStep(step);
+    try {
+      const outcome = await this.inFront(ctx, () => READ_PAGE.execute({ mode: 'overview' }, ctx));
+      step = { ...step, status: 'done', durationMs: Date.now() - step.startedAt };
+      this.upsertStep(step);
+      return outcome.output;
+    } catch (err) {
+      if (this.abort.signal.aborted || isAbort(err)) throw err;
+      this.upsertStep({ ...step, status: 'skipped', note: 'Couldn’t read the page', durationMs: Date.now() - step.startedAt });
+      return null;
+    }
   }
 
   private throwIfCancelled() {
@@ -361,6 +395,25 @@ export class AgentRun {
 
 const BUILT_IN_NAMES = new Set([...BUILT_IN_TOOL_IDS, 'load_skill']);
 const READ_PAGE = BROWSER_TOOLS.find((t) => t.name === 'read_page')!;
+
+/** Does an answer say something was done (selected, saved, added…)? Those get checked before the user sees them. */
+export function claimsDone(answer: string): boolean {
+  return /\b(selected|saved|added|created|submitted|scheduled|booked|sent|deleted|removed|updated|changed|completed|filled|signed in|opened|successfully|confirm(s|ed))\b/i.test(answer);
+}
+
+function verifyPrompt(page: string): string {
+  return [
+    'Before you finish, check your answer against the page as it is right now (below).',
+    '- For every action you said you did (selected, saved, added, created, scheduled…), find the evidence on this page or in an earlier tool result. A success message you did not see in a tool result is not evidence.',
+    '- Report details (names, IDs, numbers, dates) only exactly as they appear here or in earlier tool results. Never construct or guess them.',
+    '- If the page does not confirm something, do it now with your tools — search, go to the next page, click — or tell the user plainly that it did not happen.',
+    'If everything in your answer is confirmed, reply with exactly: CONFIRMED',
+    'Otherwise, after fixing it, reply with the corrected answer for the user — without mentioning this check.',
+    '',
+    'Current page:',
+    page,
+  ].join('\n');
+}
 
 /** The server said this model can't take tools (Ollama: “does not support tools”). */
 function lacksToolSupport(err: unknown): boolean {

@@ -224,6 +224,13 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
                   <Slider min={0} max={1} step={0.1} value={draft.temperature} onChange={(v) => set({ temperature: v })} marks={{ 0: 'Precise', 1: 'Creative' }} tooltip={{ open: false }} />
                   <div className="field-help">Low values make browsing more reliable.</div>
                 </div>
+                <div className="setting-row bare">
+                  <div className="setting-text">
+                    <div className="setting-label">Double-check before answering</div>
+                    <div className="setting-desc">When the agent says it selected, saved or added something, it first re-reads the page to confirm it. Catches made-up results; costs one more model call.</div>
+                  </div>
+                  <Switch checked={draft.verify !== false} onChange={(v) => set({ verify: v })} aria-label="Double-check before answering" />
+                </div>
                 <div>
                   <FieldLabel hint="Per task">Step limit</FieldLabel>
                   <InputNumber min={3} max={100} value={draft.maxSteps} onChange={(v) => set({ maxSteps: v ?? 25 })} style={{ width: 120 }} />

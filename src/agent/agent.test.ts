@@ -162,3 +162,14 @@ describe('prompt and context', () => {
     expect(formatElement({ id: 9, role: 'button', name: 'Add', tag: 'button', disabled: true, context: 'row 2 “Aspirin”', inViewport: false })).toBe('[9] button "Add" (disabled) in row 2 “Aspirin” ↓');
   });
 });
+
+describe('double-check before answering', () => {
+  it('spots answers that claim something was done', async () => {
+    const { claimsDone } = await import('./runtime/agentRun');
+    expect(claimsDone('I selected Luke King (MRN-100076).')).toBe(true);
+    expect(claimsDone('Saved the medication.')).toBe(true);
+    expect(claimsDone('Luke King is now the selected patient.')).toBe(true);
+    expect(claimsDone('The page lists three patients: Tom Baker, Chloe Bell and Sophie Brown.')).toBe(false);
+    expect(claimsDone('Which patient do you mean?')).toBe(false);
+  });
+});

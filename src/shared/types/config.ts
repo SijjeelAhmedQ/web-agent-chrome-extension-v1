@@ -70,6 +70,8 @@ export interface AgentConfig {
   model: string;
   temperature: number;
   maxSteps: number;
+  /** Before reporting that something was done, re-read the page and check the claim (default on). */
+  verify?: boolean;
   confirmation: ConfirmationPolicy;
   /** Built-in tool ids and custom tool ids (prefixed `custom:`). */
   toolIds: string[];
