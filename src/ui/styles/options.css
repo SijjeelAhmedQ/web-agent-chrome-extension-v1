@@ -1,7 +1,8 @@
 /* ================= Configuration page ================= */
 
 body {
-  background: var(--bg-subtle);
+  /* base.css paints the canvas and its aurora. */
+  min-height: 100vh;
 }
 
 .options {
@@ -21,7 +22,10 @@ body {
   padding: 20px 12px 14px;
   flex: none;
   border-right: 1px solid var(--border-subtle);
-  background: var(--bg);
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  transition: width var(--dur) var(--ease);
 }
 
 .sidebar-brand {
@@ -32,7 +36,8 @@ body {
 }
 
 .sidebar-title {
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-weight: 750;
   letter-spacing: -0.02em;
   line-height: 1.2;
 }
@@ -88,10 +93,27 @@ body {
   color: var(--text);
 }
 
+.nav-item {
+  position: relative;
+}
+
 .nav-item.active {
   background: var(--primary-soft);
   color: var(--primary);
   font-weight: 600;
+}
+
+/* A glowing accent bar marks where you are. */
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent-gradient);
+  box-shadow: 0 0 12px var(--accent);
 }
 
 .nav-item.active svg {
@@ -144,10 +166,10 @@ body {
 
 .page-head h1 {
   margin: 0;
-  font-size: 24px;
-  font-weight: 700;
-  letter-spacing: -0.025em;
-  line-height: 1.25;
+  font-size: 27px;
+  font-weight: 760;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
 }
 
 .page-head p {
@@ -192,8 +214,10 @@ body {
 .section-card,
 .list-card {
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   background: var(--surface);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
@@ -265,14 +289,17 @@ body {
 }
 
 .agent-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 18px;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   background: var(--surface);
+  backdrop-filter: var(--blur);
   box-shadow: var(--shadow-sm);
+  overflow: hidden;
   text-align: left;
   font: inherit;
   color: inherit;
@@ -280,10 +307,20 @@ body {
   transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
 
+/* Each agent's colour runs along the top of its card. */
+.agent-card:not(.add)::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--agent, var(--accent)), color-mix(in srgb, var(--agent, var(--accent)) 35%, transparent));
+  opacity: 0.85;
+}
+
 .agent-card:hover {
-  border-color: var(--border);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--agent, var(--accent)) 40%, var(--border));
+  box-shadow: var(--shadow-md), 0 0 44px -18px var(--agent, var(--accent));
+  transform: translateY(-2px);
 }
 
 .agent-card-top {
@@ -750,6 +787,7 @@ textarea.mono-area {
 
 .swatches {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -1273,14 +1311,72 @@ textarea.mono-area {
   justify-content: flex-end;
 }
 
-/* ---------- Responsive ---------- */
+/* ---------- Responsive: phone · tablet rail · laptop · large ---------- */
 
-@media (max-width: 900px) {
-  .sidebar {
-    width: 210px;
-  }
+/* Large screens: more room, more columns. */
+@media (min-width: 1440px) {
   .content-inner {
-    padding: 28px 24px 60px;
+    max-width: 1120px;
+    padding: 48px 56px 96px;
+  }
+  .sidebar {
+    width: 272px;
+  }
+}
+
+/* Tablets and small laptops: an icon rail with tooltips. */
+.options.is-rail .sidebar {
+  width: 76px;
+  padding-inline: 10px;
+  align-items: stretch;
+}
+
+.options.is-rail .sidebar-brand {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.options.is-rail .sidebar-brand-text,
+.options.is-rail .nav-group-label,
+.options.is-rail .nav-label,
+.options.is-rail .sidebar-version {
+  display: none;
+}
+
+.options.is-rail .nav-item {
+  justify-content: center;
+  height: 44px;
+  padding: 0;
+  position: relative;
+}
+
+.options.is-rail .nav-dot {
+  position: absolute;
+  top: 9px;
+  right: 12px;
+}
+
+.options.is-rail .nav-group {
+  gap: 4px;
+}
+
+.options.is-rail .sidebar-foot {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.options.is-rail .sidebar-foot .ant-segmented {
+  transform: scale(0.86);
+  transform-origin: center;
+}
+
+.options.is-rail .sidebar-foot .ant-segmented-group {
+  flex-direction: column;
+}
+
+@media (max-width: 1099px) {
+  .content-inner {
+    padding: 32px 28px 72px;
   }
   .activity-layout {
     grid-template-columns: 1fr;
@@ -1290,29 +1386,70 @@ textarea.mono-area {
   }
 }
 
-@media (max-width: 680px) {
-  .options {
-    flex-direction: column;
-  }
-  .sidebar {
-    position: static;
-    width: 100%;
-    height: auto;
-    border-right: 0;
-    border-bottom: 1px solid var(--border-subtle);
-  }
-  .sidebar-nav {
-    flex-direction: row;
-    overflow-x: auto;
-  }
-  .nav-group {
-    flex-direction: row;
-  }
-  .nav-group-label {
-    display: none;
-  }
+/* Phones: a top bar and a navigation drawer. */
+.mobile-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  padding: 0 12px 0 6px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+}
+
+.mobile-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+
+.nav-drawer .ant-drawer-body {
+  padding: 0 !important;
+}
+
+.sidebar.in-drawer {
+  position: static;
+  width: 100%;
+  height: 100%;
+  border-right: 0;
+  background: transparent;
+}
+
+.sidebar.in-drawer .nav-item {
+  height: 46px;
+}
+
+.options.is-phone {
+  flex-direction: column;
+}
+
+.options.is-phone .content-inner {
+  padding: 20px 16px 72px;
+}
+
+@media (max-width: 767px) {
   .page-head {
     flex-direction: column;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .page-head h1 {
+    font-size: 22px;
+  }
+  .page-head-actions,
+  .page-head-actions > .ant-btn,
+  .page-head-actions > .ant-dropdown-trigger {
+    width: 100%;
+  }
+  .page-head-actions .ant-btn {
+    width: 100%;
+    height: 44px;
   }
   .two-col,
   .radio-cards.two,
@@ -1321,6 +1458,62 @@ textarea.mono-area {
   }
   .param-row {
     grid-template-columns: 1fr 1fr;
+  }
+  .setting-row {
+    flex-wrap: wrap;
+    gap: 10px 16px;
+  }
+  .setting-control {
+    max-width: 100%;
+  }
+  .setting-control .ant-select {
+    width: 100% !important;
+    min-width: 200px;
+  }
+  .list-row,
+  .tool-row,
+  .provider-row {
+    flex-wrap: wrap;
+    padding: 14px;
+  }
+  .list-side {
+    width: 100%;
+    justify-content: flex-start;
+    padding-left: 48px;
+  }
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+  .preset-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .activity-list-pane {
+    max-height: none;
+  }
+}
+
+@media (max-width: 380px) {
+  .preset-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Drawers and dialogs never wider than the screen. */
+.ant-drawer-right > .ant-drawer-content-wrapper {
+  max-width: 100vw;
+}
+
+@media (max-width: 767px) {
+  .ant-drawer-right > .ant-drawer-content-wrapper {
+    width: 100vw !important;
+  }
+  .ant-modal {
+    max-width: calc(100vw - 24px) !important;
+    margin-inline: auto;
+  }
+  .ant-modal-footer .modal-foot,
+  .drawer-foot {
+    flex-wrap: wrap;
   }
 }
 
@@ -1384,4 +1577,51 @@ textarea.mono-area {
   max-width: 280px;
   white-space: normal;
   line-height: 1.35;
+}
+
+
+/* ---------- Dark: codeiyo glow on primary actions ---------- */
+
+:root[data-theme='dark'] .ant-btn-primary:not(:disabled) {
+  box-shadow: 0 0 24px -6px rgba(16, 185, 129, 0.55);
+}
+
+:root[data-theme='dark'] .preset-card:hover,
+:root[data-theme='dark'] .radio-card.on,
+:root[data-theme='dark'] .model-option.on {
+  box-shadow: 0 0 0 1px var(--primary), 0 0 36px -14px var(--primary);
+}
+
+/* Touch screens: bigger rows and controls. */
+@media (pointer: coarse) {
+  .nav-item {
+    height: 44px;
+  }
+  .check-row {
+    min-height: 48px;
+  }
+  .swatch {
+    width: 30px;
+    height: 30px;
+  }
+  .icon-choice {
+    width: 40px;
+    height: 40px;
+  }
+  .icon-grid {
+    grid-template-columns: repeat(6, 40px);
+  }
+}
+
+.mobile-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+@media (max-width: 420px) {
+  .avatar-picker {
+    flex-direction: column;
+    gap: 12px;
+  }
 }

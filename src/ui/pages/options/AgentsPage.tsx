@@ -92,6 +92,7 @@ export function AgentsPage() {
             <div
               key={a.id}
               className="agent-card"
+              style={{ ['--agent' as string]: a.avatar.color }}
               role="button"
               tabIndex={0}
               onClick={() => {

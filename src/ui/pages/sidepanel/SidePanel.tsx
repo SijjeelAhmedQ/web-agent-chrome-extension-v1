@@ -1,5 +1,6 @@
 import { History, ListOrdered, Settings2, SquarePen, X } from 'lucide-react';
 import { parseVoiceCommand } from '@/shared/voice/commands';
+import { voiceReady } from '@/shared/voice/speech';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { matchesSite } from '@/shared/utils';
 import { useAppDispatch, useAppSelector } from '@/store';
@@ -139,6 +140,13 @@ export function SidePanel() {
               hasModel={providers.length > 0}
               showSuggestions={settings.showSuggestions}
               canAct={canAct}
+              voiceHint={
+                voiceReady(settings.voice)
+                  ? settings.voice.mode === 'handsfree'
+                    ? 'Or just talk: click the mic once, then pause after each request.'
+                    : 'Or click the mic and say what you need.'
+                  : undefined
+              }
               onPick={(prompt, fill) => (fill || !prompt ? composer.current?.fill(prompt) : onSend(prompt))}
             />
           ) : (

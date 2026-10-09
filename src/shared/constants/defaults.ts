@@ -122,9 +122,9 @@ export function defaultConfig(): AppConfig {
 }
 
 export const SUGGESTIONS = [
-  { label: 'Summarize this page', prompt: 'Summarize this page.', icon: 'FileText' },
-  { label: 'Find something', prompt: 'Find ', icon: 'Search', fill: true },
-  { label: 'Fill this form', prompt: 'Fill this form with: ', icon: 'ClipboardPen', fill: true },
-  { label: 'Search this site', prompt: 'Search this site for ', icon: 'TextSearch', fill: true },
-  { label: 'Help me with a task', prompt: '', icon: 'Wand', fill: true },
+  { label: 'Summarize this page', desc: 'The key points in a few lines', prompt: 'Summarize this page.', icon: 'FileText' },
+  { label: 'Find something', desc: 'A button, record or piece of text', prompt: 'Find ', icon: 'Search', fill: true },
+  { label: 'Fill this form', desc: 'Tell me the details, I’ll enter them', prompt: 'Fill this form with: ', icon: 'ClipboardPen', fill: true },
+  { label: 'Search this site', desc: 'Using the site’s own search', prompt: 'Search this site for ', icon: 'TextSearch', fill: true },
+  { label: 'Help me with a task', desc: 'Describe it — I’ll work through it', prompt: '', icon: 'Wand', fill: true },
 ] as const;

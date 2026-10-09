@@ -1,5 +1,6 @@
 import '@fontsource-variable/inter';
 import '@fontsource-variable/jetbrains-mono';
+import '@fontsource-variable/plus-jakarta-sans';
 import { StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Provider } from 'react-redux';

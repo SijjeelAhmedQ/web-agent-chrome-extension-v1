@@ -3,6 +3,14 @@ import { memo } from 'react';
 import type { TaskRecord } from '@/shared/types/history';
 import { formatRelative } from '@/shared/utils';
 
+/** A one-line preview of a Markdown answer: no stars, pipes or table rules. */
+const plain = (md: string) =>
+  md
+    .replace(/\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?/g, ' ')
+    .replace(/[*_`#>|]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
 export function TaskStatusIcon({ status }: { status: TaskRecord['status'] }) {
   const label = { done: 'Completed', failed: 'Failed', cancelled: 'Stopped', running: 'Running' }[status];
   return (
@@ -34,7 +42,7 @@ export const TaskList = memo(function TaskList({ tasks, selectedId, onSelect }: 
                 <span aria-hidden> · </span>
                 {formatRelative(t.startedAt)}
               </span>
-              {(t.result || t.error) && <span className={`task-result ${t.status}`}>{t.status === 'done' ? t.result : t.error}</span>}
+              {(t.result || t.error) && <span className={`task-result ${t.status}`}>{t.status === 'done' ? plain(t.result ?? '') : t.error}</span>}
             </span>
           </button>
         </li>

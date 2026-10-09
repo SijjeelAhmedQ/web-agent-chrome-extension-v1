@@ -9,9 +9,9 @@ export type Mode = 'light' | 'dark';
 
 export const palette = {
   light: {
-    bg: '#ffffff',
-    bgSubtle: '#f8fafc',
-    bgMuted: '#f1f5f9',
+    bg: '#f7f9fb',
+    bgSubtle: '#f1f5f9',
+    bgMuted: '#eef2f6',
     surface: '#ffffff',
     elevated: '#ffffff',
     border: '#e2e8f0',
@@ -35,12 +35,12 @@ export const palette = {
   },
   dark: {
     bg: '#020617',
-    bgSubtle: '#0b1120',
-    bgMuted: '#0f172a',
-    surface: '#0b1120',
-    elevated: '#111a2e',
-    border: 'rgba(255,255,255,0.09)',
-    borderSubtle: 'rgba(255,255,255,0.05)',
+    bgSubtle: '#0a1022',
+    bgMuted: '#111a2e',
+    surface: '#0b1324',
+    elevated: '#0f172a',
+    border: 'rgba(255,255,255,0.08)',
+    borderSubtle: 'rgba(255,255,255,0.055)',
     text: '#e2e8f0',
     textSecondary: '#a3b0c2',
     textMuted: '#7c8aa0',

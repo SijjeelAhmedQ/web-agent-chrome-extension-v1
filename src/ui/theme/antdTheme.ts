@@ -87,7 +87,7 @@ export function buildAntdTheme(mode: Mode, large: boolean): ThemeConfig {
       Switch: { trackHeight: 22, handleSize: 18, trackMinWidth: 40 },
       Tooltip: { fontSize: 12.5, borderRadius: 8, paddingSM: 10 },
       Dropdown: { paddingBlock: 6, borderRadiusLG: 14 },
-      Drawer: { footerPaddingBlock: 14, footerPaddingInline: 24 },
+      Drawer: { footerPaddingBlock: 14, footerPaddingInline: 20, colorBgElevated: dark ? '#0b1324' : '#ffffff' },
       Modal: { borderRadiusLG: radius.xl, contentBg: c.elevated, headerBg: c.elevated, footerBg: 'transparent' },
       Tag: { borderRadiusSM: 999 },
       Slider: { handleColor: c.primary, trackBg: c.primary, trackHoverBg: c.primaryHover },

@@ -1,61 +1,78 @@
-/* Design tokens as CSS variables — mirror src/ui/theme/tokens.ts. */
+/*
+ * Design tokens — mirror src/ui/theme/tokens.ts.
+ * Light: calm slate on white with a faint emerald/sky aurora.
+ * Dark: codeiyo.com — slate-950 canvas, glass surfaces (slate-900 at 60% + blur), 8% white
+ * hairlines, emerald accent, green→teal gradient and soft emerald/sky glows.
+ */
 
 :root,
 :root[data-theme='light'] {
   color-scheme: light;
-  --bg: #ffffff;
-  --bg-subtle: #f8fafc;
-  --bg-muted: #f1f5f9;
+  --bg: #f7f9fb;
+  --bg-subtle: #f1f5f9;
+  --bg-muted: #eef2f6;
   --surface: #ffffff;
+  --surface-2: #fbfcfd;
   --elevated: #ffffff;
+  --glass: rgba(255, 255, 255, 0.78);
+  --glass-strong: rgba(255, 255, 255, 0.92);
   --border: #e2e8f0;
-  --border-subtle: #eef2f6;
-  --text: #0f172a;
+  --border-subtle: #edf1f5;
+  --text: #0b1220;
   --text-secondary: #475569;
   --text-muted: #64748b;
   --text-faint: #94a3b8;
   --primary: #047857;
   --primary-hover: #065f46;
-  --primary-soft: #ecfdf5;
+  --primary-soft: #e9f8f1;
   --primary-ring: rgba(4, 120, 87, 0.22);
   --focus-soft: rgba(4, 120, 87, 0.1);
   --on-primary: #ffffff;
   --accent: #10b981;
+  --accent-2: #0ea5e9;
   --danger: #dc2626;
   --danger-soft: #fef2f2;
   --warning: #b45309;
-  --warning-soft: #fffbeb;
+  --warning-soft: #fff8eb;
   --success: #047857;
   --hover: rgba(15, 23, 42, 0.045);
   --pressed: rgba(15, 23, 42, 0.08);
-  --user-bubble: #f1f5f9;
+  --user-bubble: #e9eef4;
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
   --shadow-md: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.07);
-  --shadow-lg: 0 2px 6px rgba(15, 23, 42, 0.05), 0 18px 48px rgba(15, 23, 42, 0.12);
+  --shadow-lg: 0 2px 6px rgba(15, 23, 42, 0.05), 0 22px 56px rgba(15, 23, 42, 0.14);
   --ai-gradient: linear-gradient(135deg, #10b981 0%, #06b6d4 55%, #0ea5e9 100%);
+  --accent-gradient: linear-gradient(90deg, #059669, #0891b2);
   --ai-glow: rgba(16, 185, 129, 0.18);
+  --glow-1: rgba(16, 185, 129, 0.1);
+  --glow-2: rgba(14, 165, 233, 0.08);
+  --blur: saturate(160%) blur(14px);
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
   --bg: #020617;
-  --bg-subtle: #0b1120;
-  --bg-muted: #0f172a;
-  --surface: #0b1120;
-  --elevated: #111a2e;
-  --border: rgba(255, 255, 255, 0.09);
+  --bg-subtle: #0a1022;
+  --bg-muted: #111a2e;
+  --surface: rgba(15, 23, 42, 0.6);
+  --surface-2: rgba(15, 23, 42, 0.45);
+  --elevated: #0f172a;
+  --glass: rgba(2, 6, 23, 0.72);
+  --glass-strong: rgba(15, 23, 42, 0.92);
+  --border: rgba(255, 255, 255, 0.08);
   --border-subtle: rgba(255, 255, 255, 0.055);
-  --text: #e2e8f0;
+  --text: #e8eef6;
   --text-secondary: #a3b0c2;
-  --text-muted: #7c8aa0;
+  --text-muted: #7f8ca2;
   --text-faint: #56627a;
   --primary: #10b981;
   --primary-hover: #34d399;
   --primary-soft: rgba(16, 185, 129, 0.12);
-  --primary-ring: rgba(16, 185, 129, 0.3);
-  --focus-soft: rgba(16, 185, 129, 0.14);
+  --primary-ring: rgba(16, 185, 129, 0.32);
+  --focus-soft: rgba(16, 185, 129, 0.16);
   --on-primary: #03140d;
   --accent: #10b981;
+  --accent-2: #38bdf8;
   --danger: #f87171;
   --danger-soft: rgba(248, 113, 113, 0.1);
   --warning: #fbbf24;
@@ -63,12 +80,16 @@
   --success: #34d399;
   --hover: rgba(255, 255, 255, 0.05);
   --pressed: rgba(255, 255, 255, 0.09);
-  --user-bubble: #131c30;
+  --user-bubble: rgba(30, 41, 59, 0.75);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 2px 6px rgba(0, 0, 0, 0.4), 0 18px 48px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.35), 0 10px 30px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 0 40px -10px rgba(14, 165, 233, 0.2), 0 24px 60px rgba(0, 0, 0, 0.55);
   --ai-gradient: linear-gradient(135deg, #34d399 0%, #22d3ee 55%, #38bdf8 100%);
-  --ai-glow: rgba(16, 185, 129, 0.22);
+  --accent-gradient: linear-gradient(90deg, #4ade80, #57bfcf);
+  --ai-glow: rgba(16, 185, 129, 0.24);
+  --glow-1: rgba(16, 185, 129, 0.13);
+  --glow-2: rgba(14, 165, 233, 0.11);
+  --blur: saturate(140%) blur(16px);
 }
 
 /* Before settings load: follow the system so dark-mode users never see a white flash. */
@@ -76,23 +97,27 @@
   :root:not([data-theme]) {
     color-scheme: dark;
     --bg: #020617;
-    --bg-subtle: #0b1120;
-    --bg-muted: #0f172a;
-    --surface: #0b1120;
-    --elevated: #111a2e;
-    --border: rgba(255, 255, 255, 0.09);
+    --bg-subtle: #0a1022;
+    --bg-muted: #111a2e;
+    --surface: rgba(15, 23, 42, 0.6);
+    --surface-2: rgba(15, 23, 42, 0.45);
+    --elevated: #0f172a;
+    --glass: rgba(2, 6, 23, 0.72);
+    --glass-strong: rgba(15, 23, 42, 0.92);
+    --border: rgba(255, 255, 255, 0.08);
     --border-subtle: rgba(255, 255, 255, 0.055);
-    --text: #e2e8f0;
+    --text: #e8eef6;
     --text-secondary: #a3b0c2;
-    --text-muted: #7c8aa0;
+    --text-muted: #7f8ca2;
     --text-faint: #56627a;
     --primary: #10b981;
     --primary-hover: #34d399;
     --primary-soft: rgba(16, 185, 129, 0.12);
-    --primary-ring: rgba(16, 185, 129, 0.3);
-    --focus-soft: rgba(16, 185, 129, 0.14);
+    --primary-ring: rgba(16, 185, 129, 0.32);
+    --focus-soft: rgba(16, 185, 129, 0.16);
     --on-primary: #03140d;
     --accent: #10b981;
+    --accent-2: #38bdf8;
     --danger: #f87171;
     --danger-soft: rgba(248, 113, 113, 0.1);
     --warning: #fbbf24;
@@ -100,25 +125,39 @@
     --success: #34d399;
     --hover: rgba(255, 255, 255, 0.05);
     --pressed: rgba(255, 255, 255, 0.09);
-    --user-bubble: #131c30;
+    --user-bubble: rgba(30, 41, 59, 0.75);
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.35);
-    --shadow-lg: 0 2px 6px rgba(0, 0, 0, 0.4), 0 18px 48px rgba(0, 0, 0, 0.5);
+    --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.35), 0 10px 30px rgba(0, 0, 0, 0.35);
+    --shadow-lg: 0 0 40px -10px rgba(14, 165, 233, 0.2), 0 24px 60px rgba(0, 0, 0, 0.55);
     --ai-gradient: linear-gradient(135deg, #34d399 0%, #22d3ee 55%, #38bdf8 100%);
-    --ai-glow: rgba(16, 185, 129, 0.22);
-}
+    --accent-gradient: linear-gradient(90deg, #4ade80, #57bfcf);
+    --ai-glow: rgba(16, 185, 129, 0.24);
+    --glow-1: rgba(16, 185, 129, 0.13);
+    --glow-2: rgba(14, 165, 233, 0.11);
+    --blur: saturate(140%) blur(16px);
+  }
 }
 
 :root {
   --font-sans: 'Inter Variable', Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', 'Inter Variable', Inter, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --radius-sm: 8px;
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-xl: 18px;
+  --radius-2xl: 22px;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --dur: 160ms;
   --fs-base: 14px;
+  /* Minimum touch target; grows on touch screens. */
+  --tap: 36px;
+}
+
+@media (pointer: coarse) {
+  :root {
+    --tap: 44px;
+  }
 }
 
 :root[data-text='large'] {
@@ -133,4 +172,11 @@
   :root {
     --dur: 0ms;
   }
+}
+
+/* Animatable angle for the “agent at work” running border. */
+@property --spin {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
 }

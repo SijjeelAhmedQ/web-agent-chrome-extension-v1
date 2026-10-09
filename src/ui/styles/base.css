@@ -14,7 +14,12 @@ body,
 
 body {
   margin: 0;
-  background: var(--bg);
+  /* A faint aurora behind everything — emerald top-left, sky top-right (codeiyo in dark). */
+  background:
+    radial-gradient(900px 520px at -10% -12%, var(--glow-1), transparent 60%),
+    radial-gradient(800px 480px at 110% -8%, var(--glow-2), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
   color: var(--text);
   font-family: var(--font-sans);
   font-size: var(--fs-base);
@@ -33,6 +38,20 @@ body {
 
 ::selection {
   background: var(--primary-ring);
+}
+
+h1,
+h2,
+h3,
+.display {
+  font-family: var(--font-display);
+}
+
+.gradient-text {
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 /* Quiet scrollbars */
@@ -67,10 +86,10 @@ body {
 .icon-btn {
   display: inline-grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: var(--tap);
+  height: var(--tap);
   border: 0;
-  border-radius: 9px;
+  border-radius: 10px;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;

@@ -1,5 +1,5 @@
 import { Button, Select } from 'antd';
-import { ArrowUpRight, Laptop, Plug } from 'lucide-react';
+import { ArrowUpRight, Laptop, Mic, Plug } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { SUGGESTIONS } from '@/shared/constants/defaults';
 import { modelLabel } from '@/shared/constants/providers';
@@ -16,7 +16,14 @@ interface Props {
   hasModel: boolean;
   showSuggestions: boolean;
   canAct: boolean;
+  /** Hands-free voice is set up: invite the user to just talk. */
+  voiceHint?: string;
   onPick: (prompt: string, fill: boolean) => void;
+}
+
+function greeting(now = new Date()): string {
+  const h = now.getHours();
+  return h < 5 ? 'Working late' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
 }
 
 /** First run: offer the Ollama found on this computer, or the full list of options. */
@@ -82,15 +89,30 @@ function SetupCard() {
   );
 }
 
-export function EmptyState({ agent, hasModel, showSuggestions, canAct, onPick }: Props) {
+export function EmptyState({ agent, hasModel, showSuggestions, canAct, voiceHint, onPick }: Props) {
   const isDefault = agent.id === 'agent-assistant';
   return (
     <div className="empty">
       <div className="empty-hero">
-        {isDefault ? <BrandMark size={44} /> : <AgentAvatar avatar={agent.avatar} size={44} />}
-        <h1 className="empty-title">What can I do for you?</h1>
+        <div className="hero-mark">
+          <span className="hero-aura" aria-hidden />
+          {isDefault ? <BrandMark size={48} /> : <AgentAvatar avatar={agent.avatar} size={48} />}
+        </div>
+        <div className="empty-eyebrow">
+          {greeting()}
+          {isDefault ? '' : ` · ${agent.name}`}
+        </div>
+        <h1 className="empty-title">
+          What can I <span className="gradient-text">do for you?</span>
+        </h1>
         <p className="empty-sub">{isDefault ? 'I can read this page, search, fill in forms and click through websites for you.' : agent.description}</p>
       </div>
+
+      {hasModel && voiceHint && (
+        <div className="voice-hint">
+          <Mic size={14} aria-hidden /> {voiceHint}
+        </div>
+      )}
 
       {!hasModel ? (
         <SetupCard />
@@ -101,9 +123,12 @@ export function EmptyState({ agent, hasModel, showSuggestions, canAct, onPick }:
               <li key={s.label}>
                 <button type="button" className="suggestion" onClick={() => onPick(s.prompt, 'fill' in s && !!s.fill)}>
                   <span className="suggestion-icon">
-                    <NamedIcon name={s.icon} size={15} />
+                    <NamedIcon name={s.icon} size={16} />
                   </span>
-                  <span className="suggestion-label">{s.label}</span>
+                  <span className="suggestion-text">
+                    <span className="suggestion-label">{s.label}</span>
+                    <span className="suggestion-desc">{s.desc}</span>
+                  </span>
                   <ArrowUpRight size={14} className="suggestion-arrow" aria-hidden />
                 </button>
               </li>
