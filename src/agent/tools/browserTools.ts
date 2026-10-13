@@ -58,8 +58,9 @@ async function approvalFor(
   const site = siteOf(await pageUrl(ctx)) || 'this site';
   return {
     title: action,
-    detail: `This will ${verdict.consequence} on ${site}.`,
+    detail: `This will ${verdict.consequence} on ${site}.${kind !== 'type' && info.formValues?.length ? ' Check the details:' : ''}`,
     confirmLabel: kind === 'type' ? 'Allow' : 'Confirm',
+    ...(kind !== 'type' && info.formValues?.length ? { fields: info.formValues } : {}),
   };
 }
 

@@ -7,7 +7,7 @@ import type { StepRecord, TaskRecord } from '@/shared/types/history';
 import { clip, matchesSite, siteOf, uid } from '@/shared/utils';
 import { AgentError, isAbort, toAgentError } from '@/shared/utils/errors';
 import { createClient, type LlmClient } from '../llm';
-import { knownModel } from '@/shared/constants/providers';
+import { KAGGLE_CONTEXT_WINDOW, knownModel } from '@/shared/constants/providers';
 import { BROWSER_TOOLS } from '../tools/browserTools';
 import { DEFAULT_CONTEXT_WINDOW } from '../llm/ollama';
 import type { ChatMessage, ToolCall } from '../llm/types';
@@ -149,10 +149,11 @@ export class AgentRun {
     const { agent, config, request } = this.options;
     const { provider, model } = resolveProvider(agent, config);
     const client = createClient(provider);
-    const budget = budgetFor(provider.kind === 'ollama' ? provider.contextWindow || DEFAULT_CONTEXT_WINDOW : undefined);
     const url = tab?.url ?? '';
     const toolset = buildToolset(agent, config, url);
     const specs = toolSpecs(toolset.tools);
+    // Room for the conversation: the server's context window minus the tool definitions sent with every call.
+    let budget = budgetFor(contextWindowOf(provider)) - JSON.stringify(specs).length;
     const byName = new Map(toolset.tools.map((t) => [t.name, t]));
     const ctx: ToolContext = { browser, settings: config.settings, signal: this.abort.signal, elements: new ElementMemory(), skills: toolset.onDemandSkills };
 
@@ -170,6 +171,7 @@ export class AgentRun {
     const messages: ChatMessage[] = [{ role: 'system', content: system }, ...history, { role: 'user', content: request }];
     let verified = false;
     let checkedAnswer: string | null = null;
+    let nudges = 0;
 
     void browser.setPresence(true);
     const recent: string[] = [];
@@ -192,6 +194,15 @@ export class AgentRun {
 
       if (!response.toolCalls.length) {
         const answer = response.content.trim() || 'Done.';
+        // A reply cut off by the context limit, or narration of a next step, is not a final answer.
+        const cutOff = response.finishReason === 'length';
+        if ((cutOff || soundsUnfinished(answer)) && nudges < 3 && !checkedAnswer) {
+          nudges++;
+          if (cutOff) budget = Math.max(8_000, Math.floor(budget * 0.6)); // make room: drop old page snapshots sooner
+          messages.push({ role: 'assistant', content: answer });
+          messages.push({ role: 'user', content: cutOff ? CUT_OFF_PROMPT : CONTINUE_PROMPT });
+          continue;
+        }
         // The double-check came back clean: the user gets the answer that was checked.
         if (checkedAnswer && /^\W*confirmed\b/i.test(answer)) return checkedAnswer;
         // A claim that something was done gets checked against the page before the user sees it.
@@ -395,6 +406,29 @@ export class AgentRun {
 
 const BUILT_IN_NAMES = new Set([...BUILT_IN_TOOL_IDS, 'load_skill']);
 const READ_PAGE = BROWSER_TOOLS.find((t) => t.name === 'read_page')!;
+
+const CUT_OFF_PROMPT = 'Your last reply was cut off because the conversation got long. Continue the task: call the next tool now, and keep any text short.';
+const CONTINUE_PROMPT = 'You have not finished the task yet — you described a next step instead of doing it. Continue by calling the next tool. If the task is truly complete, reply with your final answer for the user.';
+
+/** The server's context window in tokens, when known. */
+function contextWindowOf(provider: ProviderConfig): number | undefined {
+  if (provider.contextWindow) return provider.contextWindow;
+  if (provider.preset === 'kaggle') return KAGGLE_CONTEXT_WINDOW;
+  return provider.kind === 'ollama' ? DEFAULT_CONTEXT_WINDOW : undefined;
+}
+
+/**
+ * Narration of a step the model has not taken (“Good, the dropdown is open. Let me click…”) or a
+ * reply that stops mid-sentence. Final answers end with a full stop and don't promise more work.
+ */
+export function soundsUnfinished(answer: string): boolean {
+  const text = answer.trim();
+  if (!text) return false;
+  const tail = text.slice(-260);
+  const promisesMore = /(^|[.!?]\s+|\n)\s*(now,?\s+|next,?\s+|so\s+)?(let me(?! know)|let's|i('|’)ll(?! be happy)|i will(?! be happy)|i need to|i'm going to|i am going to|i should now)\b/i.test(tail);
+  const stopsMidSentence = text.length > 20 && !/[.!?)"”'’`*|…:\]]$/.test(text);
+  return promisesMore || stopsMidSentence;
+}
 
 /** Does an answer say something was done (selected, saved, added…)? Those get checked before the user sees them. */
 export function claimsDone(answer: string): boolean {

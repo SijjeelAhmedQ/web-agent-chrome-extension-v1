@@ -3,7 +3,7 @@ import { DEFAULT_CONTEXT_WINDOW } from '@/agent/llm/ollama';
 import { CheckCircle2, ExternalLink, Laptop, MoreHorizontal, Plus, RefreshCw, Star, Trash2, XCircle, Zap } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/agent/llm';
-import { PROVIDER_PRESETS, presetById, withApiPath, type ProviderPreset } from '@/shared/constants/providers';
+import { KAGGLE_CONTEXT_WINDOW, PROVIDER_PRESETS, presetById, withApiPath, type ProviderPreset } from '@/shared/constants/providers';
 import { speechBase } from '@/shared/voice/speech';
 import type { ProviderConfig } from '@/shared/types/config';
 import { uid } from '@/shared/utils';
@@ -62,7 +62,7 @@ export function ModelsPage() {
         skipThinking: preset.skipThinking ?? false,
         ...(preset.keyHeader ? { keyHeader: preset.keyHeader } : {}),
         ...(preset.timeoutMs ? { timeoutMs: preset.timeoutMs } : {}),
-        ...(preset.kind === 'ollama' ? { contextWindow: DEFAULT_CONTEXT_WINDOW } : {}),
+        ...(preset.kind === 'ollama' ? { contextWindow: DEFAULT_CONTEXT_WINDOW } : preset.id === 'kaggle' ? { contextWindow: KAGGLE_CONTEXT_WINDOW } : {}),
         createdAt: Date.now(),
       },
     });
@@ -360,13 +360,28 @@ function ProviderEditor({ value, onClose, onSave }: { value: { provider: Provide
             <div className="field-help">Choose a model that supports tool calling.</div>
           )}
         </div>
-        {draft.kind === 'ollama' && (
+        {draft.kind !== 'anthropic' && (
           <div className="setting-row bare">
             <div className="setting-text">
               <div className="setting-label">Context window</div>
-              <div className="setting-desc">How much the model can read at once, in tokens. Web pages need room — 12k or more works well. Larger uses more memory.</div>
+              <div className="setting-desc">
+                {draft.kind === 'ollama'
+                  ? 'How much the model can read at once, in tokens. Web pages need room — 12k or more works well. Larger uses more memory.'
+                  : draft.preset === 'kaggle'
+                    ? 'The notebook gives every model 16,384 tokens (CTX in the notebook). Change this only if you changed CTX there.'
+                    : 'How much the server lets the model read, in tokens. Long tasks are trimmed to fit. Leave empty if you don’t know.'}
+              </div>
             </div>
-            <InputNumber min={2048} max={262144} step={1024} value={draft.contextWindow ?? DEFAULT_CONTEXT_WINDOW} onChange={(v) => set({ contextWindow: v ?? DEFAULT_CONTEXT_WINDOW })} style={{ width: 120 }} aria-label="Context window" />
+            <InputNumber
+              min={2048}
+              max={1_000_000}
+              step={1024}
+              value={draft.contextWindow ?? (draft.kind === 'ollama' ? DEFAULT_CONTEXT_WINDOW : draft.preset === 'kaggle' ? KAGGLE_CONTEXT_WINDOW : null)}
+              placeholder="Unknown"
+              onChange={(v) => set({ contextWindow: v ?? undefined })}
+              style={{ width: 120 }}
+              aria-label="Context window"
+            />
           </div>
         )}
         {draft.kind !== 'anthropic' && (

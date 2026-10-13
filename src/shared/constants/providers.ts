@@ -29,6 +29,9 @@ export interface ProviderPreset {
   apiPath?: string;
 }
 
+/** The notebook runs every model with this many tokens of context (CTX in careflow_kaggle.ipynb). */
+export const KAGGLE_CONTEXT_WINDOW = 16384;
+
 /** Qwen models people run in Ollama on their own computer. */
 export const OLLAMA_MODELS: ModelOption[] = [
   { id: 'qwen3.5:9b', label: 'Qwen 3.5 9B', note: 'Better at multi-step tasks. Needs about 7 GB of GPU memory.', tools: true },

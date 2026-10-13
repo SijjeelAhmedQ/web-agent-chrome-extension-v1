@@ -23,7 +23,7 @@ export interface ProviderConfig {
   defaultModel: string;
   /** Ask reasoning models to answer without a thinking phase (`reasoning_effort: "none"`). Much faster on local models. */
   skipThinking?: boolean;
-  /** Ollama only: context window in tokens (`num_ctx`). */
+  /** Context window in tokens. Ollama: sent as `num_ctx`. Others: used to trim long tasks to fit. */
   contextWindow?: number;
   /** Send the API key in this header instead of `Authorization: Bearer` (e.g. `X-CareFlow-Key`). */
   keyHeader?: string;

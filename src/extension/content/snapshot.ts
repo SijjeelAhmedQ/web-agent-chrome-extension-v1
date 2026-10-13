@@ -181,6 +181,38 @@ export function find(query: string, limit: number): FindResult {
 const PAYMENT_HINT = /card|cc-|cvc|cvv|iban|expir|billing/i;
 
 /** Facts about an element that decide whether acting on it needs the user's approval. */
+/** The filled-in fields of the form or dialog around a control, as label → value. */
+function filledValues(scope: Element | null): { label: string; value: string }[] {
+  if (!scope) return [];
+  const out: { label: string; value: string }[] = [];
+  const seen = new Set<string>();
+  for (const field of Array.from(scope.querySelectorAll('input,textarea,select,[role=combobox],[contenteditable=true]'))) {
+    if (field instanceof HTMLInputElement && ['hidden', 'submit', 'button', 'reset', 'image', 'file'].includes(field.type)) continue;
+    if (field instanceof HTMLInputElement && (field.type === 'checkbox' || field.type === 'radio') && !field.checked) continue;
+    if (!isVisibleField(field)) continue;
+    const label = accessibleName(field);
+    let value = '';
+    if (field instanceof HTMLInputElement && field.type === 'password') value = field.value ? '••••' : '';
+    else if (field instanceof HTMLInputElement && (field.type === 'checkbox' || field.type === 'radio')) value = 'Yes';
+    else if (field instanceof HTMLSelectElement) value = field.selectedOptions[0]?.text.trim() ?? '';
+    else if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) value = field.value.trim();
+    else value = ((field as HTMLElement).innerText ?? '').trim();
+    // Custom dropdowns show their choice next to an empty search input.
+    if (!value && field.getAttribute('role') === 'combobox') {
+      const box = field.closest('[class*="select"]:not(input), [role=combobox]:not(input)');
+      value = ((box as HTMLElement | null)?.innerText ?? '').trim();
+    }
+    value = value.replace(/\s+/g, ' ');
+    if (!label || !value || seen.has(label) || value === label) continue;
+    seen.add(label);
+    out.push({ label: label.slice(0, 40), value: value.length > 70 ? `${value.slice(0, 69)}…` : value });
+    if (out.length >= 14) break;
+  }
+  return out;
+}
+
+const isVisibleField = (el: Element) => el.getClientRects().length > 0 || (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio'));
+
 export function describeRisk(el: Element): ElementRisk {
   const info = describeElement(el);
   const form = (el as HTMLInputElement).form ?? el.closest('form');
@@ -207,5 +239,6 @@ export function describeRisk(el: Element): ElementRisk {
         /search/i.test(form.getAttribute('action') ?? '') ||
         fields.some((f) => (f as HTMLInputElement).type === 'search' || /^(q|query|search|s|k|keywords?|term)$/i.test(f.getAttribute('name') ?? ''))),
     formSubmitLabels: submitLabels,
+    formValues: filledValues(form ?? el.closest('dialog,[role=dialog],[aria-modal=true]')),
   };
 }

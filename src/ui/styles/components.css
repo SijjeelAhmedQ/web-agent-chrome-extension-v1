@@ -738,3 +738,32 @@
   color: var(--danger);
 }
 
+
+
+/* What an approval will save or send. */
+.approval-fields {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-muted);
+  font-size: 12.5px;
+}
+
+.approval-field {
+  display: contents;
+}
+
+.approval-field dt {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.approval-field dd {
+  margin: 0;
+  color: var(--text);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}

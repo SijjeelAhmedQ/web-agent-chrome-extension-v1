@@ -173,3 +173,17 @@ describe('double-check before answering', () => {
     expect(claimsDone('Which patient do you mean?')).toBe(false);
   });
 });
+
+describe('unfinished replies', () => {
+  it('spots narration of a next step and replies cut mid-sentence', async () => {
+    const { soundsUnfinished } = await import('./runtime/agentRun');
+    // From the user's log: cut off by the context limit.
+    expect(soundsUnfinished('Good, the frequency dropdown is now open. I can see "Twice daily" as an option (element [234]). Let')).toBe(true);
+    expect(soundsUnfinished('The dropdown is open. Let me click “Twice daily”.')).toBe(true);
+    expect(soundsUnfinished('Now I need to fill in the dosage.')).toBe(true);
+    // Real final answers.
+    expect(soundsUnfinished('Added Panadol 500 mg, twice daily for 10 days.')).toBe(false);
+    expect(soundsUnfinished('Done. Let me know if you need anything else.')).toBe(false);
+    expect(soundsUnfinished('| Laptop | Price |\n|---|---|\n| Aero 14 | $649 |')).toBe(false);
+  });
+});

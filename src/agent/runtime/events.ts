@@ -7,6 +7,7 @@ export interface ApprovalPrompt {
   detail: string;
   confirmLabel: string;
   site: string;
+  fields?: { label: string; value: string }[];
 }
 
 /** Everything the UI needs to show a run as it happens. */

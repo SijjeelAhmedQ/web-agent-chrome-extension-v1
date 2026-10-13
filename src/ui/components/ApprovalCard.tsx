@@ -22,6 +22,16 @@ export function ApprovalCard({ prompt, onRespond }: { prompt: ApprovalPrompt; on
         <div className="approval-detail" id={`${prompt.id}-d`}>
           {prompt.detail}
         </div>
+        {prompt.fields && prompt.fields.length > 0 && (
+          <dl className="approval-fields" aria-label="What will be saved">
+            {prompt.fields.map((f) => (
+              <div key={f.label} className="approval-field">
+                <dt>{f.label}</dt>
+                <dd>{f.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
         <div className="approval-actions">
           <Button ref={cancelRef} onClick={() => onRespond(false)}>
             Cancel

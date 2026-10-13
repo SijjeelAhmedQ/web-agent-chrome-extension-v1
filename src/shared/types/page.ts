@@ -46,6 +46,8 @@ export interface ElementRisk {
   formHasPayment: boolean;
   formIsSearch: boolean;
   formSubmitLabels: string[];
+  /** What the surrounding form or dialog holds right now — shown in the approval. */
+  formValues?: { label: string; value: string }[];
   href?: string;
   target?: string;
 }

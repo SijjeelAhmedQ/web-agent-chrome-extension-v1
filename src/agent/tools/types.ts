@@ -37,6 +37,8 @@ export interface ApprovalRequest {
   title: string;
   detail: string;
   confirmLabel: string;
+  /** What will be saved or sent — the user checks these before confirming. */
+  fields?: { label: string; value: string }[];
 }
 
 export interface AgentTool<A = Record<string, unknown>> {
