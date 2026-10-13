@@ -146,6 +146,9 @@ function opensOnClick(el: Element): boolean {
   return false;
 }
 
+/** Explicitly marked as opening a menu. */
+const isMenuButton = (el: Element) => el.hasAttribute('aria-haspopup') || el.hasAttribute('aria-expanded');
+
 function bestMatch(candidates: Element[], label: string): Element | null {
   const want = norm(label);
   if (!want) return null;
@@ -167,7 +170,8 @@ function bestMatch(candidates: Element[], label: string): Element | null {
 export async function openMenu(path: string[], show: boolean): Promise<MenuResult> {
   const opened: string[] = [];
   let scope: Element[] | null = null;
-  for (const label of path) {
+  for (const [level, label] of path.entries()) {
+    const last = level === path.length - 1;
     const all = collectInteractive().elements;
     const target = (scope?.length ? bestMatch(scope, label) : null) ?? bestMatch(all, label);
     if (!target) {
@@ -179,10 +183,16 @@ export async function openMenu(path: string[], show: boolean): Promise<MenuResul
     hoverOn(target);
     await settleBriefly();
     let revealed = newlyVisible(before);
-    if (!revealed.length && opensOnClick(target) && target instanceof HTMLElement) {
+    // Only menu buttons are clicked here. The last label may be the item the user wants —
+    // that click goes through the click tool, so approvals still apply.
+    const clickable = last ? isMenuButton(target) : opensOnClick(target);
+    if (!revealed.length && clickable && target instanceof HTMLElement) {
       target.click();
       await settleBriefly();
       revealed = newlyVisible(before);
+    }
+    if (last && !revealed.length) {
+      return { opened, revealed: [], item: describeElement(target) };
     }
     opened.push(accessibleName(target) || label);
     scope = revealed;

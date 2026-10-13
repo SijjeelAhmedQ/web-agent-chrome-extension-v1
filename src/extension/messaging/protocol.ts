@@ -59,6 +59,8 @@ export interface MenuResult {
   /** The label that couldn't be found, and what was there instead. */
   failedAt?: string;
   options?: ElementInfo[];
+  /** The last label was a final item (not a menu): it was reached but not clicked. */
+  item?: ElementInfo;
 }
 
 export interface ClickResult {

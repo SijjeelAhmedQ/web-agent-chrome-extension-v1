@@ -250,8 +250,14 @@ const openMenu: AgentTool<{ path: string[] }> = {
   label: (a) => `Opening ${a.path.map((p) => quote(p)).join(' › ')}`,
   async execute(a, ctx) {
     const res = await ctx.browser.send({ kind: 'menuPath', path: a.path, highlight: ctx.settings.highlightActions });
-    ctx.elements.remember([...res.revealed, ...(res.options ?? [])]);
+    ctx.elements.remember([...res.revealed, ...(res.options ?? []), ...(res.item ? [res.item] : [])]);
     const trail = res.opened.length ? res.opened.map((p) => quote(p)).join(' › ') : 'nothing';
+    if (res.item) {
+      return {
+        output: `Opened ${trail}. ${quote(res.item.name || 'The last label')} is an item, not a menu — it is showing now as:\n${formatElement(res.item)}\nClick it with click to choose it.`,
+        note: `“${clip(res.item.name, 30)}” is showing`,
+      };
+    }
     if (res.failedAt) {
       const options = (res.options ?? []).map(formatElement).join('\n');
       return {
