@@ -190,17 +190,25 @@ function filledValues(scope: Element | null): { label: string; value: string }[]
     if (field instanceof HTMLInputElement && ['hidden', 'submit', 'button', 'reset', 'image', 'file'].includes(field.type)) continue;
     if (field instanceof HTMLInputElement && (field.type === 'checkbox' || field.type === 'radio') && !field.checked) continue;
     if (!isVisibleField(field)) continue;
-    const label = accessibleName(field);
+    const isRadio = field instanceof HTMLInputElement && field.type === 'radio';
+    const label = isRadio ? groupLabel(field) || accessibleName(field) : accessibleName(field);
     let value = '';
     if (field instanceof HTMLInputElement && field.type === 'password') value = field.value ? '••••' : '';
-    else if (field instanceof HTMLInputElement && (field.type === 'checkbox' || field.type === 'radio')) value = 'Yes';
+    else if (isRadio) value = accessibleName(field);
+    else if (field instanceof HTMLInputElement && field.type === 'checkbox') value = 'Yes';
     else if (field instanceof HTMLSelectElement) value = field.selectedOptions[0]?.text.trim() ?? '';
     else if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) value = field.value.trim();
     else value = ((field as HTMLElement).innerText ?? '').trim();
-    // Custom dropdowns show their choice next to an empty search input.
+    // Custom dropdowns show their choice beside an empty search input: read the box around it,
+    // stopping at the form row (its label) and ignoring the placeholder.
     if (!value && field.getAttribute('role') === 'combobox') {
-      const box = field.closest('[class*="select"]:not(input), [role=combobox]:not(input)');
-      value = ((box as HTMLElement | null)?.innerText ?? '').trim();
+      let node = field.parentElement;
+      for (let i = 0; node && i < 4 && !value; i++, node = node.parentElement) {
+        if (node.querySelector('label')) break;
+        const text = (node.innerText ?? '').trim();
+        const placeholder = node.querySelector('[class*="placeholder"]')?.textContent?.trim();
+        if (text && text !== placeholder) value = text;
+      }
     }
     value = value.replace(/\s+/g, ' ');
     if (!label || !value || seen.has(label) || value === label) continue;
@@ -209,6 +217,21 @@ function filledValues(scope: Element | null): { label: string; value: string }[]
     if (out.length >= 14) break;
   }
   return out;
+}
+
+/** A radio button's question (“As Needed (PRN)”), not its own option label (“No”). */
+function groupLabel(radio: Element): string {
+  const group = radio.closest('[role=radiogroup], fieldset');
+  if (group) {
+    const name = group.tagName === 'FIELDSET' ? (group.querySelector('legend')?.textContent ?? '') : accessibleName(group);
+    if (name.trim()) return name.trim();
+  }
+  let node = radio.parentElement;
+  for (let i = 0; node && i < 6; i++, node = node.parentElement) {
+    const label = Array.from(node.querySelectorAll('label')).find((l) => !l.contains(radio) && !l.querySelector('input'));
+    if (label?.textContent?.trim()) return label.textContent.trim();
+  }
+  return '';
 }
 
 const isVisibleField = (el: Element) => el.getClientRects().length > 0 || (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio'));

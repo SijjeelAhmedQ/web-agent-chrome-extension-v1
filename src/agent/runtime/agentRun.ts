@@ -52,6 +52,10 @@ export class AgentRun {
   readonly id = uid('task_');
   private readonly abort = new AbortController();
   private approval: { id: string; resolve: (approved: boolean) => void } | null = null;
+  /** Approvals the user declined in this task (by their title). */
+  private readonly declined = new Set<string>();
+  /** Set when the task must end now, with this answer. */
+  private endWith: string | null = null;
   private task!: TaskRecord;
   private persistTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -225,6 +229,7 @@ export class AgentRun {
         const signature = `${call.name}:${JSON.stringify(call.arguments)}`;
         recent.push(signature);
         let output = await this.runTool(call, byName, ctx);
+        if (this.endWith) return this.endWith;
         if (recent.slice(-3).every((s) => s === signature) && recent.length >= 3) {
           output += '\nYou have repeated this exact action three times. Try a different approach or explain to the user what is blocking you.';
         }
@@ -323,6 +328,12 @@ export class AgentRun {
       }
 
       const approvalNeeded = await this.inFront(ctx, () => this.needsApproval(tool, args, ctx, step.label));
+      if (approvalNeeded && this.declined.has(approvalNeeded.title)) {
+        // The model ignored “don't try again”: no second prompt — the task stops here.
+        finish({ status: 'skipped', note: 'You declined this — stopping' });
+        this.endWith = declinedAnswer(approvalNeeded.title);
+        return 'The user already declined this action. The task is stopped.';
+      }
       if (approvalNeeded) {
         const site = siteOf((await ctx.browser.currentTab().catch(() => null))?.url) || 'this site';
         step = { ...step, status: 'waiting' };
@@ -330,6 +341,7 @@ export class AgentRun {
         const approved = await this.askApproval({ id: uid('ap_'), stepId: step.id, site, ...approvalNeeded });
         this.throwIfCancelled();
         if (!approved) {
+          this.declined.add(approvalNeeded.title);
           finish({ status: 'skipped', note: 'You declined' });
           return 'The user declined this action. Do not try it again or work around it; continue without it, or tell the user what you would have done.';
         }
@@ -406,6 +418,12 @@ export class AgentRun {
 
 const BUILT_IN_NAMES = new Set([...BUILT_IN_TOOL_IDS, 'load_skill']);
 const READ_PAGE = BROWSER_TOOLS.find((t) => t.name === 'read_page')!;
+
+/** What the user sees when the task stops because they declined a step. */
+export function declinedAnswer(title: string): string {
+  const what = title.match(/“([^”]+)”/)?.[1] ?? title.replace(/\?$/, '');
+  return `Stopped — you cancelled “${what}”, so it wasn’t done. Everything before that step is still on the page: check it and finish it yourself, or tell me what to change and I’ll try again.`;
+}
 
 const CUT_OFF_PROMPT = 'Your last reply was cut off because the conversation got long. Continue the task: call the next tool now, and keep any text short.';
 const CONTINUE_PROMPT = 'You have not finished the task yet — you described a next step instead of doing it. Continue by calling the next tool. If the task is truly complete, reply with your final answer for the user.';

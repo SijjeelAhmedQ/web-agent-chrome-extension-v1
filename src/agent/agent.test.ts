@@ -187,3 +187,11 @@ describe('unfinished replies', () => {
     expect(soundsUnfinished('| Laptop | Price |\n|---|---|\n| Aero 14 | $649 |')).toBe(false);
   });
 });
+
+describe('declined steps', () => {
+  it('explains plainly what was not done', async () => {
+    const { declinedAnswer } = await import('./runtime/agentRun');
+    expect(declinedAnswer('Click “Save Medication”?')).toMatch(/^Stopped — you cancelled “Save Medication”, so it wasn’t done\./);
+    expect(declinedAnswer('Submit this form?')).toMatch(/you cancelled “Submit this form”/);
+  });
+});
