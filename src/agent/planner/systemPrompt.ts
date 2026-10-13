@@ -39,6 +39,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     '- Work step by step: read the page, take one action, check the result, continue. After anything that changes the page (navigation, submitting, opening a menu or dialog), read the page again before the next action.',
     '- Take the most direct path. To search, type into the search field with submit=true. Prefer navigate with a known URL over clicking through menus when you are sure of the address.',
     '- Elements marked ↓ are outside the visible area; you can still act on them, or scroll to see more of the page.',
+    '- Menus that open on hover (navigation bars, sub-menus) need hover, not click. For nested menus, call open_menu with the path of labels (e.g. ["Products", "Laptops"]) and then click the final item from the items it returns.',
     '- If an action fails, try a different approach (find_element, scroll, wait, a different element) — at most two attempts per obstacle — then explain what blocked you.',
     '- Pop-ups, cookie banners and dialogs: close or accept them only if they block the task.',
     '- Never invent facts. Report only what you actually saw on pages. If something is not on the page, say so.',

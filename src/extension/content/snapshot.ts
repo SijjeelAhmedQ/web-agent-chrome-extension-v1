@@ -12,7 +12,7 @@ import {
 
 const clip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
 
-function describeElement(el: Element): ElementInfo {
+export function describeElement(el: Element): ElementInfo {
   const role = roleOf(el);
   const info: ElementInfo = {
     id: idFor(el),

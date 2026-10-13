@@ -8,6 +8,7 @@ import type {
   TypeResult,
 } from '../messaging/protocol';
 import { accessibleName, elementFor, isDisabled, isEditable, isVisible, roleOf } from './elements';
+import { releaseHoverUnlessInside } from './hover';
 import { highlight } from './overlay';
 
 /**
@@ -103,6 +104,7 @@ export async function click(id: number, show: boolean): Promise<ClickResult> {
   const submitter = el.closest('button,input');
   const invalidFields = submitter && isSubmitControl(submitter) ? invalidFieldsOf((submitter as HTMLButtonElement).form) : undefined;
 
+  releaseHoverUnlessInside(el);
   dispatchPointerSequence(el);
   if (el instanceof HTMLElement) el.click();
   else el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, composed: true, ...centerOf(el) }));

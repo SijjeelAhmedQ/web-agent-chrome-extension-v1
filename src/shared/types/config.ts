@@ -169,6 +169,8 @@ export interface Settings {
   maxElements: number;
   maxTextChars: number;
   voice: VoiceSettings;
+  /** Built-in tools that existed when this config was last saved (new ones get added to agents). */
+  knownToolIds?: string[];
 }
 
 export interface AppConfig {

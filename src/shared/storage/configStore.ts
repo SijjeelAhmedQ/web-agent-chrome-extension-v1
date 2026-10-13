@@ -1,4 +1,5 @@
 import { defaultConfig, DEFAULT_SETTINGS } from '../constants/defaults';
+import { BUILT_IN_TOOL_IDS, BUILT_IN_TOOLS, LEGACY_TOOL_IDS } from '../constants/tools';
 import type { AppConfig } from '../types/config';
 import { getItem, setItem, watchItem } from './kv';
 
@@ -16,6 +17,17 @@ export function normalizeConfig(raw: Partial<AppConfig> | undefined): AppConfig 
     customTools: Array.isArray(raw.customTools) ? raw.customTools : base.customTools,
     settings: { ...DEFAULT_SETTINGS, ...(raw.settings ?? {}), voice: { ...DEFAULT_SETTINGS.voice, ...(raw.settings?.voice ?? {}) } },
   };
+  // Tools added since this config was saved: agents that read pages get the new read tools.
+  const known = new Set(config.settings.knownToolIds ?? LEGACY_TOOL_IDS);
+  const added = BUILT_IN_TOOLS.filter((t) => !known.has(t.id));
+  if (added.length) {
+    config.agents = config.agents.map((a) => {
+      if (!a.toolIds.includes('read_page')) return a;
+      const extra = added.filter((t) => t.risk === 'read' || a.toolIds.includes('click')).map((t) => t.id);
+      return { ...a, toolIds: [...new Set([...a.toolIds, ...extra])] };
+    });
+  }
+  config.settings.knownToolIds = BUILT_IN_TOOL_IDS;
   if (!config.agents.some((a) => a.id === config.settings.defaultAgentId)) {
     config.settings.defaultAgentId = config.agents[0].id;
   }

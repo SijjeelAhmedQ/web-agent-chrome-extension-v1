@@ -1,5 +1,6 @@
 import { CHANNEL, CONTENT_VERSION, type ContentRequest, type ContentResponse, type Envelope } from '../messaging/protocol';
 import { ActionError, clear, click, pressKey, resolve, scroll, select, settle, type, waitForText } from './actions';
+import { hover, openMenu } from './hover';
 import { setPresence } from './overlay';
 import { describeRisk, find, snapshot } from './snapshot';
 
@@ -40,6 +41,10 @@ async function handle(request: ContentRequest): Promise<unknown> {
       return settle(request.quietMs, request.timeoutMs);
     case 'waitForText':
       return waitForText(request.text, request.timeoutMs);
+    case 'hover':
+      return hover(resolve(request.id), request.highlight);
+    case 'menuPath':
+      return openMenu(request.path, request.highlight);
     case 'presence':
       setPresence(request.active);
       return null;

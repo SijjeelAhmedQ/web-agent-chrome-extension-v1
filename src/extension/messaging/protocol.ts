@@ -22,6 +22,8 @@ export type ContentRequest =
   | { kind: 'key'; key: string; id?: number }
   | { kind: 'settle'; quietMs: number; timeoutMs: number }
   | { kind: 'waitForText'; text: string; timeoutMs: number }
+  | { kind: 'hover'; id: number; highlight: boolean }
+  | { kind: 'menuPath'; path: string[]; highlight: boolean }
   | { kind: 'presence'; active: boolean };
 
 export type ContentErrorCode =
@@ -42,6 +44,22 @@ export interface ContentError {
 }
 
 export type ContentResponse<T = unknown> = { ok: true; data: T } | { ok: false; error: ContentError };
+
+export interface HoverResult {
+  element: Pick<ElementInfo, 'name' | 'role'>;
+  /** Controls that became visible — the menu or tooltip that opened. */
+  revealed: ElementInfo[];
+}
+
+export interface MenuResult {
+  /** Labels of the levels that were opened, in order. */
+  opened: string[];
+  /** What the last opened level shows. */
+  revealed: ElementInfo[];
+  /** The label that couldn't be found, and what was there instead. */
+  failedAt?: string;
+  options?: ElementInfo[];
+}
 
 export interface ClickResult {
   element: Pick<ElementInfo, 'name' | 'role'>;
@@ -85,6 +103,8 @@ export interface ResponseMap {
   find: FindResult;
   describe: ElementRisk;
   click: ClickResult;
+  hover: HoverResult;
+  menuPath: MenuResult;
   type: TypeResult;
   clear: TypeResult;
   select: SelectResult;

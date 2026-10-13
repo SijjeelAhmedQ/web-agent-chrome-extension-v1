@@ -216,6 +216,56 @@ const scroll: AgentTool<{ direction?: 'up' | 'down' | 'top' | 'bottom'; id?: num
   },
 };
 
+const hover: AgentTool<{ id: number }> = {
+  name: 'hover',
+  description:
+    'Move the mouse over an element without clicking. Opens menus that appear on hover (navigation bars, dropdown menus), tooltips and previews. Returns the items that appeared, with their ids — then hover the next level or click the item you want.',
+  schema: z.object({ id }),
+  risk: 'read',
+  touchesPage: true,
+  label: (a, ctx) => `Hovering over ${nameOf(ctx, a.id)}`,
+  async execute(a, ctx) {
+    const res = await ctx.browser.send({ kind: 'hover', id: a.id, highlight: ctx.settings.highlightActions });
+    ctx.elements.remember(res.revealed);
+    const label = res.element.name ? quote(res.element.name) : 'the element';
+    if (!res.revealed.length) {
+      return { output: `Hovered over ${label}. Nothing new appeared — it may open on click instead, or it is already open. Call read_page to check.`, note: 'Nothing new appeared' };
+    }
+    return { output: `Hovered over ${label}. These appeared:\n${res.revealed.map(formatElement).join('\n')}`, note: `${res.revealed.length} items appeared` };
+  },
+};
+
+const pathSchema = z.preprocess(
+  (v) => (typeof v === 'string' ? v.split(/\s*(?:>|›|»|→|\/)\s*/).filter(Boolean) : v),
+  z.array(z.string().min(1)).min(1).max(6),
+);
+
+const openMenu: AgentTool<{ path: string[] }> = {
+  name: 'open_menu',
+  description:
+    'Open nested menus one level at a time by their visible labels, e.g. ["Products", "Laptops"] — each level is hovered (or clicked if it is a menu button) and the next label is looked for in what opened. Returns the items of the last level with their ids; then click the item you want. Use it for navigation bars with sub-menus.',
+  schema: z.object({ path: pathSchema.describe('Menu labels from the top level down, without the final item to click') }),
+  risk: 'read',
+  touchesPage: true,
+  label: (a) => `Opening ${a.path.map((p) => quote(p)).join(' › ')}`,
+  async execute(a, ctx) {
+    const res = await ctx.browser.send({ kind: 'menuPath', path: a.path, highlight: ctx.settings.highlightActions });
+    ctx.elements.remember([...res.revealed, ...(res.options ?? [])]);
+    const trail = res.opened.length ? res.opened.map((p) => quote(p)).join(' › ') : 'nothing';
+    if (res.failedAt) {
+      const options = (res.options ?? []).map(formatElement).join('\n');
+      return {
+        output: `Opened ${trail}, but couldn't find ${quote(res.failedAt)} there. ${options ? `Items at that level:\n${options}` : 'No items were visible — try hover or click on the previous level.'}`,
+        note: `“${clip(res.failedAt, 30)}” not found`,
+      };
+    }
+    if (!res.revealed.length) {
+      return { output: `Opened ${trail}, but no new items appeared. The menu may need a click, or it was already open — call read_page.`, note: 'Nothing new appeared' };
+    }
+    return { output: `Opened ${trail}. Items now showing:\n${res.revealed.map(formatElement).join('\n')}\nClick the one you want.`, note: `${res.revealed.length} items showing` };
+  },
+};
+
 const pressKey: AgentTool<{ key: string; id?: number }> = {
   name: 'press_key',
   description: 'Press a key: Enter, Escape, Tab, ArrowDown, ArrowUp, Backspace, Space, etc. Sent to the element with that id, or to the focused element. Enter in a form field submits the form; Escape closes most pop-ups.',
@@ -366,7 +416,7 @@ const closeTab: AgentTool<{ tab_id?: number }> = {
 };
 
 export const BROWSER_TOOLS: AgentTool<any>[] = [
-  readPage, findElement, scroll, wait, click, type, clear, selectOption, pressKey, navigate, goBack, goForward, listTabs, openTab, switchTab, closeTab,
+  readPage, findElement, scroll, wait, click, hover, openMenu, type, clear, selectOption, pressKey, navigate, goBack, goForward, listTabs, openTab, switchTab, closeTab,
 ];
 
 // Keep the UI catalogue and the implementations in lock-step.
