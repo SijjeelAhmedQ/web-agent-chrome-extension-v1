@@ -18,7 +18,8 @@ export function formatElement(e: ElementInfo): string {
   if (e.placeholder) parts.push(`placeholder=${q(e.placeholder)}`);
   if (e.checked !== undefined) parts.push(e.checked ? '(checked)' : '(unchecked)');
   if (e.selected) parts.push('(selected)');
-  if (e.expanded !== undefined) parts.push(e.expanded ? '(expanded)' : '(collapsed)');
+  if (e.hasMenu) parts.push('(opens a menu on hover — use hover or open_menu)');
+  else if (e.expanded !== undefined) parts.push(e.expanded ? '(expanded)' : '(collapsed)');
   if (e.disabled) parts.push('(disabled)');
   if (e.required) parts.push('(required)');
   if (e.options?.length) parts.push(`options: ${e.options.join(' | ')}`);

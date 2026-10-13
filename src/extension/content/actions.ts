@@ -7,8 +7,8 @@ import type {
   SelectResult,
   TypeResult,
 } from '../messaging/protocol';
-import { accessibleName, elementFor, isDisabled, isEditable, isVisible, roleOf } from './elements';
-import { releaseHoverUnlessInside } from './hover';
+import { accessibleName, elementFor, hasHiddenMenu, isDisabled, isEditable, isVisible, roleOf } from './elements';
+import { isHovered, openHoverMenu, releaseHoverUnlessInside } from './hover';
 import { highlight } from './overlay';
 
 /**
@@ -100,6 +100,13 @@ export async function click(id: number, show: boolean): Promise<ClickResult> {
   const { clientX, clientY } = centerOf(el);
   const top = el.ownerDocument.elementFromPoint(clientX, clientY);
   const covered = !!top && top !== el && !el.contains(top) && !top.contains(el);
+
+  // A menu trigger (“Patients” in a hover navbar): open its menu instead of clicking.
+  // Clicking it again, with the menu open, really clicks — for when the page itself is wanted.
+  if (hasHiddenMenu(el) && !isHovered(el)) {
+    const menu = await openHoverMenu(el);
+    if (menu.length) return { element: summary(el), menu };
+  }
 
   const submitter = el.closest('button,input');
   const invalidFields = submitter && isSubmitControl(submitter) ? invalidFieldsOf((submitter as HTMLButtonElement).form) : undefined;

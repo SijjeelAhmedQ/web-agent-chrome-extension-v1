@@ -6,6 +6,7 @@ import {
   contextOf,
   idFor,
   inViewport,
+  hasHiddenMenu,
   isDisabled,
   roleOf,
 } from './elements';
@@ -51,6 +52,7 @@ export function describeElement(el: Element): ElementInfo {
   if (ariaSelected === 'true') info.selected = true;
   const ariaExpanded = el.getAttribute('aria-expanded');
   if (ariaExpanded) info.expanded = ariaExpanded === 'true';
+  if (['link', 'button', 'clickable', 'menuitem'].includes(role) && hasHiddenMenu(el)) info.hasMenu = true;
   if (isDisabled(el)) info.disabled = true;
   if (role === 'combobox' && !info.value) {
     const input = el.matches('input') ? (el as HTMLInputElement) : el.querySelector('input');

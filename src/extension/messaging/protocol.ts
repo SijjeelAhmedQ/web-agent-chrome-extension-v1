@@ -70,6 +70,8 @@ export interface ClickResult {
   covered?: boolean;
   /** Submit blocked by the browser's form validation: “field: message”. */
   invalidFields?: string[];
+  /** It was a menu trigger: its menu was opened (hovered) instead, showing these items. */
+  menu?: ElementInfo[];
 }
 
 export interface TypeResult {

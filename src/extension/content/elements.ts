@@ -280,3 +280,31 @@ function isPointerClickable(el: Element): boolean {
   const name = accessibleName(el);
   return name.length > 0 && name.length < 120;
 }
+
+const MENU_ITEMS = 'a[href], button, [role=menuitem], [role=option], [role=link]';
+const MENU_HOST = 'li, [role=menuitem], [role=none], [class*="dropdown"], [class*="menu-item"], [class*="nav-item"]';
+
+/**
+ * Holds a sub-menu that is hidden right now — a hover (or click) menu trigger such as
+ * “Patients” in a navigation bar. Marked with aria-haspopup, or its list item contains
+ * hidden menu items.
+ */
+export function hasHiddenMenu(el: Element): boolean {
+  const popup = el.getAttribute('aria-haspopup');
+  if (popup && popup !== 'false' && el.getAttribute('aria-expanded') !== 'true') return true;
+  // <a>Patients</a><ul class="…">…</ul> — a hidden list right next to the trigger (or its wrapper).
+  const hiddenSiblingMenu = (node: Element | null) =>
+    !!node?.parentElement &&
+    Array.from(node.parentElement.children).some((sib) => sib !== node && !isVisible(sib) && sib.querySelectorAll(MENU_ITEMS).length >= 2);
+  if (hiddenSiblingMenu(el) || (el.parentElement && el.parentElement.children.length === 1 && hiddenSiblingMenu(el.parentElement))) return true;
+  const host = el.closest(MENU_HOST);
+  if (!host || host === document.body) return false;
+  const items = host.querySelectorAll(MENU_ITEMS);
+  if (items.length > 120) return false; // a whole page section, not a menu
+  let hidden = 0;
+  for (const item of Array.from(items)) {
+    if (item === el || el.contains(item) || item.contains(el)) continue;
+    if (!isVisible(item) && ++hidden >= 2) return true;
+  }
+  return false;
+}

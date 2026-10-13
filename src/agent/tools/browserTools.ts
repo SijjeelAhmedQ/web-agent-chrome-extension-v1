@@ -120,6 +120,13 @@ const click: AgentTool<{ id: number }> = {
       throw err;
     }
     const label = res.element.name ? quote(res.element.name) : 'the element';
+    if (res.menu?.length) {
+      ctx.elements.remember(res.menu);
+      return {
+        output: `${label} opens a menu on hover, so I opened the menu instead of clicking. Items now showing:\n${res.menu.map(formatElement).join('\n')}\nClick the item you want. (Click ${label} again only if you want its own page.)`,
+        note: `Opened its menu · ${res.menu.length} items`,
+      };
+    }
     if (res.opensNewTab) {
       const tab = await ctx.browser.openTab(res.opensNewTab, ctx.signal);
       return { output: `${label} opens in a new tab, so I opened it: “${tab.title}” (${clip(tab.url ?? '', 120)}). You are now working in that tab. Call read_page.`, note: 'Opened in a new tab' };

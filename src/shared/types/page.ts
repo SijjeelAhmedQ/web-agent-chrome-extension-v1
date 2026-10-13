@@ -12,6 +12,8 @@ export interface ElementInfo {
   checked?: boolean;
   selected?: boolean;
   expanded?: boolean;
+  /** Opens a sub-menu that is hidden now (hover or click it to see the items). */
+  hasMenu?: boolean;
   disabled?: boolean;
   required?: boolean;
   href?: string;

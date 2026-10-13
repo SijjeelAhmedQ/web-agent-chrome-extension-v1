@@ -199,3 +199,14 @@ export async function openMenu(path: string[], show: boolean): Promise<MenuResul
   }
   return { opened, revealed: describeAll(scope ?? []) };
 }
+
+/** Is the emulated pointer on this element (its hover menu open)? */
+export const isHovered = (el: Element) => chain.includes(el);
+
+/** Hovers a menu trigger and returns the items that appeared. */
+export async function openHoverMenu(el: Element): Promise<ElementInfo[]> {
+  const before = new Set(collectInteractive().elements);
+  hoverOn(el);
+  await settleBriefly();
+  return describeAll(newlyVisible(before));
+}
