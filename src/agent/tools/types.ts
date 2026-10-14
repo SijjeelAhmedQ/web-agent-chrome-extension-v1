@@ -41,6 +41,8 @@ export interface ToolOutcome {
   output: string;
   /** Short plain-language outcome for the activity list. */
   note?: string;
+  /** A click on something meant to open a page or record changed nothing (counts toward loop guards). */
+  noEffect?: boolean;
 }
 
 export interface ApprovalRequest {

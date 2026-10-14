@@ -213,18 +213,24 @@ async function clickAndReport(ctx: ToolContext, elementId: number, double: boole
   const tab = openedTab();
   if (tab) return followNewTab(ctx, tab, label);
 
-  if (!changed() && ctx.settings.realClicks !== false) {
+  // Links, names and menu items open things; a button such as Clear or Search may rightly
+  // change nothing — no real click (and no debugger bar) for those.
+  const opener = /^(link|clickable|menuitem|option|tab|gridcell|row|cell|image|treeitem)$/.test(res.element.role ?? '');
+  if (!changed() && opener && ctx.settings.realClicks !== false) {
     // Some pages ignore script clicks, or open the record in a pop-up only a real click may open.
     const real = await realClick(ctx, elementId, label, double, openedTab).catch(() => null);
     if (real) return real;
+  }
+  if (!changed() && effect && !opener) {
+    return { output: `${verb} ${label}. Nothing on the page changed — fine if there was nothing to do (e.g. the fields were already empty). Don’t click it again; carry on with the next step.${covered}`, note: 'Nothing changed' };
   }
   if (!changed() && effect) {
     // Saying so stops the model from clicking again, or clicking around to find out.
     const tried = ctx.settings.realClicks !== false ? ' (a real mouse click was tried too)' : '';
     const advice = ' Do not click it again or try other buttons and icons to find out. Call read_page once to check; if what you expected is not there, tell the user what you clicked and what happened.';
     return effect.styleChanges
-      ? { output: `${verb} ${label}${tried}. Only its look changed (it may be selected or highlighted now) — nothing new appeared in this tab within a few seconds.${advice}${covered}`, note: 'Selected — nothing opened' }
-      : { output: `${verb} ${label}${tried}, but nothing on the page changed within a few seconds.${advice}${covered}`, note: 'Nothing changed' };
+      ? { output: `${verb} ${label}${tried}. Only its look changed (it may be selected or highlighted now) — nothing new appeared in this tab within a few seconds.${advice}${covered}`, note: 'Selected — nothing opened', noEffect: true }
+      : { output: `${verb} ${label}${tried}, but nothing on the page changed within a few seconds.${advice}${covered}`, note: 'Nothing changed', noEffect: true };
   }
   const appeared = effect?.added.length ? ` New on the page: ${effect.added.map((l) => `“${clip(l, 80)}”`).join(', ')}.` : '';
   return { output: `${verb} ${label}.${appeared}${changeReport(after)}${covered}`, note: after.navigated ? 'Opened a new page' : effect?.added.length ? 'The page changed' : undefined };
@@ -315,7 +321,7 @@ const clickText: AgentTool<ClickTextArgs> = {
     textTargets.delete(a);
     if (!res.total) {
       return {
-        output: `No visible text “${a.text}”${a.near ? ` near “${a.near}”` : ''} on the page. Check the spelling, scroll, search, or go to the next page of results.`,
+        output: `No visible text or control named “${a.text}”${a.near ? ` near “${a.near}”` : ''} on the page. Don’t retry click_text with other wording — call find_element (e.g. "${a.text} button") or read_page, then click the element by its id. If it is not there, scroll, search or go to the next page of results.`,
         note: 'Text not found',
       };
     }

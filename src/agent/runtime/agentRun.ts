@@ -63,6 +63,8 @@ export class AgentRun {
   private readonly repeats = new Map<string, number>();
   /** Actions in this task that changed nothing at all. */
   private noEffect = 0;
+  /** click_text targets that were not found, by text — to stop retrying with other wording. */
+  private readonly notFound = new Map<string, number>();
   /** Set when the task must end now, with this answer. */
   private endWith: string | null = null;
   private task!: TaskRecord;
@@ -339,6 +341,11 @@ export class AgentRun {
 
     // The exact same action that already did nothing twice won't work a third time.
     const key = tool.risk !== 'read' && tool.touchesPage ? `${tool.name} ${JSON.stringify(args)}` : '';
+    const textKey = tool.name === 'click_text' ? String((args as { text?: unknown }).text ?? '').trim().toLowerCase() : '';
+    if (textKey && (this.notFound.get(textKey) ?? 0) >= 2) {
+      finish({ status: 'skipped', note: 'Not found twice — use the element list' });
+      return `click_text found nothing named “${textKey}” twice already, so it is not plain text there (it may be a button whose name is in its value, or inside a frame). Do not try click_text for it again: call find_element (e.g. "${textKey} button") or read_page, and click the element by its id.`;
+    }
     if (key && (this.repeats.get(key) ?? 0) >= 2) {
       finish({ status: 'skipped', note: 'Did nothing twice — not repeating' });
       return 'You already did exactly this twice in this task and nothing changed either time. Do not repeat it. Try a different way (double: true, another element, a link or icon that opens it) or tell the user what you tried and what happened.';
@@ -374,7 +381,8 @@ export class AgentRun {
       }
 
       const outcome = await this.inFront(ctx, () => tool.execute(args, ctx));
-      if (/^(Nothing changed|Selected — nothing opened)$/.test(outcome.note ?? '')) {
+      if (textKey && outcome.note === 'Text not found') this.notFound.set(textKey, (this.notFound.get(textKey) ?? 0) + 1);
+      if (outcome.noEffect) {
         if (key) this.repeats.set(key, (this.repeats.get(key) ?? 0) + 1);
         // Clicking around the app to see what happens is not progress.
         if (++this.noEffect >= 2) {

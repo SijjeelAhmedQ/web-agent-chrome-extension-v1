@@ -1,3 +1,4 @@
+import { isHTML, isInput, isSelect, isTextArea } from './dom';
 /**
  * Element discovery for the page-understanding layer: which elements a person could
  * interact with, what they are called (a pragmatic subset of the accessible-name
@@ -52,7 +53,7 @@ export function isExplicitlyInteractive(el: Element): boolean {
   }
   const role = el.getAttribute('role');
   if (role && INTERACTIVE_ROLES.has(role)) return true;
-  if (el instanceof HTMLElement && el.isContentEditable && !el.parentElement?.isContentEditable) return true;
+  if (isHTML(el) && el.isContentEditable && !el.parentElement?.isContentEditable) return true;
   const tabindex = el.getAttribute('tabindex');
   if (tabindex !== null && tabindex !== '-1' && !Number.isNaN(Number(tabindex))) return true;
   if (el.hasAttribute('onclick')) return true;
@@ -62,7 +63,7 @@ export function isExplicitlyInteractive(el: Element): boolean {
 export function isVisible(el: Element): boolean {
   if (el.id === OVERLAY_HOST_ID) return false;
   const rect = el.getBoundingClientRect();
-  if (rect.width < 1 || rect.height < 1 || (el instanceof HTMLInputElement && el.type !== 'checkbox' && el.type !== 'radio' && (rect.width < 4 || rect.height < 4))) {
+  if (rect.width < 1 || rect.height < 1 || (isInput(el) && el.type !== 'checkbox' && el.type !== 'radio' && (rect.width < 4 || rect.height < 4))) {
     // Visually-hidden native inputs (custom checkboxes) are still operable through their label.
     return false;
   }
@@ -118,7 +119,7 @@ export function roleOf(el: Element): string {
     if (type === 'search') return 'searchbox';
     return 'textbox';
   }
-  if (el instanceof HTMLElement && el.isContentEditable) return 'textbox';
+  if (isHTML(el) && el.isContentEditable) return 'textbox';
   if (tag === 'IMG') return 'image';
   return 'clickable';
 }
@@ -129,11 +130,11 @@ export function accessibleName(el: Element): string {
   const aria = clean(el.getAttribute('aria-label'));
   if (aria) return aria;
 
-  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) {
+  if (isInput(el) || isTextArea(el) || isSelect(el)) {
     const labels = Array.from(el.labels ?? []).map((l) => textOf(l)).filter(Boolean);
     if (labels.length) return clean(labels.join(' '));
-    if (el instanceof HTMLInputElement && ['button', 'submit', 'reset'].includes(el.type) && el.value) return clean(el.value);
-    if (el instanceof HTMLInputElement && el.type === 'image') return clean(el.alt || el.value || el.title) || iconName(el) || 'Submit';
+    if (isInput(el) && ['button', 'submit', 'reset'].includes(el.type) && el.value) return clean(el.value);
+    if (isInput(el) && el.type === 'image') return clean(el.alt || el.value || el.title) || iconName(el) || 'Submit';
     // Older forms lay out label and field in table cells: <td>Take:</td><td><input></td>.
     const cellLabel = tableLabel(el);
     if (cellLabel) return cellLabel;
@@ -277,7 +278,7 @@ function controlWords(id: string): string {
 function pictureNames(el: Element): string[] {
   const out: string[] = [];
   for (const node of [el, ...Array.from(el.querySelectorAll('img,i,span,svg,use,em'))].slice(0, 6)) {
-    const src = node.tagName === 'IMG' || node instanceof HTMLInputElement ? node.getAttribute('src') ?? '' : '';
+    const src = node.tagName === 'IMG' || isInput(node) ? node.getAttribute('src') ?? '' : '';
     if (src && !src.startsWith('data:')) {
       const file = src.split(/[?#]/)[0].split('/').pop() ?? '';
       if (!/[0-9a-f]{12}/.test(file)) out.push(words(file).replace(/\b(icon|ico|img|btn|image|small|large|\d+)\b/g, '').replace(/\s+/g, ' ').trim());
@@ -328,12 +329,12 @@ export function isDisabled(el: Element): boolean {
 }
 
 export function isEditable(el: Element): el is HTMLInputElement | HTMLTextAreaElement | HTMLElement {
-  if (el instanceof HTMLTextAreaElement) return !el.readOnly;
-  if (el instanceof HTMLInputElement) {
+  if (isTextArea(el)) return !el.readOnly;
+  if (isInput(el)) {
     const nonText = ['button', 'submit', 'reset', 'checkbox', 'radio', 'file', 'image', 'range', 'color', 'hidden'];
     return !nonText.includes(el.type) && !el.readOnly;
   }
-  return el instanceof HTMLElement && el.isContentEditable;
+  return isHTML(el) && el.isContentEditable;
 }
 
 export interface Root {
@@ -396,7 +397,7 @@ function frameHost(frame: HTMLIFrameElement): string {
 
 /** Custom checkboxes/radios hide the real input; it is still operable. */
 function isOperableHiddenInput(el: Element): boolean {
-  if (!(el instanceof HTMLInputElement) || !['checkbox', 'radio'].includes(el.type)) return false;
+  if (!(isInput(el)) || !['checkbox', 'radio'].includes(el.type)) return false;
   const label = el.labels?.[0] ?? el.parentElement;
   return !!label && isVisible(label);
 }

@@ -3,6 +3,7 @@ import type { HoverResult, MenuResult } from '../messaging/protocol';
 import { accessibleName, collectInteractive, roleOf } from './elements';
 import { highlight } from './overlay';
 import { describeElement } from './snapshot';
+import { isAnchor, isHTML } from './dom';
 
 /**
  * Hovering without a real mouse. Two kinds of hover menus exist:
@@ -102,7 +103,7 @@ export function hoverOn(el: Element) {
   }
   chain = next;
   // Keyboard-friendly menus also open on focus (:focus-within).
-  if (el instanceof HTMLElement && el.tabIndex >= 0) el.focus({ preventScroll: true });
+  if (isHTML(el) && el.tabIndex >= 0) el.focus({ preventScroll: true });
 }
 
 /** A click outside the hovered menu moves the pointer away: the menu closes. */
@@ -139,7 +140,7 @@ export async function hover(el: Element, show: boolean): Promise<HoverResult> {
 function opensOnClick(el: Element): boolean {
   if (el.hasAttribute('aria-haspopup') || el.hasAttribute('aria-expanded')) return true;
   if (el.tagName === 'BUTTON' || el.getAttribute('role') === 'button' || el.getAttribute('role') === 'menuitem') return true;
-  if (el instanceof HTMLAnchorElement) {
+  if (isAnchor(el)) {
     const href = el.getAttribute('href') ?? '';
     return href === '' || href === '#' || href.startsWith('javascript:');
   }
@@ -186,7 +187,7 @@ export async function openMenu(path: string[], show: boolean): Promise<MenuResul
     // Only menu buttons are clicked here. The last label may be the item the user wants —
     // that click goes through the click tool, so approvals still apply.
     const clickable = last ? isMenuButton(target) : opensOnClick(target);
-    if (!revealed.length && clickable && target instanceof HTMLElement) {
+    if (!revealed.length && clickable && isHTML(target)) {
       target.click();
       await settleBriefly();
       revealed = newlyVisible(before);

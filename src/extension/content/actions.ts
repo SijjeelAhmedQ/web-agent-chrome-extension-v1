@@ -11,6 +11,7 @@ import type {
 import { accessibleName, elementFor, hasHiddenMenu, isDisabled, isEditable, isVisible, OVERLAY_HOST_ID, roleOf } from './elements';
 import { isHovered, openHoverMenu, releaseHoverUnlessInside } from './hover';
 import { highlight } from './overlay';
+import { isButton, isHTML, isInput, isLabel, isSelect, isTextArea } from './dom';
 
 /**
  * Generic page actions. Events are dispatched the way frameworks (React, Vue, Angular,
@@ -68,7 +69,7 @@ function dispatchPointerSequence(el: Element, detail = 1) {
   el.dispatchEvent(new MouseEvent('mouseover', base));
   el.dispatchEvent(new PointerEvent('pointerdown', { ...base, pointerType: 'mouse', isPrimary: true, buttons: 1 }));
   el.dispatchEvent(new MouseEvent('mousedown', { ...base, buttons: 1 }));
-  if (el instanceof HTMLElement) el.focus({ preventScroll: true });
+  if (isHTML(el)) el.focus({ preventScroll: true });
   el.dispatchEvent(new PointerEvent('pointerup', { ...base, pointerType: 'mouse', isPrimary: true }));
   el.dispatchEvent(new MouseEvent('mouseup', base));
 }
@@ -84,7 +85,7 @@ function invalidFieldsOf(form: HTMLFormElement | null): string[] | undefined {
 }
 
 const isSubmitControl = (el: Element) =>
-  (el instanceof HTMLButtonElement && el.type === 'submit') || (el instanceof HTMLInputElement && (el.type === 'submit' || el.type === 'image'));
+  (isButton(el) && el.type === 'submit') || (isInput(el) && (el.type === 'submit' || el.type === 'image'));
 
 /** Watches the page from just before a click, until the next click: settle (and later checks) report what changed. */
 let watch: { lines: Set<string>; frames: Set<Element>; styleChanges: number; observer: MutationObserver } | null = null;
@@ -179,7 +180,7 @@ export function pointAt(id: number): { x: number; y: number } {
 
 export async function click(id: number, show: boolean, double = false): Promise<ClickResult> {
   const el = resolve(id);
-  if (!isVisible(el) && !(el instanceof HTMLInputElement)) fail('not_visible', 'That element is hidden right now.', 'It may be inside a closed menu or collapsed section. Open the menu first or scroll.');
+  if (!isVisible(el) && !(isInput(el))) fail('not_visible', 'That element is hidden right now.', 'It may be inside a closed menu or collapsed section. Open the menu first or scroll.');
   if (isDisabled(el)) fail('disabled', `“${accessibleName(el) || 'That control'}” is disabled.`, 'A required field may be empty, or a previous step is incomplete.');
   await prepare(el, 'Clicking', show);
 
@@ -206,7 +207,7 @@ export async function click(id: number, show: boolean, double = false): Promise<
   releaseHoverUnlessInside(el);
   watchEffects();
   dispatchPointerSequence(el);
-  if (el instanceof HTMLElement) el.click();
+  if (isHTML(el)) el.click();
   else el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, composed: true, ...centerOf(el) }));
   if (double) {
     // Lists that open a record on double-click: second press, then dblclick.
@@ -218,7 +219,8 @@ export async function click(id: number, show: boolean, double = false): Promise<
 }
 
 const nativeSetter = (el: HTMLInputElement | HTMLTextAreaElement) => {
-  const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+  const win = (el.ownerDocument.defaultView ?? window) as typeof window;
+  const proto = isTextArea(el) ? win.HTMLTextAreaElement.prototype : win.HTMLInputElement.prototype;
   return Object.getOwnPropertyDescriptor(proto, 'value')?.set;
 };
 
@@ -227,7 +229,7 @@ function editableTarget(el: Element): HTMLInputElement | HTMLTextAreaElement | H
   if (isEditable(el)) return el;
   const inner = el.querySelector('input:not([type=hidden]),textarea,[contenteditable=""],[contenteditable=true]');
   if (inner && isEditable(inner)) return inner;
-  const forLabel = el instanceof HTMLLabelElement ? el.control : null;
+  const forLabel = isLabel(el) ? el.control : null;
   if (forLabel && isEditable(forLabel)) return forLabel;
   return fail('not_editable', `“${accessibleName(el) || 'That element'}” isn't a text field.`, 'Pick a textbox, searchbox or combobox from read_page.');
 }
@@ -247,7 +249,7 @@ export async function type(id: number, text: string, clearFirst: boolean, show: 
   field.focus({ preventScroll: true });
   dispatchPointerSequence(field);
 
-  if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+  if (isInput(field) || isTextArea(field)) {
     const start = clearFirst ? '' : field.value;
     if (clearFirst && field.value) setFieldValue(field, '', null);
     // Key events per character for autocompletes that listen to keys; value set in one go.
@@ -289,7 +291,7 @@ export async function clear(id: number, show: boolean): Promise<TypeResult> {
   const field = editableTarget(el);
   await prepare(field, 'Clearing', show);
   field.focus({ preventScroll: true });
-  if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+  if (isInput(field) || isTextArea(field)) {
     setFieldValue(field, '', null);
     field.dispatchEvent(new Event('change', { bubbles: true }));
   } else {
@@ -307,7 +309,7 @@ const optionNorm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
 
 export async function select(id: number, option: string, show: boolean): Promise<SelectResult> {
   const el = resolve(id);
-  const native = el instanceof HTMLSelectElement ? el : el.querySelector('select');
+  const native = isSelect(el) ? el : el.querySelector('select');
   if (!native) {
     return fail('not_native_select', `“${accessibleName(el) || 'That control'}” is a custom dropdown.`, 'Click it to open the list, then click the option you want (read_page after opening).');
   }
@@ -414,7 +416,7 @@ function focusables(): HTMLElement[] {
 export async function pressKey(rawKey: string, id?: number): Promise<KeyResult> {
   const key = normalizeKey(rawKey);
   const target = (id !== undefined ? resolve(id) : (document.activeElement as Element | null)) ?? document.body;
-  if (id !== undefined && target instanceof HTMLElement) target.focus({ preventScroll: true });
+  if (id !== undefined && isHTML(target)) target.focus({ preventScroll: true });
   const meta = KEY_CODES[key] ?? { code: key.length === 1 ? `Key${key.toUpperCase()}` : key, keyCode: key.length === 1 ? key.toUpperCase().charCodeAt(0) : 0 };
   const eventKey = key === 'Space' ? ' ' : key;
   const init: KeyboardEventInit = { key: eventKey, code: meta.code, keyCode: meta.keyCode, which: meta.keyCode, bubbles: true, cancelable: true, composed: true } as KeyboardEventInit;
@@ -426,7 +428,7 @@ export async function pressKey(rawKey: string, id?: number): Promise<KeyResult> 
 
   let submittedForm = false;
   if (notCancelled) {
-    if (key === 'Enter' && target instanceof HTMLInputElement && target.form) {
+    if (key === 'Enter' && isInput(target) && target.form) {
       const invalidFields = invalidFieldsOf(target.form);
       if (invalidFields) return { submittedForm: false, invalidFields };
       // A real Enter in a single-line field submits its form; synthetic events don't.
@@ -440,7 +442,7 @@ export async function pressKey(rawKey: string, id?: number): Promise<KeyResult> 
       const list = focusables();
       const index = list.indexOf(target as HTMLElement);
       list[(index + 1) % list.length]?.focus();
-    } else if ((key === 'Enter' || key === 'Space') && target instanceof HTMLElement && /button|link|checkbox|tab|menuitem|option/.test(roleOf(target)) && !(target instanceof HTMLInputElement)) {
+    } else if ((key === 'Enter' || key === 'Space') && isHTML(target) && /button|link|checkbox|tab|menuitem|option/.test(roleOf(target)) && !(isInput(target))) {
       target.click();
     }
   }

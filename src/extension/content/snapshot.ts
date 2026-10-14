@@ -12,6 +12,7 @@ import {
   isDisabled,
   roleOf,
 } from './elements';
+import { isAnchor, isButton, isHTML, isInput, isSelect, isTextArea } from './dom';
 
 const clip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
 
@@ -24,7 +25,7 @@ export function describeElement(el: Element): ElementInfo {
     tag: el.tagName.toLowerCase(),
     inViewport: inViewport(el),
   };
-  if (el instanceof HTMLInputElement) {
+  if (isInput(el)) {
     info.type = el.type;
     if (el.type === 'checkbox' || el.type === 'radio') info.checked = el.checked;
     else if (el.type === 'password') info.value = el.value ? '••••' : '';
@@ -32,20 +33,20 @@ export function describeElement(el: Element): ElementInfo {
     if (el.placeholder && el.placeholder !== info.name) info.placeholder = clip(el.placeholder, 60);
     if (el.required) info.required = true;
     if (el.readOnly && !['button', 'submit', 'reset', 'image', 'checkbox', 'radio'].includes(el.type)) info.readonly = true;
-  } else if (el instanceof HTMLTextAreaElement) {
+  } else if (isTextArea(el)) {
     info.value = clip(el.value, 200);
     if (el.placeholder && el.placeholder !== info.name) info.placeholder = clip(el.placeholder, 60);
     if (el.required) info.required = true;
-  } else if (el instanceof HTMLSelectElement) {
+  } else if (isSelect(el)) {
     info.value = el.selectedOptions[0]?.text.trim() ?? '';
     const options = Array.from(el.options).map((o) => o.text.trim()).filter(Boolean);
     info.options = options.length > 25 ? [...options.slice(0, 25), `…${options.length - 25} more`] : options;
     if (el.required) info.required = true;
-  } else if (el instanceof HTMLButtonElement) {
+  } else if (isButton(el)) {
     info.type = el.type;
-  } else if (el instanceof HTMLAnchorElement && el.href) {
+  } else if (isAnchor(el) && el.href) {
     info.href = shortHref(el.href);
-  } else if (el instanceof HTMLElement && el.isContentEditable) {
+  } else if (isHTML(el) && el.isContentEditable) {
     info.value = clip((el.innerText ?? '').trim(), 200);
   }
 
@@ -200,17 +201,17 @@ function filledValues(scope: Element | null): { label: string; value: string }[]
   const out: { label: string; value: string }[] = [];
   const seen = new Set<string>();
   for (const field of Array.from(scope.querySelectorAll('input,textarea,select,[role=combobox],[contenteditable=true]'))) {
-    if (field instanceof HTMLInputElement && ['hidden', 'submit', 'button', 'reset', 'image', 'file'].includes(field.type)) continue;
-    if (field instanceof HTMLInputElement && (field.type === 'checkbox' || field.type === 'radio') && !field.checked) continue;
+    if (isInput(field) && ['hidden', 'submit', 'button', 'reset', 'image', 'file'].includes(field.type)) continue;
+    if (isInput(field) && (field.type === 'checkbox' || field.type === 'radio') && !field.checked) continue;
     if (!isVisibleField(field)) continue;
-    const isRadio = field instanceof HTMLInputElement && field.type === 'radio';
+    const isRadio = isInput(field) && field.type === 'radio';
     const label = isRadio ? groupLabel(field) || accessibleName(field) : accessibleName(field);
     let value = '';
-    if (field instanceof HTMLInputElement && field.type === 'password') value = field.value ? '••••' : '';
+    if (isInput(field) && field.type === 'password') value = field.value ? '••••' : '';
     else if (isRadio) value = accessibleName(field);
-    else if (field instanceof HTMLInputElement && field.type === 'checkbox') value = 'Yes';
-    else if (field instanceof HTMLSelectElement) value = field.selectedOptions[0]?.text.trim() ?? '';
-    else if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) value = field.value.trim();
+    else if (isInput(field) && field.type === 'checkbox') value = 'Yes';
+    else if (isSelect(field)) value = field.selectedOptions[0]?.text.trim() ?? '';
+    else if (isInput(field) || isTextArea(field)) value = field.value.trim();
     else value = ((field as HTMLElement).innerText ?? '').trim();
     // Custom dropdowns show their choice beside an empty search input: read the box around it,
     // stopping at the form row (its label) and ignoring the placeholder.
@@ -247,7 +248,7 @@ function groupLabel(radio: Element): string {
   return '';
 }
 
-const isVisibleField = (el: Element) => el.getClientRects().length > 0 || (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio'));
+const isVisibleField = (el: Element) => el.getClientRects().length > 0 || (isInput(el) && (el.type === 'checkbox' || el.type === 'radio'));
 
 export function describeRisk(el: Element): ElementRisk {
   const info = describeElement(el);
@@ -264,8 +265,8 @@ export function describeRisk(el: Element): ElementRisk {
     role: info.role,
     tag: info.tag,
     type: info.type,
-    href: el instanceof HTMLAnchorElement ? el.href : undefined,
-    target: el instanceof HTMLAnchorElement ? el.target : undefined,
+    href: isAnchor(el) ? el.href : undefined,
+    target: isAnchor(el) ? el.target : undefined,
     formHasPassword: fields.some((f) => (f as HTMLInputElement).type === 'password'),
     formHasPayment: fields.some((f) => PAYMENT_HINT.test(`${f.getAttribute('autocomplete') ?? ''} ${f.getAttribute('name') ?? ''} ${f.id}`)),
     formIsSearch:
@@ -315,6 +316,16 @@ export function findText(text: string, near: string | undefined, limit: number):
   }
 
   const seen = new Set<Element>();
+  // `near`: the match's row or item (or a few levels up) must also show that text.
+  const isNear = (el: Element) => {
+    if (!nearQ) return true;
+    let scope: Element | null = el.closest('tr,[role=row],li,[role=option],[role=listitem],dialog,[role=dialog]');
+    if (!scope) {
+      scope = el;
+      for (let i = 0; i < 4 && scope.parentElement; i++) scope = scope.parentElement;
+    }
+    return hasWords((scope as HTMLElement).innerText ?? '', nearQ);
+  };
   const found = hits
     .filter((el) => isVisible(el) && hasWords((el as HTMLElement).innerText ?? '', q))
     .map((el) => {
@@ -322,15 +333,7 @@ export function findText(text: string, near: string | undefined, limit: number):
       return target && target.contains(el) && isVisible(target) ? target : el;
     })
     .filter((el) => !seen.has(el) && seen.add(el))
-    .filter((el) => {
-      if (!nearQ) return true;
-      let scope: Element | null = el.closest('tr,[role=row],li,[role=option],[role=listitem]');
-      if (!scope) {
-        scope = el;
-        for (let i = 0; i < 4 && scope.parentElement; i++) scope = scope.parentElement;
-      }
-      return hasWords((scope as HTMLElement).innerText ?? '', nearQ);
-    })
+    .filter(isNear)
     .map((el, order) => {
       const exact = norm((el as HTMLElement).innerText ?? '') === q;
       const r = el.getBoundingClientRect();
@@ -338,6 +341,14 @@ export function findText(text: string, near: string | undefined, limit: number):
       const covered = !!top && top !== el && !el.contains(top) && !top.contains(el);
       return { el, exact, covered, order };
     });
+  // No such text: a control with that name instead — <input type=button value="Save">, an icon
+  // button with a title, or a button inside a same-origin frame (a modal in an iframe).
+  if (!found.length) {
+    collectInteractive()
+      .elements.filter((el) => hasWords(accessibleName(el), q))
+      .filter(isNear)
+      .forEach((el, order) => found.push({ el, exact: norm(accessibleName(el)) === q, covered: false, order }));
+  }
   const best = found.some((f) => f.exact) ? found.filter((f) => f.exact) : found;
   best.sort((a, b) => Number(a.covered) - Number(b.covered) || a.order - b.order);
   // Something on top (a search dropdown) hides what is behind it: prefer what can be clicked.
