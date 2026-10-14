@@ -183,6 +183,8 @@ export interface Settings {
   knownToolIds?: string[];
   /** Edited descriptions and approval settings of built-in tools, by tool id. */
   toolOverrides?: Record<string, ToolOverride>;
+  /** When a click does nothing, click again with a real mouse click (Chrome's debugger). */
+  realClicks?: boolean;
 }
 
 export interface AppConfig {

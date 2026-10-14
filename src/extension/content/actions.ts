@@ -86,20 +86,34 @@ function invalidFieldsOf(form: HTMLFormElement | null): string[] | undefined {
 const isSubmitControl = (el: Element) =>
   (el instanceof HTMLButtonElement && el.type === 'submit') || (el instanceof HTMLInputElement && (el.type === 'submit' || el.type === 'image'));
 
-/** Watches the page from just before a click; the next settle reports what changed. */
-let watch: { lines: Set<string>; styleChanges: number; observer: MutationObserver } | null = null;
+/** Watches the page from just before a click, until the next click: settle (and later checks) report what changed. */
+let watch: { lines: Set<string>; frames: Set<Element>; styleChanges: number; observer: MutationObserver } | null = null;
 
-const visibleLines = () =>
-  new Set(
-    (document.body?.innerText ?? '')
-      .split('\n')
-      .map((l) => l.replace(/\s+/g, ' ').trim())
-      .filter((l) => l.length > 1),
-  );
+/** Rendered text lines of the page and of same-origin frames (modals often load a page in an iframe). */
+function visibleLines(): Set<string> {
+  const lines = new Set<string>();
+  const add = (text: string | undefined) => {
+    for (const l of (text ?? '').split('\n')) {
+      const t = l.replace(/\s+/g, ' ').trim();
+      if (t.length > 1) lines.add(t);
+    }
+  };
+  add(document.body?.innerText);
+  for (const frame of visibleFrames()) {
+    try {
+      add((frame as HTMLIFrameElement).contentDocument?.body?.innerText);
+    } catch {
+      // cross-origin: its text can't be read
+    }
+  }
+  return lines;
+}
+
+const visibleFrames = () => Array.from(document.querySelectorAll('iframe,frame')).filter((f) => isVisible(f));
 
 function watchEffects() {
   watch?.observer.disconnect();
-  const w = { lines: visibleLines(), styleChanges: 0, observer: new MutationObserver(() => undefined) };
+  const w = { lines: visibleLines(), frames: new Set(visibleFrames()), styleChanges: 0, observer: new MutationObserver(() => undefined) };
   w.observer = new MutationObserver((records) => {
     for (const r of records) {
       if (r.type !== 'attributes') continue;
@@ -114,17 +128,53 @@ function watchEffects() {
   watch = w;
 }
 
-/** What changed since the click started — then stops watching. */
-function takeEffect(): ClickEffect | undefined {
+/** What changed since the last click started. */
+export function currentEffect(): ClickEffect | undefined {
   if (!watch) return undefined;
-  const { lines, styleChanges, observer } = watch;
-  observer.disconnect();
-  watch = null;
   const now = visibleLines();
-  const added = [...now].filter((l) => !lines.has(l));
+  const added = [...now].filter((l) => !watch!.lines.has(l));
   let removed = 0;
-  for (const l of lines) if (!now.has(l)) removed++;
-  return { added: added.slice(0, 6).map((l) => (l.length > 120 ? `${l.slice(0, 119)}…` : l)), removed, styleChanges };
+  for (const l of watch.lines) if (!now.has(l)) removed++;
+  const newFrames = visibleFrames()
+    .filter((f) => !watch!.frames.has(f))
+    .map((f) => {
+      let title = '';
+      try {
+        title = (f as HTMLIFrameElement).contentDocument?.title ?? '';
+      } catch {
+        title = '';
+      }
+      return `(a frame opened${title ? `: ${title}` : ''})`;
+    });
+  return {
+    added: [...newFrames, ...added].slice(0, 6).map((l) => (l.length > 120 ? `${l.slice(0, 119)}…` : l)),
+    removed,
+    styleChanges: watch.styleChanges,
+  };
+}
+
+/**
+ * Where a real mouse click would land on this element (viewport coordinates), with the
+ * element scrolled into view. Starts watching the page so the next settle reports the effect.
+ */
+export function pointAt(id: number): { x: number; y: number } {
+  const el = resolve(id);
+  reveal(el);
+  const r = el.getBoundingClientRect();
+  // The centre, unless something covers it there: then the first spot where it is on top.
+  const spots = [[0.5, 0.5], [0.25, 0.5], [0.75, 0.5], [0.5, 0.25], [0.5, 0.75], [0.15, 0.5], [0.85, 0.5]];
+  let point = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  for (const [fx, fy] of spots) {
+    const x = r.left + r.width * fx;
+    const y = r.top + r.height * fy;
+    const top = document.elementFromPoint(x, y);
+    if (top && (top === el || el.contains(top))) {
+      point = { x, y };
+      break;
+    }
+  }
+  watchEffects();
+  return { x: Math.round(point.x), y: Math.round(point.y) };
 }
 
 export async function click(id: number, show: boolean, double = false): Promise<ClickResult> {
@@ -429,7 +479,7 @@ export function settle(quietMs: number, timeoutMs: number): Promise<{ mutations:
       observer.disconnect();
       clearTimeout(quietTimer);
       clearTimeout(hardTimer);
-      done({ mutations, url: location.href, title: document.title, alerts: pageAlerts(), effect: takeEffect() });
+      done({ mutations, url: location.href, title: document.title, alerts: pageAlerts(), effect: currentEffect() });
     }
   });
 }

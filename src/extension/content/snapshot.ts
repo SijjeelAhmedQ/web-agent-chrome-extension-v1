@@ -143,6 +143,9 @@ export function snapshot(mode: ReadMode, maxElements: number, maxTextChars: numb
 
 const norm = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
 
+/** “link”, “button”… in a query say what kind of thing, not which one. */
+const ROLE_WORDS = /^(link|links|button|buttons|btn|field|box|input|icon|tab|menu|item|checkbox|option|textbox|dropdown|name)$/;
+
 /** Ranks elements against a free-text description (“search box”, “Add medication”). */
 export function find(query: string, limit: number): FindResult {
   const q = norm(query);
@@ -158,7 +161,8 @@ export function find(query: string, limit: number): FindResult {
       if (name === q) score += 10;
       else if (name.includes(q)) score += 6;
       for (const w of words) {
-        if (hay.includes(w)) score += 2;
+        if (ROLE_WORDS.test(w)) score += hay.includes(w) ? 0.5 : 0;
+        else if (hay.includes(w)) score += 2;
         else if (context.includes(w)) score += 0.25;
       }
       // Synonyms that come up constantly.

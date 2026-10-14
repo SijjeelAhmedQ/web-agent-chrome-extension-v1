@@ -56,6 +56,8 @@ export class AgentRun {
   private readonly declined = new Set<string>();
   /** How often each exact page action changed nothing in this task — to break loops. */
   private readonly repeats = new Map<string, number>();
+  /** Actions in this task that changed nothing at all. */
+  private noEffect = 0;
   /** Set when the task must end now, with this answer. */
   private endWith: string | null = null;
   private task!: TaskRecord;
@@ -359,7 +361,15 @@ export class AgentRun {
       }
 
       const outcome = await this.inFront(ctx, () => tool.execute(args, ctx));
-      if (key && /^(Nothing changed|Selected — nothing opened)$/.test(outcome.note ?? '')) this.repeats.set(key, (this.repeats.get(key) ?? 0) + 1);
+      if (/^(Nothing changed|Selected — nothing opened)$/.test(outcome.note ?? '')) {
+        if (key) this.repeats.set(key, (this.repeats.get(key) ?? 0) + 1);
+        // Clicking around the app to see what happens is not progress.
+        if (++this.noEffect >= 2) {
+          finish({ status: 'done', note: outcome.note, ...(dev ? { result: clip(outcome.output, 4000) } : {}) });
+          return `${outcome.output}
+This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in this task that changed nothing. Stop clicking other things. Tell the user what you clicked, what you saw, and ask how this app opens it.`;
+        }
+      }
       finish({ status: 'done', note: outcome.note, ...(dev ? { result: clip(outcome.output, 4000) } : {}) });
       return outcome.output;
     } catch (err) {

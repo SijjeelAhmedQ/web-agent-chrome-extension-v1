@@ -107,6 +107,7 @@ export const DEFAULT_SETTINGS: Settings = {
   disabledToolIds: [],
   maxElements: 250,
   maxTextChars: 12000,
+  realClicks: true,
   voice: { enabled: false, serverUrl: '', key: '', engine: 'whisper', vocabulary: '', autoSend: false, mode: 'handsfree', pauseMs: 1000, livePartials: true, voiceCommands: true },
 };
 

@@ -40,7 +40,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     '- Take the most direct path. To search, type into the search field with submit=true. Prefer navigate with a known URL over clicking through menus when you are sure of the address.',
     '- Elements marked ↓ are outside the visible area; you can still act on them, or scroll to see more of the page.',
     '- Menus that open on hover (navigation bars, sub-menus) need hover, not click. For nested menus, call open_menu with the path of labels (e.g. ["Products", "Laptops"]) and then click the final item from the items it returns.',
-    '- If a click changed nothing (the result says so), do not click the same thing again: try double: true once (many lists open a record on double-click), or a different way.',
+    '- If a click changed nothing (the result says so), do not click it again and do not click other buttons or icons to explore the app. Read the page once; if it still is not done, tell the user what you did and ask. Use double: true only when the user says the app needs a double-click.',
     '- If an action fails, try a different approach (find_element, scroll, wait, a different element) — at most two attempts per obstacle — then explain what blocked you.',
     '- Pop-ups, cookie banners and dialogs: close or accept them only if they block the task.',
     '- Never invent facts. Report only what you actually saw on pages. If something is not on the page, say so.',

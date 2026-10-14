@@ -135,6 +135,24 @@ const findElement: AgentTool<{ query: string }> = {
 
 /** Clicks a known element id and reports what happened. Shared by click and click_text. */
 async function clickById(ctx: ToolContext, elementId: number, double = false): Promise<ToolOutcome> {
+  const tabs = await ctx.browser.watchNewTabs();
+  try {
+    return await clickAndReport(ctx, elementId, double, tabs.opened);
+  } finally {
+    tabs.stop();
+  }
+}
+
+/** The page opened a new tab or pop-up window: work there. */
+async function followNewTab(ctx: ToolContext, tab: chrome.tabs.Tab, label: string, how = ''): Promise<ToolOutcome> {
+  const now = await ctx.browser.adoptTab(tab, ctx.signal);
+  return {
+    output: `Clicked ${label}${how}. It opened “${now.title || 'a page'}” (${clip(now.url ?? '', 120)}) in a new tab or window — you are now working there. Call read_page.`,
+    note: 'Opened in a new tab',
+  };
+}
+
+async function clickAndReport(ctx: ToolContext, elementId: number, double: boolean, openedTab: () => chrome.tabs.Tab | null): Promise<ToolOutcome> {
   const before = await pageUrl(ctx);
   let res;
   try {
@@ -158,25 +176,63 @@ async function clickById(ctx: ToolContext, elementId: number, double = false): P
     const tab = await ctx.browser.openTab(res.opensNewTab, ctx.signal);
     return { output: `${label} opens in a new tab, so I opened it: “${tab.title}” (${clip(tab.url ?? '', 120)}). You are now working in that tab. Call read_page.`, note: 'Opened in a new tab' };
   }
-  const after = await ctx.browser.settleAfterAction(before, ctx.signal);
+  let after = await ctx.browser.settleAfterAction(before, ctx.signal);
   const covered = res.covered ? ' Note: something was covering it (a pop-up or banner?) — check the result.' : '';
   if (res.invalidFields) return { output: `Clicked ${label}.${invalidReport(res.invalidFields)}`, note: 'Form has missing or invalid fields' };
   const verb = double ? 'Double-clicked' : 'Clicked';
-  const effect = after.navigated ? undefined : after.effect;
-  if (effect && !effect.added.length && !effect.removed && !after.alerts.length) {
-    // Saying so stops the model from clicking the same thing again and again.
-    const retry = double
-      ? 'Repeating it won’t help: look for a link, button or icon that opens it, or tell the user what you tried.'
-      : 'Clicking it again won’t help. If it should open something, try once with double: true (some lists open a record on double-click), or a link, button or icon that opens it.';
+  let effect = after.navigated ? undefined : after.effect;
+  const changed = () => after.navigated || !!effect?.added.length || !!effect?.removed || after.alerts.length > 0;
+
+  // Older apps answer slowly (a round trip to the server): give them a few seconds before
+  // deciding nothing happened — a new tab or window, a page load, or new content.
+  for (let waited = 0; !changed() && !openedTab() && waited < 3000; waited += 400) {
+    await sleep(400);
+    const tab = await ctx.browser.currentTab();
+    if (tab.status === 'loading' || (tab.url ?? '') !== before) {
+      await ctx.browser.waitForLoad(tab.id!, 20_000, ctx.signal);
+      const loaded = await ctx.browser.currentTab();
+      after = { navigated: true, url: loaded.url ?? '', title: loaded.title ?? '', alerts: [] };
+      break;
+    }
+    effect = (await ctx.browser.send({ kind: 'effect' }).catch(() => undefined)) ?? effect;
+  }
+  const tab = openedTab();
+  if (tab) return followNewTab(ctx, tab, label);
+
+  if (!changed() && ctx.settings.realClicks !== false) {
+    // Some pages ignore script clicks, or open the record in a pop-up only a real click may open.
+    const real = await realClick(ctx, elementId, label, double, openedTab).catch(() => null);
+    if (real) return real;
+  }
+  if (!changed() && effect) {
+    // Saying so stops the model from clicking again, or clicking around to find out.
+    const tried = ctx.settings.realClicks !== false ? ' (a real mouse click was tried too)' : '';
+    const advice = ' Do not click it again or try other buttons and icons to find out. Call read_page once to check; if what you expected is not there, tell the user what you clicked and what happened.';
     return effect.styleChanges
-      ? { output: `${verb} ${label}. Only its look changed (it may be selected or highlighted now) — nothing new appeared on the page. ${retry}${covered}`, note: 'Selected — nothing opened' }
-      : { output: `${verb} ${label}, but nothing on the page changed. ${retry}${covered}`, note: 'Nothing changed' };
+      ? { output: `${verb} ${label}${tried}. Only its look changed (it may be selected or highlighted now) — nothing new appeared in this tab within a few seconds.${advice}${covered}`, note: 'Selected — nothing opened' }
+      : { output: `${verb} ${label}${tried}, but nothing on the page changed within a few seconds.${advice}${covered}`, note: 'Nothing changed' };
   }
   const appeared = effect?.added.length ? ` New on the page: ${effect.added.map((l) => `“${clip(l, 80)}”`).join(', ')}.` : '';
   return { output: `${verb} ${label}.${appeared}${changeReport(after)}${covered}`, note: after.navigated ? 'Opened a new page' : effect?.added.length ? 'The page changed' : undefined };
 }
 
-const double = bool(false).describe('Double-click instead (default false) — for lists that open an item on double-click');
+const double = bool(false).describe('Double-click instead (default false). Only when the user says this app opens items on double-click.');
+
+/** Clicks again with real mouse input. Returns null when that changed nothing either. */
+async function realClick(ctx: ToolContext, elementId: number, label: string, double: boolean, openedTab: () => chrome.tabs.Tab | null): Promise<ToolOutcome | null> {
+  const before = await pageUrl(ctx);
+  const point = await ctx.browser.send({ kind: 'pointAt', id: elementId });
+  const opened = (await ctx.browser.realClick(point.x, point.y, double)) ?? openedTab();
+  if (opened) return followNewTab(ctx, opened, label, ' (real mouse click)');
+  const after = await ctx.browser.settleAfterAction(before, ctx.signal);
+  const effect = after.navigated ? undefined : after.effect;
+  if (!after.navigated && !effect?.added.length && !effect?.removed && !after.alerts.length) return null;
+  const appeared = effect?.added.length ? ` New on the page: ${effect.added.map((l) => `“${clip(l, 80)}”`).join(', ')}.` : '';
+  return {
+    output: `Clicked ${label} (a normal click did nothing, so I used a real mouse click).${appeared}${changeReport(after)}`,
+    note: after.navigated ? 'Opened a new page' : 'The page changed',
+  };
+}
 
 const click: AgentTool<{ id: number; name: string; double: boolean }> = {
   name: 'click',

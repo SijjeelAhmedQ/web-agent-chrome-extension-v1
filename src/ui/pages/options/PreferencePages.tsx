@@ -332,6 +332,14 @@ export function AdvancedPage() {
           <Switch checked={settings.developerMode} onChange={(v) => update({ developerMode: v })} aria-label="Show technical details" />
         </SettingRow>
       </Section>
+      <Section title="Clicking">
+        <SettingRow
+          label="Real mouse clicks"
+          description="When a normal click does nothing, click again with a real mouse click. Needed by sites that ignore script clicks or open records in a new window. Chrome shows a “started debugging this browser” bar for a moment while it clicks."
+        >
+          <Switch checked={settings.realClicks !== false} onChange={(v) => update({ realClicks: v })} aria-label="Real mouse clicks" />
+        </SettingRow>
+      </Section>
       <Section title="Page reading" description="How much of a page the agent reads at once. Higher values help on big pages but use more of the model's context.">
         <SettingRow label="Controls per read" description={`${settings.maxElements} buttons, links and fields`} stacked>
           <Slider min={50} max={600} step={25} value={settings.maxElements} onChange={(v) => update({ maxElements: v })} aria-label="Controls per read" />

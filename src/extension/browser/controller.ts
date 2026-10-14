@@ -231,6 +231,65 @@ export class BrowserController {
     return { closed: id, now };
   }
 
+  /**
+   * A real mouse click (trusted input, with a user gesture) through Chrome's debugger, at
+   * viewport coordinates. For pages that ignore script clicks or open a window on click —
+   * pop-ups from script clicks are blocked. Returns a tab the click opened, if any.
+   */
+  async realClick(x: number, y: number, double: boolean): Promise<chrome.tabs.Tab | null> {
+    const tab = await this.currentTab();
+    const target = { tabId: tab.id! };
+    let opened: chrome.tabs.Tab | null = null;
+    const onCreated = (t: chrome.tabs.Tab) => {
+      if (t.openerTabId === tab.id) opened = t;
+    };
+    chrome.tabs.onCreated.addListener(onCreated);
+    try {
+      try {
+        await chrome.debugger.attach(target, '1.3');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new PageError('unsupported', 'A real mouse click isn’t possible on this tab right now (are DevTools open on it?).', msg);
+      }
+      try {
+        const mouse = (params: Record<string, unknown>) => chrome.debugger.sendCommand(target, 'Input.dispatchMouseEvent', { x, y, ...params });
+        await mouse({ type: 'mouseMoved' });
+        for (let count = 1; count <= (double ? 2 : 1); count++) {
+          await mouse({ type: 'mousePressed', button: 'left', buttons: 1, clickCount: count });
+          await mouse({ type: 'mouseReleased', button: 'left', buttons: 0, clickCount: count });
+        }
+      } finally {
+        await chrome.debugger.detach(target).catch(() => undefined);
+      }
+      await sleep(700);
+    } finally {
+      chrome.tabs.onCreated.removeListener(onCreated);
+    }
+    return opened;
+  }
+
+  /** Notices tabs and pop-up windows the agent's tab opens (window.open, target=_blank) while it is on. */
+  async watchNewTabs(): Promise<{ opened: () => chrome.tabs.Tab | null; stop: () => void }> {
+    const opener = (await this.currentTab()).id;
+    let opened: chrome.tabs.Tab | null = null;
+    const listener = (t: chrome.tabs.Tab) => {
+      if (t.openerTabId === opener && !opened) opened = t;
+    };
+    chrome.tabs.onCreated.addListener(listener);
+    return { opened: () => opened, stop: () => chrome.tabs.onCreated.removeListener(listener) };
+  }
+
+  /** Makes a tab the page opened (a new tab or a pop-up window) the agent's tab, where it is. */
+  async adoptTab(tab: chrome.tabs.Tab, signal?: AbortSignal): Promise<chrome.tabs.Tab> {
+    const id = tab.id!;
+    await this.setPresence(false);
+    this.tabId = id;
+    if (tab.windowId !== this.windowId) await chrome.windows.update(tab.windowId, { focused: true }).catch(() => undefined);
+    else await chrome.tabs.update(id, { active: true }).catch(() => undefined);
+    await this.waitForLoad(id, 20_000, signal);
+    return chrome.tabs.get(id);
+  }
+
   /** The thin glow around the page while the agent works there. Best-effort. */
   async setPresence(active: boolean): Promise<void> {
     if (this.tabId === null) return;

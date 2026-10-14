@@ -16,6 +16,8 @@ export type ContentRequest =
   | { kind: 'findText'; text: string; near?: string; limit: number }
   | { kind: 'describe'; id: number }
   | { kind: 'click'; id: number; highlight: boolean; double?: boolean }
+  | { kind: 'pointAt'; id: number }
+  | { kind: 'effect' }
   | { kind: 'type'; id: number; text: string; clear: boolean; highlight: boolean }
   | { kind: 'clear'; id: number; highlight: boolean }
   | { kind: 'select'; id: number; option: string; highlight: boolean }
@@ -125,6 +127,8 @@ export interface ResponseMap {
   findText: TextResult;
   describe: ElementRisk;
   click: ClickResult;
+  pointAt: { x: number; y: number };
+  effect: ClickEffect | undefined;
   hover: HoverResult;
   menuPath: MenuResult;
   type: TypeResult;
