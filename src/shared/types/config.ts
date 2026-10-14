@@ -135,11 +135,15 @@ export interface SiteProfile {
   /** Model for this site. null and '' → the agent's own. */
   providerId: string | null;
   model: string;
+  /** Agents that work on this site; the first opens by itself in the side panel here. */
+  agentIds: string[];
   /** Skills that apply on this site, for every agent. */
   skillIds: string[];
+  /** Agents' own skills switched off on this site. */
+  disabledSkillIds: string[];
   /** Custom tools available on this site, for every agent. */
   customToolIds: string[];
-  /** Built-in tools switched off on this site. */
+  /** Tools switched off on this site: built-in ids and custom tools as `custom:<id>`. */
   disabledToolIds: string[];
   knowledge: KnowledgeEntry[];
   createdAt: number;

@@ -2,6 +2,7 @@ import { History, ListOrdered, Settings2, SquarePen, X } from 'lucide-react';
 import { parseVoiceCommand } from '@/shared/voice/commands';
 import { voiceReady } from '@/shared/voice/speech';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { sitesFor } from '@/agent/tools/registry';
 import { matchesSite } from '@/shared/utils';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { chatActions } from '@/store/chatSlice';
@@ -33,6 +34,15 @@ export function SidePanel() {
   const siteMode = matchesSite(tab.url, settings.blockedSites) ? 'blocked' : matchesSite(tab.url, settings.readOnlySites) ? 'read-only' : 'normal';
   const canAct = agent.toolIds.some((t) => ['click', 'type'].includes(t));
   const multiAgent = new Set(turns.map((t) => t.agentId)).size > 1;
+
+  // On a site with its own agents, the site's first agent takes over when you arrive there.
+  const siteHere = sitesFor(config, tab.url)[0];
+  const siteAgents = siteHere?.agentIds.filter((id) => agents.some((a) => a.id === id)) ?? [];
+  useEffect(() => {
+    if (!siteAgents.length || running || siteAgents.includes(agent.id)) return;
+    dispatch(chatActions.setActiveAgent(siteAgents[0]));
+    // Only when the site (or its agents) changes — a manual pick on the same site sticks.
+  }, [siteHere?.id, siteAgents.join(',')]);
 
   // Keep the newest activity in view while the agent works.
   const last = turns[turns.length - 1];

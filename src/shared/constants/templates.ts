@@ -128,7 +128,7 @@ const entry = (kind: KnowledgeEntry['kind'], title: string, content: string, tri
 
 const site = (name: string, color: string, sites: string[], description: string, knowledge: KnowledgeEntry[]): SiteProfile => {
   const now = Date.now();
-  return { id: uid('site_'), name, description, color, sites, enabled: true, providerId: null, model: '', skillIds: [], customToolIds: [], disabledToolIds: [], knowledge, createdAt: now, updatedAt: now };
+  return { id: uid('site_'), name, description, color, sites, enabled: true, providerId: null, model: '', agentIds: [], skillIds: [], disabledSkillIds: [], customToolIds: [], disabledToolIds: [], knowledge, createdAt: now, updatedAt: now };
 };
 
 export interface SiteTemplate {

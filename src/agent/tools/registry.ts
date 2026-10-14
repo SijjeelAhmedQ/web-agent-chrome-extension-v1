@@ -33,7 +33,8 @@ export function skillsFor(agent: AgentConfig, config: AppConfig, url: string): {
     .flatMap((site) => site.skillIds)
     .map((id) => config.skills.find((s) => s.id === id))
     .filter((s): s is SkillConfig => !!s);
-  const skills = [...new Map([...own, ...fromSites].map((s) => [s.id, s])).values()];
+  const off = new Set(sitesFor(config, url).flatMap((site) => site.disabledSkillIds ?? []));
+  const skills = [...new Map([...own, ...fromSites].map((s) => [s.id, s])).values()].filter((s) => !off.has(s.id));
   return { always: skills.filter((s) => s.activation === 'always'), onDemand: skills.filter((s) => s.activation === 'on-demand') };
 }
 
@@ -45,7 +46,8 @@ export function buildToolset(agent: AgentConfig, config: AppConfig, url: string)
   const overrides = config.settings.toolOverrides ?? {};
   const tools: AgentTool<any>[] = BROWSER_TOOLS.filter((t) => assigned.has(t.name) && !disabled.has(t.name)).map((t) => applyOverride(t, overrides[t.name]));
   for (const ct of config.customTools) {
-    if (assigned.has(`${CUSTOM_PREFIX}${ct.id}`)) tools.push(customTool(ct));
+    const key = `${CUSTOM_PREFIX}${ct.id}`;
+    if (assigned.has(key) && !disabled.has(key)) tools.push(customTool(ct));
   }
   const { always, onDemand } = skillsFor(agent, config, url);
   if (onDemand.length) tools.push(skillTool(onDemand));

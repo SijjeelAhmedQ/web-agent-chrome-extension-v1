@@ -58,6 +58,26 @@ describe('site-based setup', () => {
     expect(elsewhere.alwaysSkills.map((s) => s.id)).not.toContain('indici_forms');
   });
 
+  it('switches an agent’s own skill or custom tool off on the site only', () => {
+    const config = withIndici();
+    config.skills.push(skill('agent_skill'));
+    config.customTools.push(tool('agent_tool'));
+    const agent = config.agents[0];
+    agent.skillIds.push('agent_skill');
+    agent.toolIds.push('custom:agent_tool');
+    Object.assign(config.sites[0], { agentIds: [agent.id], disabledSkillIds: ['agent_skill'], disabledToolIds: ['custom:agent_tool', 'read_page'] });
+    const here = buildToolset(agent, config, INDICI);
+    expect(here.alwaysSkills.map((s) => s.id)).not.toContain('agent_skill');
+    expect(here.tools.map((t) => t.name)).not.toContain('agent_tool');
+    expect(here.tools.map((t) => t.name)).not.toContain('read_page');
+    const elsewhere = buildToolset(agent, config, 'https://example.com/');
+    expect(elsewhere.alwaysSkills.map((s) => s.id)).toContain('agent_skill');
+    expect(elsewhere.tools.map((t) => t.name)).toContain('agent_tool');
+    // Deleting the agent takes it off the site.
+    const state = configSlice.reducer({ config, hydrated: true, revision: 0 }, configActions.deleteAgent(agent.id));
+    expect(state.config.sites[0].agentIds).toEqual([]);
+  });
+
   it('runs every agent on the site’s own model when it has one', () => {
     const config = withIndici();
     const agent = config.agents[0];

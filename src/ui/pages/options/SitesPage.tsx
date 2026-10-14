@@ -1,16 +1,17 @@
-import { App, Button, Dropdown, Input, Modal, Segmented, Select, Switch, Tabs } from 'antd';
+import { App, Button, Checkbox, Dropdown, Input, Modal, Segmented, Select, Switch, Tabs } from 'antd';
 import { ArrowLeft, BookOpen, ChevronDown, Compass, FileText, Globe, ListOrdered, Plus, ShieldCheck, Sparkles, Trash2, Webhook, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { KNOWLEDGE_KINDS, knowledgeSection } from '@/agent/planner/siteKnowledge';
-import { BUILT_IN_TOOLS } from '@/shared/constants/tools';
+import { BUILT_IN_TOOLS, CUSTOM_PREFIX } from '@/shared/constants/tools';
 import { SITE_TEMPLATES, type SiteTemplate } from '@/shared/constants/templates';
-import type { CustomToolConfig, KnowledgeEntry, KnowledgeKind, SiteProfile, SkillConfig } from '@/shared/types/config';
+import type { AgentConfig, CustomToolConfig, KnowledgeEntry, KnowledgeKind, SiteProfile, SkillConfig } from '@/shared/types/config';
 import { uid } from '@/shared/utils';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { configActions } from '@/store/configSlice';
+import { AgentAvatar } from '../../components/Brand';
 import { NamedIcon } from '../../components/icons';
-import { EmptyBlock, FieldLabel, PageHeader, Section } from './parts';
+import { AvatarStack, EmptyBlock, FieldLabel, PageHeader, Section } from './parts';
 import { SkillEditor } from './SkillsPage';
 import { CustomToolEditor } from './ToolsPage';
 
@@ -25,7 +26,7 @@ const COLORS = ['#0e7490', '#10b981', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6'
 
 const newSite = (name = '', sites: string[] = []): SiteProfile => {
   const now = Date.now();
-  return { id: uid('site_'), name, description: '', color: COLORS[Math.floor(Math.random() * COLORS.length)], sites, enabled: true, providerId: null, model: '', skillIds: [], customToolIds: [], disabledToolIds: [], knowledge: [], createdAt: now, updatedAt: now };
+  return { id: uid('site_'), name, description: '', color: COLORS[Math.floor(Math.random() * COLORS.length)], sites, enabled: true, providerId: null, model: '', agentIds: [], skillIds: [], disabledSkillIds: [], customToolIds: [], disabledToolIds: [], knowledge: [], createdAt: now, updatedAt: now };
 };
 
 const newEntry = (kind: KnowledgeKind): KnowledgeEntry => {
@@ -49,7 +50,7 @@ function SiteMark({ site, size = 34 }: { site: Pick<SiteProfile, 'color' | 'name
 // ---------- List of sites ----------
 
 export function SitesPage() {
-  const { sites } = useAppSelector((s) => s.config.config);
+  const { sites, agents } = useAppSelector((s) => s.config.config);
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const [creating, setCreating] = useState<{ template?: SiteTemplate } | null>(null);
@@ -100,6 +101,7 @@ export function SitesPage() {
                 <span className="list-desc mono">{site.sites.length ? site.sites.join(', ') : 'No address yet — add one to switch it on'}</span>
               </span>
               <span className="list-side" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                {site.agentIds.length > 0 && <AvatarStack agents={agents.filter((a) => site.agentIds.includes(a.id))} max={3} />}
                 <span className="pill">
                   <BookOpen size={11} /> {site.knowledge.length}
                 </span>
@@ -248,6 +250,7 @@ export function SiteDetailPage() {
         onChange={setTab}
         items={[
           { key: 'knowledge', label: `Knowledge base (${site.knowledge.length})`, children: <KnowledgeTab site={site} /> },
+          { key: 'agents', label: `Agents (${site.agentIds.length})`, children: <AgentsTab site={site} /> },
           { key: 'skills', label: `Skills (${site.skillIds.length})`, children: <SkillsTab site={site} /> },
           { key: 'tools', label: 'Tools', children: <ToolsTab site={site} /> },
           { key: 'model', label: 'Model', children: <ModelTab site={site} update={update} /> },
@@ -450,15 +453,174 @@ function KnowledgeEditor({
   );
 }
 
+// ---------- Agents ----------
+
+/** Turning a skill or tool on/off for this site only. */
+function useSiteSwitches(site: SiteProfile) {
+  const dispatch = useAppDispatch();
+  const update = (patch: Partial<SiteProfile>) => dispatch(configActions.upsertSite({ ...site, ...patch }));
+  const toggle = (list: string[], ids: string[], on: boolean) => (on ? list.filter((id) => !ids.includes(id)) : [...new Set([...list, ...ids])]);
+  return {
+    update,
+    skillOn: (id: string) => !site.disabledSkillIds.includes(id),
+    toolOn: (key: string) => !site.disabledToolIds.includes(key),
+    setSkills: (ids: string[], on: boolean) => update({ disabledSkillIds: toggle(site.disabledSkillIds, ids, on) }),
+    setTools: (keys: string[], on: boolean) => update({ disabledToolIds: toggle(site.disabledToolIds, keys, on) }),
+  };
+}
+
+const toolLabel = (key: string, customTools: CustomToolConfig[]) => {
+  if (key.startsWith(CUSTOM_PREFIX)) {
+    const t = customTools.find((c) => `${CUSTOM_PREFIX}${c.id}` === key);
+    return t ? t.label || t.name : null;
+  }
+  return BUILT_IN_TOOLS.find((t) => t.id === key)?.label ?? null;
+};
+
+function AgentsTab({ site }: { site: SiteProfile }) {
+  const { agents } = useAppSelector((s) => s.config.config);
+  const { update } = useSiteSwitches(site);
+  const select = (agent: AgentConfig, on: boolean) =>
+    on
+      ? // Its skills and tools come on here — any that were switched off on this site come back on.
+        update({
+          agentIds: [...site.agentIds, agent.id],
+          disabledSkillIds: site.disabledSkillIds.filter((id) => !agent.skillIds.includes(id)),
+          disabledToolIds: site.disabledToolIds.filter((id) => !agent.toolIds.includes(id)),
+        })
+      : update({ agentIds: site.agentIds.filter((id) => id !== agent.id) });
+
+  return (
+    <>
+      <p className="muted tab-lede">
+        Agents that work on {site.name}. The first one opens by itself in the side panel when you are on this site. Choosing an agent switches its skills and tools on here — turn any of them off just for this site.
+      </p>
+      <div className="tab-toolbar">
+        <Button size="small" onClick={() => update({ agentIds: agents.map((a) => a.id), disabledSkillIds: [], disabledToolIds: [] })}>
+          Select all
+        </Button>
+        <Button size="small" onClick={() => update({ agentIds: [] })} disabled={!site.agentIds.length}>
+          Clear
+        </Button>
+      </div>
+      <div className="list-card">
+        {agents.map((a) => {
+          const on = site.agentIds.includes(a.id);
+          const first = site.agentIds[0] === a.id;
+          return (
+            <div key={a.id} className={`site-agent ${on ? 'on' : ''}`}>
+              <div className="site-agent-head">
+                <Checkbox checked={on} onChange={(e) => select(a, e.target.checked)} aria-label={`${a.name} works on ${site.name}`} />
+                <AgentAvatar avatar={a.avatar} size={30} />
+                <span className="list-main">
+                  <span className="list-title">{a.name}</span>
+                  <span className="list-desc">{a.description || `${a.skillIds.length} skills · ${a.toolIds.length} tools`}</span>
+                </span>
+                {on &&
+                  (first ? (
+                    <span className="pill success">Opens here by default</span>
+                  ) : (
+                    <Button size="small" type="text" onClick={() => update({ agentIds: [a.id, ...site.agentIds.filter((x) => x !== a.id)] })}>
+                      Make default
+                    </Button>
+                  ))}
+              </div>
+              {on && <AgentOnSite site={site} agent={a} />}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+/** One agent's skills and tools on this site, each with an on/off switch. */
+function AgentOnSite({ site, agent }: { site: SiteProfile; agent: AgentConfig }) {
+  const { skills, customTools } = useAppSelector((s) => s.config.config);
+  const sw = useSiteSwitches(site);
+  const agentSkills = agent.skillIds.map((id) => skills.find((s) => s.id === id)).filter((s): s is SkillConfig => !!s);
+  const agentTools = agent.toolIds.map((key) => ({ key, label: toolLabel(key, customTools) })).filter((t): t is { key: string; label: string } => !!t.label);
+  const allKeys = agentTools.map((t) => t.key);
+  const allSkills = agentSkills.map((s) => s.id);
+
+  return (
+    <div className="site-agent-body">
+      <div className="site-agent-col">
+        <div className="site-agent-col-head">
+          <span>Skills on {site.name}</span>
+          {agentSkills.length > 0 && (
+            <span className="row-gap">
+              <button type="button" className="link-btn small" onClick={() => sw.setSkills(allSkills, true)}>
+                All on
+              </button>
+              <button type="button" className="link-btn small" onClick={() => sw.setSkills(allSkills, false)}>
+                All off
+              </button>
+            </span>
+          )}
+        </div>
+        {agentSkills.length === 0 && <div className="muted small">This agent has no skills.</div>}
+        {agentSkills.map((s) => (
+          <label key={s.id} className="switch-row">
+            <Switch size="small" checked={sw.skillOn(s.id)} onChange={(v) => sw.setSkills([s.id], v)} aria-label={`${s.name} on ${site.name}`} />
+            <span>{s.name}</span>
+          </label>
+        ))}
+      </div>
+      <div className="site-agent-col">
+        <div className="site-agent-col-head">
+          <span>Tools on {site.name}</span>
+          <span className="row-gap">
+            <button type="button" className="link-btn small" onClick={() => sw.setTools(allKeys, true)}>
+              All on
+            </button>
+            <button type="button" className="link-btn small" onClick={() => sw.setTools(allKeys, false)}>
+              All off
+            </button>
+          </span>
+        </div>
+        <div className="switch-grid">
+          {agentTools.map((t) => (
+            <label key={t.key} className="switch-row">
+              <Switch size="small" checked={sw.toolOn(t.key)} onChange={(v) => sw.setTools([t.key], v)} aria-label={`${t.label} on ${site.name}`} />
+              <span>{t.label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Without Read page the agent can't see anything on the site. */
+function ReadPageWarning({ site }: { site: SiteProfile }) {
+  const sw = useSiteSwitches(site);
+  if (sw.toolOn('read_page')) return null;
+  return (
+    <div className="inline-note warning row-gap align-center">
+      <span>“Read page” is off on {site.name}, so agents can’t see the page here — no fields, buttons or text.</span>
+      <Button size="small" onClick={() => sw.setTools(['read_page', 'find_element', 'scroll'], true)}>
+        Turn reading back on
+      </Button>
+    </div>
+  );
+}
+
 // ---------- Skills ----------
 
 function SkillsTab({ site }: { site: SiteProfile }) {
-  const { skills } = useAppSelector((s) => s.config.config);
+  const { skills, agents } = useAppSelector((s) => s.config.config);
   const dispatch = useAppDispatch();
   const { modal, message } = App.useApp();
+  const sw = useSiteSwitches(site);
   const [editing, setEditing] = useState<{ skill: SkillConfig; isNew: boolean } | null>(null);
   const own = site.skillIds.map((id) => skills.find((s) => s.id === id)).filter((s): s is SkillConfig => !!s);
   const others = skills.filter((s) => !site.skillIds.includes(s.id));
+  const siteAgents = site.agentIds.map((id) => agents.find((a) => a.id === id)).filter((a): a is AgentConfig => !!a);
+  const fromAgents = [...new Set(siteAgents.flatMap((a) => a.skillIds))]
+    .filter((id) => !site.skillIds.includes(id))
+    .map((id) => skills.find((s) => s.id === id))
+    .filter((s): s is SkillConfig => !!s);
   const blank = (): SkillConfig => {
     const now = Date.now();
     return { id: uid('skill_'), name: '', description: '', instructions: '', activation: 'on-demand', sites: [], createdAt: now, updatedAt: now };
@@ -466,45 +628,98 @@ function SkillsTab({ site }: { site: SiteProfile }) {
 
   return (
     <>
-      <p className="muted tab-lede">Instructions every agent gets while it is on {site.name}. “When relevant” skills are loaded only when a task needs them.</p>
-      <div className="tab-toolbar">
-        {others.length > 0 && (
-          <Select
-            placeholder="Add an existing skill…"
-            style={{ minWidth: 240 }}
-            value={null}
-            onChange={(id: string) => dispatch(configActions.upsertSite({ ...site, skillIds: [...site.skillIds, id] }))}
-            options={others.map((s) => ({ value: s.id, label: s.name }))}
-          />
-        )}
-        <span className="spacer" />
-        <Button type="primary" icon={<Plus size={15} />} onClick={() => setEditing({ skill: blank(), isNew: true })}>
-          New skill
-        </Button>
-      </div>
-      {own.length === 0 ? (
-        <EmptyBlock icon={<Sparkles size={22} />} title="No skills for this site" text="Most site know-how fits in the knowledge base. Use a skill for longer instructions, like how to fill a big form." />
-      ) : (
-        <div className="list-card">
-          {own.map((s) => (
-            <div key={s.id} className="list-row" role="button" tabIndex={0} onClick={() => setEditing({ skill: s, isNew: false })} onKeyDown={(e) => e.key === 'Enter' && setEditing({ skill: s, isNew: false })}>
-              <span className="list-icon">
-                <Sparkles size={16} />
-              </span>
-              <span className="list-main">
-                <span className="list-title">{s.name}</span>
-                <span className="list-desc">{s.description || 'No description'}</span>
-              </span>
-              <span className="list-side" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-                <span className={`pill ${s.activation === 'always' ? 'success' : ''}`}>{s.activation === 'always' ? 'Always on' : 'When relevant'}</span>
-                <button type="button" className="icon-btn" aria-label={`Remove ${s.name} from ${site.name}`} onClick={() => dispatch(configActions.upsertSite({ ...site, skillIds: site.skillIds.filter((id) => id !== s.id) }))}>
-                  <X size={15} />
-                </button>
-              </span>
-            </div>
-          ))}
+      <Section
+        title={`${site.name}’s own skills`}
+        description={`Instructions every agent gets while it is on ${site.name}.`}
+        actions={
+          own.length > 0 && (
+            <Button
+              size="small"
+              danger
+              onClick={() =>
+                modal.confirm({
+                  title: `Remove all ${own.length} skills from ${site.name}?`,
+                  content: 'They stay in Skills (Extension base); this site just stops using them.',
+                  okText: 'Remove all',
+                  okButtonProps: { danger: true },
+                  onOk: () => sw.update({ skillIds: [] }),
+                })
+              }
+            >
+              Remove all
+            </Button>
+          )
+        }
+      >
+        <div className="tab-toolbar padded">
+          {others.length > 0 && (
+            <Select
+              placeholder="Add an existing skill…"
+              style={{ minWidth: 240 }}
+              value={null}
+              onChange={(id: string) => sw.update({ skillIds: [...site.skillIds, id] })}
+              options={others.map((s) => ({ value: s.id, label: s.name }))}
+            />
+          )}
+          <span className="spacer" />
+          <Button type="primary" icon={<Plus size={15} />} onClick={() => setEditing({ skill: blank(), isNew: true })}>
+            New skill
+          </Button>
         </div>
-      )}
+        {own.map((s) => (
+          <div key={s.id} className="list-row" role="button" tabIndex={0} onClick={() => setEditing({ skill: s, isNew: false })} onKeyDown={(e) => e.key === 'Enter' && setEditing({ skill: s, isNew: false })}>
+            <span className="list-icon">
+              <Sparkles size={16} />
+            </span>
+            <span className="list-main">
+              <span className="list-title">{s.name}</span>
+              <span className="list-desc">{s.description || 'No description'}</span>
+            </span>
+            <span className="list-side" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+              <span className={`pill ${s.activation === 'always' ? 'success' : ''}`}>{s.activation === 'always' ? 'Always on' : 'When relevant'}</span>
+              <button type="button" className="icon-btn" aria-label={`Remove ${s.name} from ${site.name}`} onClick={() => sw.update({ skillIds: site.skillIds.filter((id) => id !== s.id) })}>
+                <X size={15} />
+              </button>
+            </span>
+          </div>
+        ))}
+        {own.length === 0 && <div className="muted small padded-note">None yet. Most site know-how fits in the knowledge base; use a skill for longer instructions.</div>}
+      </Section>
+
+      <Section
+        title="From the agents on this site"
+        description={siteAgents.length ? `Skills of ${siteAgents.map((a) => a.name).join(', ')}. Switch one off to keep it out on ${site.name}.` : 'Choose agents in the Agents tab — their skills show up here.'}
+        actions={
+          fromAgents.length > 0 && (
+            <span className="row-gap">
+              <Button size="small" onClick={() => sw.setSkills(fromAgents.map((s) => s.id), true)}>
+                All on
+              </Button>
+              <Button size="small" onClick={() => sw.setSkills(fromAgents.map((s) => s.id), false)}>
+                All off
+              </Button>
+            </span>
+          )
+        }
+      >
+        {fromAgents.map((s) => (
+          <div key={s.id} className={`tool-row ${sw.skillOn(s.id) ? '' : 'is-off'}`}>
+            <span className="list-icon">
+              <Sparkles size={16} />
+            </span>
+            <span className="list-main">
+              <span className="list-title">{s.name}</span>
+              <span className="list-desc">{s.description || 'No description'}</span>
+            </span>
+            <span className="list-side">
+              <AvatarStack agents={siteAgents.filter((a) => a.skillIds.includes(s.id))} max={3} />
+              <Switch size="small" checked={sw.skillOn(s.id)} onChange={(v) => sw.setSkills([s.id], v)} aria-label={`${s.name} on ${site.name}`} />
+            </span>
+          </div>
+        ))}
+        {fromAgents.length === 0 && <div className="muted small padded-note">{siteAgents.length ? 'These agents have no other skills.' : 'No agents chosen for this site yet.'}</div>}
+      </Section>
+
       <SkillEditor
         value={editing}
         siteName={site.name}
@@ -534,29 +749,90 @@ function SkillsTab({ site }: { site: SiteProfile }) {
 // ---------- Tools ----------
 
 function ToolsTab({ site }: { site: SiteProfile }) {
-  const { customTools } = useAppSelector((s) => s.config.config);
+  const { customTools, agents } = useAppSelector((s) => s.config.config);
   const dispatch = useAppDispatch();
   const { modal, message } = App.useApp();
+  const sw = useSiteSwitches(site);
   const [editing, setEditing] = useState<{ tool: CustomToolConfig; isNew: boolean } | null>(null);
   const own = site.customToolIds.map((id) => customTools.find((t) => t.id === id)).filter((t): t is CustomToolConfig => !!t);
   const others = customTools.filter((t) => !site.customToolIds.includes(t.id));
+  const siteAgents = site.agentIds.map((id) => agents.find((a) => a.id === id)).filter((a): a is AgentConfig => !!a);
+  const agentCustom = [...new Set(siteAgents.flatMap((a) => a.toolIds.filter((k) => k.startsWith(CUSTOM_PREFIX))))]
+    .map((key) => ({ key, tool: customTools.find((t) => `${CUSTOM_PREFIX}${t.id}` === key) }))
+    .filter((x): x is { key: string; tool: CustomToolConfig } => !!x.tool && !site.customToolIds.includes(x.tool.id));
+  const builtInIds = BUILT_IN_TOOLS.map((t) => t.id);
   const blank = (): CustomToolConfig => {
     const now = Date.now();
     return { id: uid('tool_'), name: '', label: '', description: '', method: 'POST', url: '', headers: '', params: [], needsApproval: true, createdAt: now, updatedAt: now };
   };
-  const toggleBuiltIn = (id: string, on: boolean) =>
-    dispatch(configActions.upsertSite({ ...site, disabledToolIds: on ? site.disabledToolIds.filter((t) => t !== id) : [...site.disabledToolIds, id] }));
 
   return (
     <>
-      <Section title="Custom tools for this site" description={`Your own endpoints, available to every agent on ${site.name}.`}>
+      <ReadPageWarning site={site} />
+      <Section
+        title="Built-in tools on this site"
+        description="Switch a tool off to keep agents from using it here — e.g. no navigating away, no typing."
+        actions={
+          <span className="row-gap">
+            <Button size="small" onClick={() => sw.setTools(builtInIds, true)}>
+              All on
+            </Button>
+            <Button size="small" onClick={() => sw.setTools(builtInIds, false)}>
+              All off
+            </Button>
+          </span>
+        }
+      >
+        {BUILT_IN_TOOLS.map((t) => {
+          const on = sw.toolOn(t.id);
+          return (
+            <div key={t.id} className={`tool-row ${on ? '' : 'is-off'}`}>
+              <span className="list-icon">
+                <NamedIcon name={t.icon} size={16} />
+              </span>
+              <span className="list-main">
+                <span className="list-title">{t.label}</span>
+                <span className="list-desc">{t.description}</span>
+              </span>
+              <span className="list-side">
+                {siteAgents.length > 0 && <AvatarStack agents={siteAgents.filter((a) => a.toolIds.includes(t.id))} max={3} />}
+                <Switch size="small" checked={on} onChange={(v) => sw.setTools([t.id], v)} aria-label={`${t.label} on ${site.name}`} />
+              </span>
+            </div>
+          );
+        })}
+      </Section>
+
+      <Section
+        title="Custom tools for this site"
+        description={`Your own endpoints, available to every agent on ${site.name}.`}
+        actions={
+          own.length > 0 && (
+            <Button
+              size="small"
+              danger
+              onClick={() =>
+                modal.confirm({
+                  title: `Remove all ${own.length} custom tools from ${site.name}?`,
+                  content: 'They stay in Tools (Extension base); this site just stops using them.',
+                  okText: 'Remove all',
+                  okButtonProps: { danger: true },
+                  onOk: () => sw.update({ customToolIds: [] }),
+                })
+              }
+            >
+              Remove all
+            </Button>
+          )
+        }
+      >
         <div className="tab-toolbar padded">
           {others.length > 0 && (
             <Select
               placeholder="Add an existing tool…"
               style={{ minWidth: 220 }}
               value={null}
-              onChange={(id: string) => dispatch(configActions.upsertSite({ ...site, customToolIds: [...site.customToolIds, id] }))}
+              onChange={(id: string) => sw.update({ customToolIds: [...site.customToolIds, id] })}
               options={others.map((t) => ({ value: t.id, label: t.label || t.name }))}
             />
           )}
@@ -577,7 +853,7 @@ function ToolsTab({ site }: { site: SiteProfile }) {
               </span>
             </span>
             <span className="list-side" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-              <button type="button" className="icon-btn" aria-label={`Remove ${t.label || t.name} from ${site.name}`} onClick={() => dispatch(configActions.upsertSite({ ...site, customToolIds: site.customToolIds.filter((id) => id !== t.id) }))}>
+              <button type="button" className="icon-btn" aria-label={`Remove ${t.label || t.name} from ${site.name}`} onClick={() => sw.update({ customToolIds: site.customToolIds.filter((id) => id !== t.id) })}>
                 <X size={15} />
               </button>
             </span>
@@ -585,25 +861,37 @@ function ToolsTab({ site }: { site: SiteProfile }) {
         ))}
       </Section>
 
-      <Section title="Built-in tools on this site" description="Switch a tool off to keep agents from using it here — e.g. no navigating away, no typing.">
-        {BUILT_IN_TOOLS.map((t) => {
-          const on = !site.disabledToolIds.includes(t.id);
-          return (
-            <div key={t.id} className={`tool-row ${on ? '' : 'is-off'}`}>
+      {agentCustom.length > 0 && (
+        <Section
+          title="Custom tools of the agents on this site"
+          actions={
+            <span className="row-gap">
+              <Button size="small" onClick={() => sw.setTools(agentCustom.map((x) => x.key), true)}>
+                All on
+              </Button>
+              <Button size="small" onClick={() => sw.setTools(agentCustom.map((x) => x.key), false)}>
+                All off
+              </Button>
+            </span>
+          }
+        >
+          {agentCustom.map(({ key, tool }) => (
+            <div key={key} className={`tool-row ${sw.toolOn(key) ? '' : 'is-off'}`}>
               <span className="list-icon">
-                <NamedIcon name={t.icon} size={16} />
+                <Webhook size={16} />
               </span>
               <span className="list-main">
-                <span className="list-title">{t.label}</span>
-                <span className="list-desc">{t.description}</span>
+                <span className="list-title">{tool.label || tool.name}</span>
+                <span className="list-desc">{tool.description}</span>
               </span>
               <span className="list-side">
-                <Switch size="small" checked={on} onChange={(v) => toggleBuiltIn(t.id, v)} aria-label={`${t.label} on ${site.name}`} />
+                <AvatarStack agents={siteAgents.filter((a) => a.toolIds.includes(key))} max={3} />
+                <Switch size="small" checked={sw.toolOn(key)} onChange={(v) => sw.setTools([key], v)} aria-label={`${tool.label || tool.name} on ${site.name}`} />
               </span>
             </div>
-          );
-        })}
-      </Section>
+          ))}
+        </Section>
+      )}
 
       <CustomToolEditor
         value={editing}
