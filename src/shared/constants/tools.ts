@@ -34,6 +34,7 @@ export const BUILT_IN_TOOLS: ToolMeta[] = [
   { id: 'type', label: 'Type', description: 'Types into text fields, search boxes and editors.', category: 'interact', risk: 'action', icon: 'Keyboard' },
   { id: 'clear', label: 'Clear field', description: 'Empties a text field.', category: 'interact', risk: 'action', icon: 'Eraser' },
   { id: 'select_option', label: 'Choose option', description: 'Picks an option from a dropdown list.', category: 'interact', risk: 'action', icon: 'ListChecks' },
+  { id: 'click_text', label: 'Click text', description: 'Clicks visible text that isn’t a button or link — like a name in a table.', category: 'interact', risk: 'sensitive', icon: 'TextSelect' },
   { id: 'hover', label: 'Hover', description: 'Moves the mouse over something without clicking — opens hover menus, tooltips and previews.', category: 'interact', risk: 'read', icon: 'MousePointer2' },
   { id: 'open_menu', label: 'Open menu', description: 'Opens nested menus level by level, like Products › Laptops › Gaming.', category: 'interact', risk: 'read', icon: 'ListTree' },
   { id: 'press_key', label: 'Press key', description: 'Presses keys like Enter, Escape, Tab or the arrow keys.', category: 'interact', risk: 'sensitive', icon: 'CornerDownLeft' },
@@ -49,7 +50,7 @@ export const BUILT_IN_TOOLS: ToolMeta[] = [
 export const BUILT_IN_TOOL_IDS = BUILT_IN_TOOLS.map((t) => t.id);
 
 /** The tools that existed before hover/open_menu — used to add new tools to saved agents. */
-export const LEGACY_TOOL_IDS = BUILT_IN_TOOL_IDS.filter((id) => id !== 'hover' && id !== 'open_menu');
+export const LEGACY_TOOL_IDS = BUILT_IN_TOOL_IDS.filter((id) => id !== 'hover' && id !== 'open_menu' && id !== 'click_text');
 export const READ_ONLY_TOOL_IDS = BUILT_IN_TOOLS.filter((t) => t.risk === 'read').map((t) => t.id);
 
 export const toolMeta = (id: string): ToolMeta | undefined => BUILT_IN_TOOLS.find((t) => t.id === id);

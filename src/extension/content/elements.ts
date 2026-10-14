@@ -62,7 +62,7 @@ export function isExplicitlyInteractive(el: Element): boolean {
 export function isVisible(el: Element): boolean {
   if (el.id === OVERLAY_HOST_ID) return false;
   const rect = el.getBoundingClientRect();
-  if (rect.width < 1 || rect.height < 1) {
+  if (rect.width < 1 || rect.height < 1 || (el instanceof HTMLInputElement && el.type !== 'checkbox' && el.type !== 'radio' && (rect.width < 4 || rect.height < 4))) {
     // Visually-hidden native inputs (custom checkboxes) are still operable through their label.
     return false;
   }

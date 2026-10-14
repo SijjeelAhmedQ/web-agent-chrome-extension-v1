@@ -13,6 +13,7 @@ export type ContentRequest =
   | { kind: 'ping' }
   | { kind: 'snapshot'; mode: ReadMode; maxElements: number; maxTextChars: number }
   | { kind: 'find'; query: string; limit: number }
+  | { kind: 'findText'; text: string; near?: string; limit: number }
   | { kind: 'describe'; id: number }
   | { kind: 'click'; id: number; highlight: boolean }
   | { kind: 'type'; id: number; text: string; clear: boolean; highlight: boolean }
@@ -101,10 +102,17 @@ export interface FindResult {
   textMatches: string[];
 }
 
+export interface TextResult {
+  /** Elements showing the text, best first. */
+  matches: ElementInfo[];
+  total: number;
+}
+
 export interface ResponseMap {
   ping: { version: number; url: string };
   snapshot: PageSnapshot;
   find: FindResult;
+  findText: TextResult;
   describe: ElementRisk;
   click: ClickResult;
   hover: HoverResult;

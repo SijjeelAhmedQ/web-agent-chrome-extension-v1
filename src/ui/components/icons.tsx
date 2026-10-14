@@ -32,6 +32,7 @@ import {
   SquareX,
   Stethoscope,
   TextSearch,
+  TextSelect,
   Wand,
   Webhook,
   type LucideIcon,
@@ -42,7 +43,7 @@ import {
 const ICONS: Record<string, LucideIcon> = {
   ArrowDownUp, ArrowLeft, ArrowLeftRight, ArrowRight, BookOpen, Bot, Briefcase, ClipboardList, ClipboardPen, Compass,
   CornerDownLeft, Eraser, FileText, Globe, Hourglass, Keyboard, Layers, ListChecks, ListTree, Mail, MousePointer2, MousePointerClick, PenLine,
-  Plug, ScanText, Search, Shield, ShoppingBag, Sparkles, SquarePlus, SquareX, Stethoscope, TextSearch, Wand, Webhook,
+  Plug, ScanText, Search, Shield, ShoppingBag, Sparkles, SquarePlus, SquareX, Stethoscope, TextSearch, TextSelect, Wand, Webhook,
 };
 
 export function NamedIcon({ name, ...props }: { name: string } & LucideProps) {

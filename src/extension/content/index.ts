@@ -2,7 +2,7 @@ import { CHANNEL, CONTENT_VERSION, type ContentRequest, type ContentResponse, ty
 import { ActionError, clear, click, pressKey, resolve, scroll, select, settle, type, waitForText } from './actions';
 import { hover, openMenu } from './hover';
 import { setPresence } from './overlay';
-import { describeRisk, find, snapshot } from './snapshot';
+import { describeRisk, find, findText, snapshot } from './snapshot';
 
 /**
  * Content script entry. Injected on demand (never on every page by default) by the agent
@@ -23,6 +23,8 @@ async function handle(request: ContentRequest): Promise<unknown> {
       return snapshot(request.mode, request.maxElements, request.maxTextChars);
     case 'find':
       return find(request.query, request.limit);
+    case 'findText':
+      return findText(request.text, request.near, request.limit);
     case 'describe':
       return describeRisk(resolve(request.id));
     case 'click':

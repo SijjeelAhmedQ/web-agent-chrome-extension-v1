@@ -1,11 +1,13 @@
 import type { ElementInfo, ElementRisk, PageSnapshot, ReadMode } from '@/shared/types/page';
-import type { FindResult } from '../messaging/protocol';
+import type { FindResult, TextResult } from '../messaging/protocol';
 import {
   accessibleName,
   collectInteractive,
   contextOf,
   idFor,
   inViewport,
+  isVisible,
+  OVERLAY_HOST_ID,
   hasHiddenMenu,
   isDisabled,
   roleOf,
@@ -149,12 +151,16 @@ export function find(query: string, limit: number): FindResult {
   const scored = elements
     .map((el) => {
       const info = describeElement(el);
-      const hay = norm([info.name, info.role, info.placeholder, info.type, info.context, info.value, el.getAttribute('name'), el.id].filter(Boolean).join(' '));
+      const hay = norm([info.name, info.role, info.placeholder, info.type, info.value, el.getAttribute('name'), el.id].filter(Boolean).join(' '));
+      const context = norm(info.context ?? '');
       const name = norm(info.name);
       let score = 0;
       if (name === q) score += 10;
       else if (name.includes(q)) score += 6;
-      for (const w of words) if (hay.includes(w)) score += 2;
+      for (const w of words) {
+        if (hay.includes(w)) score += 2;
+        else if (context.includes(w)) score += 0.25;
+      }
       // Synonyms that come up constantly.
       if (/\bsearch\b/.test(q) && (info.role === 'searchbox' || info.type === 'search' || /search/.test(hay))) score += 4;
       if (info.inViewport) score += 0.5;
@@ -266,4 +272,71 @@ export function describeRisk(el: Element): ElementRisk {
     formSubmitLabels: submitLabels,
     formValues: filledValues(form ?? el.closest('dialog,[role=dialog],[aria-modal=true]')),
   };
+}
+
+const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'HEAD', 'svg']);
+const CLICK_TARGET = 'a,button,[role=button],[role=link],[role=option],[role=menuitem],[role=tab],[onclick],label';
+/** Whole words: “Arya STARK” matches “Arya STARK” but not “Arya STARKK”. */
+const hasWords = (hay: string, q: string) => ` ${norm(hay)} `.includes(` ${q} `);
+
+/**
+ * Visible elements showing this text — for things a page doesn't mark up as controls,
+ * like a patient's name in a table cell whose click is handled by script. Exact matches
+ * first, then what is actually on top (not covered), in page order. `near` keeps only
+ * matches whose row or item also shows that text (a date of birth, a chart number).
+ */
+export function findText(text: string, near: string | undefined, limit: number): TextResult {
+  const q = norm(text);
+  const nearQ = near ? norm(near) : '';
+  if (!q) return { matches: [], total: 0 };
+  const hits: Element[] = [];
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+  const skip = () => {
+    let next = walker.nextSibling();
+    while (!next && walker.parentNode()) next = walker.nextSibling();
+    return next as Element | null;
+  };
+  let node = walker.firstChild() as Element | null;
+  for (let visited = 0; node && visited < 40000; visited++) {
+    // textContent runs table cells together (“STARK03-12-2015”), so this pass is loose;
+    // whole words are checked on the rendered text below.
+    if (node.id === OVERLAY_HOST_ID || SKIP_TAGS.has(node.tagName) || !norm(node.textContent ?? '').includes(q)) {
+      node = skip();
+      continue;
+    }
+    // The deepest element holding the whole text.
+    if (!Array.from(node.children).some((c) => norm(c.textContent ?? '').includes(q))) hits.push(node);
+    node = walker.nextNode() as Element | null;
+  }
+
+  const seen = new Set<Element>();
+  const found = hits
+    .filter((el) => isVisible(el) && hasWords((el as HTMLElement).innerText ?? '', q))
+    .map((el) => {
+      const target = el.closest(CLICK_TARGET);
+      return target && target.contains(el) && isVisible(target) ? target : el;
+    })
+    .filter((el) => !seen.has(el) && seen.add(el))
+    .filter((el) => {
+      if (!nearQ) return true;
+      let scope: Element | null = el.closest('tr,[role=row],li,[role=option],[role=listitem]');
+      if (!scope) {
+        scope = el;
+        for (let i = 0; i < 4 && scope.parentElement; i++) scope = scope.parentElement;
+      }
+      return hasWords((scope as HTMLElement).innerText ?? '', nearQ);
+    })
+    .map((el, order) => {
+      const exact = norm((el as HTMLElement).innerText ?? '') === q;
+      const r = el.getBoundingClientRect();
+      const top = inViewport(el) ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
+      const covered = !!top && top !== el && !el.contains(top) && !top.contains(el);
+      return { el, exact, covered, order };
+    });
+  const best = found.some((f) => f.exact) ? found.filter((f) => f.exact) : found;
+  best.sort((a, b) => Number(a.covered) - Number(b.covered) || a.order - b.order);
+  // Something on top (a search dropdown) hides what is behind it: prefer what can be clicked.
+  const onTop = best.filter((f) => !f.covered);
+  const chosen = onTop.length ? onTop : best;
+  return { matches: chosen.slice(0, limit).map((f) => describeElement(f.el)), total: chosen.length };
 }

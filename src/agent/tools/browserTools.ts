@@ -4,6 +4,7 @@ import { toolMeta } from '@/shared/constants/tools';
 import { clip, siteOf, sleep } from '@/shared/utils';
 import { classifyClick, classifySubmit, classifyTyping } from '../execution/riskPolicy';
 import { formatElement, formatSnapshot } from './format';
+import type { TextResult } from '@/extension/messaging/protocol';
 import type { AgentTool, ApprovalRequest, ToolContext, ToolOutcome } from './types';
 
 /**
@@ -121,10 +122,44 @@ const findElement: AgentTool<{ query: string }> = {
       return { output: `Nothing matching "${a.query}" found. Try other words, scroll, or read_page.`, note: 'Not found' };
     }
     const lines = res.matches.map(formatElement);
-    if (res.textMatches.length) lines.push('', 'Matching text on the page:', ...res.textMatches.map((t) => `- ${t}`));
+    if (res.textMatches.length) {
+      lines.push('', 'Matching text on the page:', ...res.textMatches.map((t) => `- ${t}`));
+      if (!res.matches.some((m) => sameName(a.query, m.name))) lines.push(`No control is named “${a.query}” — if that text is what you want to click, use click_text.`);
+    }
     return { output: lines.join('\n'), note: res.matches[0] ? `Found ${quote(res.matches[0].name || res.matches[0].role)}` : 'Found matching text' };
   },
 };
+
+/** Clicks a known element id and reports what happened. Shared by click and click_text. */
+async function clickById(ctx: ToolContext, elementId: number): Promise<ToolOutcome> {
+  const before = await pageUrl(ctx);
+  let res;
+  try {
+    res = await ctx.browser.send({ kind: 'click', id: elementId, highlight: ctx.settings.highlightActions });
+  } catch (err) {
+    if (err instanceof PageError && err.code === 'navigating') {
+      const after = await ctx.browser.settleAfterAction(before, ctx.signal);
+      return { output: `Clicked.${changeReport({ ...after, navigated: true })}`, note: 'Opened a new page' };
+    }
+    throw err;
+  }
+  const label = res.element.name ? quote(res.element.name) : 'the element';
+  if (res.menu?.length) {
+    ctx.elements.remember(res.menu);
+    return {
+      output: `${label} opens a menu on hover, so I opened the menu instead of clicking. Items now showing:\n${res.menu.map(formatElement).join('\n')}\nClick the item you want. (Click ${label} again only if you want its own page.)`,
+      note: `Opened its menu · ${res.menu.length} items`,
+    };
+  }
+  if (res.opensNewTab) {
+    const tab = await ctx.browser.openTab(res.opensNewTab, ctx.signal);
+    return { output: `${label} opens in a new tab, so I opened it: “${tab.title}” (${clip(tab.url ?? '', 120)}). You are now working in that tab. Call read_page.`, note: 'Opened in a new tab' };
+  }
+  const after = await ctx.browser.settleAfterAction(before, ctx.signal);
+  const covered = res.covered ? ' Note: something was covering it (a pop-up or banner?) — check the result.' : '';
+  if (res.invalidFields) return { output: `Clicked ${label}.${invalidReport(res.invalidFields)}`, note: 'Form has missing or invalid fields' };
+  return { output: `Clicked ${label}.${changeReport(after)}${covered}`, note: after.navigated ? 'Opened a new page' : undefined };
+}
 
 const click: AgentTool<{ id: number; name: string }> = {
   name: 'click',
@@ -141,33 +176,59 @@ const click: AgentTool<{ id: number; name: string }> = {
   async execute(a, ctx) {
     const mismatch = wrongTarget(ctx, a.id, a.name);
     if (mismatch) return { output: mismatch, note: 'Wrong element — not clicked' };
-    const before = await pageUrl(ctx);
-    let res;
-    try {
-      res = await ctx.browser.send({ kind: 'click', id: a.id, highlight: ctx.settings.highlightActions });
-    } catch (err) {
-      if (err instanceof PageError && err.code === 'navigating') {
-        const after = await ctx.browser.settleAfterAction(before, ctx.signal);
-        return { output: `Clicked.${changeReport({ ...after, navigated: true })}`, note: 'Opened a new page' };
-      }
-      throw err;
-    }
-    const label = res.element.name ? quote(res.element.name) : 'the element';
-    if (res.menu?.length) {
-      ctx.elements.remember(res.menu);
+    return clickById(ctx, a.id);
+  },
+};
+
+interface ClickTextArgs {
+  text: string;
+  near: string;
+}
+
+/** The page is searched once per call (approval check and click share it). */
+const textTargets = new WeakMap<ClickTextArgs, TextResult>();
+
+async function textTarget(a: ClickTextArgs, ctx: ToolContext): Promise<TextResult> {
+  let res = textTargets.get(a);
+  if (!res) {
+    res = await ctx.browser.send({ kind: 'findText', text: a.text, near: a.near || undefined, limit: 6 });
+    ctx.elements.remember(res.matches);
+    textTargets.set(a, res);
+  }
+  return res;
+}
+
+const clickText: AgentTool<ClickTextArgs> = {
+  name: 'click_text',
+  description:
+    'Click visible text that is not listed as a button or link — e.g. a name in a table or a result in a search dropdown. Matches whole words, exact text first. If the text appears more than once, pass near: other text from the same row (a date of birth, an ID).',
+  schema: z.object({
+    text: z.coerce.string().min(1).describe('The visible text to click, e.g. "Arya STARK"'),
+    near: z.coerce.string().optional().default('').describe('Optional: other text in the same row or item, to pick the right one (e.g. "03-12-2015")'),
+  }),
+  risk: 'sensitive',
+  touchesPage: true,
+  label: (a) => `Clicking ${quote(a.text)}${a.near ? ` (with ${quote(a.near)})` : ''}`,
+  async assess(a, ctx) {
+    const res = await textTarget(a, ctx);
+    return res.total === 1 ? approvalFor(ctx, res.matches[0].id, 'click', `Click ${quote(a.text)}?`) : null;
+  },
+  async execute(a, ctx) {
+    const res = await textTarget(a, ctx);
+    textTargets.delete(a);
+    if (!res.total) {
       return {
-        output: `${label} opens a menu on hover, so I opened the menu instead of clicking. Items now showing:\n${res.menu.map(formatElement).join('\n')}\nClick the item you want. (Click ${label} again only if you want its own page.)`,
-        note: `Opened its menu · ${res.menu.length} items`,
+        output: `No visible text “${a.text}”${a.near ? ` near “${a.near}”` : ''} on the page. Check the spelling, scroll, search, or go to the next page of results.`,
+        note: 'Text not found',
       };
     }
-    if (res.opensNewTab) {
-      const tab = await ctx.browser.openTab(res.opensNewTab, ctx.signal);
-      return { output: `${label} opens in a new tab, so I opened it: “${tab.title}” (${clip(tab.url ?? '', 120)}). You are now working in that tab. Call read_page.`, note: 'Opened in a new tab' };
+    if (res.total > 1) {
+      return {
+        output: `“${a.text}” appears ${res.total} times:\n${res.matches.map(formatElement).join('\n')}\nCall click_text again with near (other text from the right row), or click one of these ids with its name.`,
+        note: `${res.total} matches — not clicked`,
+      };
     }
-    const after = await ctx.browser.settleAfterAction(before, ctx.signal);
-    const covered = res.covered ? ' Note: something was covering it (a pop-up or banner?) — check the result.' : '';
-    if (res.invalidFields) return { output: `Clicked ${label}.${invalidReport(res.invalidFields)}`, note: 'Form has missing or invalid fields' };
-    return { output: `Clicked ${label}.${changeReport(after)}${covered}`, note: after.navigated ? 'Opened a new page' : undefined };
+    return clickById(ctx, res.matches[0].id);
   },
 };
 
@@ -462,7 +523,7 @@ const closeTab: AgentTool<{ tab_id?: number }> = {
 };
 
 export const BROWSER_TOOLS: AgentTool<any>[] = [
-  readPage, findElement, scroll, wait, click, hover, openMenu, type, clear, selectOption, pressKey, navigate, goBack, goForward, listTabs, openTab, switchTab, closeTab,
+  readPage, findElement, scroll, wait, click, clickText, hover, openMenu, type, clear, selectOption, pressKey, navigate, goBack, goForward, listTabs, openTab, switchTab, closeTab,
 ];
 
 // Keep the UI catalogue and the implementations in lock-step.
