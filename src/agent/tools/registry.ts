@@ -1,10 +1,11 @@
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { CUSTOM_PREFIX } from '@/shared/constants/tools';
-import type { AgentConfig, AppConfig, SkillConfig, ToolOverride } from '@/shared/types/config';
+import type { AgentConfig, AppConfig, SiteProfile, SkillConfig, ToolOverride } from '@/shared/types/config';
 import { matchesSite } from '@/shared/utils';
 import type { ToolSpec } from '../llm/types';
 import { BROWSER_TOOLS } from './browserTools';
 import { customTool } from './customTools';
+import { knowledgeTool } from './knowledgeTool';
 import { skillTool } from './skillTool';
 import type { AgentTool } from './types';
 
@@ -12,21 +13,35 @@ export interface Toolset {
   tools: AgentTool<any>[];
   alwaysSkills: SkillConfig[];
   onDemandSkills: SkillConfig[];
+  /** The site profiles for this page — their knowledge goes into the prompt. */
+  sites: SiteProfile[];
 }
 
-/** The skills of an agent that apply on the given page. */
+/** Site profiles that apply on this address (enabled, with a matching host pattern). */
+export function sitesFor(config: AppConfig, url: string): SiteProfile[] {
+  if (!url) return [];
+  return (config.sites ?? []).filter((s) => s.enabled && s.sites.length > 0 && matchesSite(url, s.sites));
+}
+
+/** The skills that apply on the given page: the agent's own, plus those of the site profiles here. */
 export function skillsFor(agent: AgentConfig, config: AppConfig, url: string): { always: SkillConfig[]; onDemand: SkillConfig[] } {
-  const skills = agent.skillIds
+  const own = agent.skillIds
     .map((id) => config.skills.find((s) => s.id === id))
     .filter((s): s is SkillConfig => !!s)
     .filter((s) => !s.sites.length || matchesSite(url, s.sites));
+  const fromSites = sitesFor(config, url)
+    .flatMap((site) => site.skillIds)
+    .map((id) => config.skills.find((s) => s.id === id))
+    .filter((s): s is SkillConfig => !!s);
+  const skills = [...new Map([...own, ...fromSites].map((s) => [s.id, s])).values()];
   return { always: skills.filter((s) => s.activation === 'always'), onDemand: skills.filter((s) => s.activation === 'on-demand') };
 }
 
 /** Everything an agent may call: its assigned built-in tools (minus globally disabled ones), its custom tools and, if needed, load_skill. */
 export function buildToolset(agent: AgentConfig, config: AppConfig, url: string): Toolset {
-  const disabled = new Set(config.settings.disabledToolIds);
-  const assigned = new Set(agent.toolIds);
+  const sites = sitesFor(config, url);
+  const disabled = new Set([...config.settings.disabledToolIds, ...sites.flatMap((s) => s.disabledToolIds)]);
+  const assigned = new Set([...agent.toolIds, ...sites.flatMap((s) => s.customToolIds.map((id) => `${CUSTOM_PREFIX}${id}`))]);
   const overrides = config.settings.toolOverrides ?? {};
   const tools: AgentTool<any>[] = BROWSER_TOOLS.filter((t) => assigned.has(t.name) && !disabled.has(t.name)).map((t) => applyOverride(t, overrides[t.name]));
   for (const ct of config.customTools) {
@@ -34,7 +49,8 @@ export function buildToolset(agent: AgentConfig, config: AppConfig, url: string)
   }
   const { always, onDemand } = skillsFor(agent, config, url);
   if (onDemand.length) tools.push(skillTool(onDemand));
-  return { tools, alwaysSkills: always, onDemandSkills: onDemand };
+  if (sites.some((s) => s.knowledge.some((k) => k.enabled))) tools.push(knowledgeTool(sites));
+  return { tools, alwaysSkills: always, onDemandSkills: onDemand, sites };
 }
 
 /** Exactly what the model receives for a tool: name, description and parameters. */

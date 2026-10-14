@@ -185,7 +185,7 @@ export class TeamRun {
   private async plan(members: AgentConfig[], tab: chrome.tabs.Tab | null): Promise<{ key: string; agent: AgentConfig; task: string }[]> {
     const { agent, config, request } = this.options;
     let step = this.step({ id: uid('step_'), label: `Splitting the request between ${members.length} agents`, status: 'running', tool: 'plan', startedAt: Date.now() });
-    const { provider, model } = resolveProvider(agent, config);
+    const { provider, model } = resolveProvider(agent, config, tab?.url ?? '');
     const names = members.map((m) => m.name);
     const now = new Date();
     const system = [

@@ -1,5 +1,5 @@
 import { Drawer, Segmented, Tooltip } from 'antd';
-import {
+import { Globe,
   Activity,
   Blocks,
   Bot,
@@ -28,13 +28,14 @@ import { ActivityPage } from './ActivityPage';
 import { AgentsPage } from './AgentsPage';
 import { ModelsPage } from './ModelsPage';
 import { AdvancedPage, AppearancePage, BehaviorPage, GeneralPage, PermissionsPage, PrivacyPage } from './PreferencePages';
+import { SiteDetailPage, SitesPage } from './SitesPage';
 import { SkillsPage } from './SkillsPage';
 import { ToolsPage } from './ToolsPage';
 import { VoicePage } from './VoicePage';
 
 const NAV = [
   {
-    group: 'Workspace',
+    group: 'Extension base',
     items: [
       { to: '/agents', label: 'Agents', icon: Bot },
       { to: '/skills', label: 'Skills', icon: Sparkles },
@@ -43,6 +44,7 @@ const NAV = [
       { to: '/voice', label: 'Voice', icon: Mic },
     ],
   },
+  { group: 'Site base', items: [{ to: '/sites', label: 'Sites', icon: Globe }] },
   {
     group: 'Preferences',
     items: [
@@ -174,6 +176,8 @@ function Shell() {
               <Route path="/tools" element={<ToolsPage />} />
               <Route path="/models" element={<ModelsPage />} />
               <Route path="/voice" element={<VoicePage />} />
+              <Route path="/sites" element={<SitesPage />} />
+              <Route path="/sites/:siteId" element={<SiteDetailPage />} />
               <Route path="/general" element={<GeneralPage />} />
               <Route path="/appearance" element={<AppearancePage />} />
               <Route path="/behavior" element={<BehaviorPage />} />

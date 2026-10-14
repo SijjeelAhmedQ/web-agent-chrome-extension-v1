@@ -12,7 +12,8 @@ import { BROWSER_TOOLS } from '../tools/browserTools';
 import { DEFAULT_CONTEXT_WINDOW } from '../llm/ollama';
 import type { ChatMessage, ToolCall } from '../llm/types';
 import { buildSystemPrompt } from '../planner/systemPrompt';
-import { buildToolset, toolSpecs } from '../tools/registry';
+import { knowledgeSection } from '../planner/siteKnowledge';
+import { buildToolset, sitesFor, toolSpecs } from '../tools/registry';
 import { ElementMemory, type AgentTool, type ApprovalRequest, type ToolContext } from '../tools/types';
 import { budgetFor, clipToolOutput, compactMessages } from './context';
 import type { ApprovalPrompt, RunEvent } from './events';
@@ -32,13 +33,17 @@ export interface RunOptions {
   parentId?: string;
 }
 
-export function resolveProvider(agent: AgentConfig, config: AppConfig): { provider: ProviderConfig; model: string } {
+export function resolveProvider(agent: AgentConfig, config: AppConfig, url = ''): { provider: ProviderConfig; model: string } {
+  // A site profile with its own model wins on that site.
+  const site = sitesFor(config, url).find((s) => s.providerId || s.model.trim());
+  const siteProvider = site?.providerId ? config.providers.find((p) => p.id === site.providerId) : undefined;
   const provider =
+    siteProvider ??
     config.providers.find((p) => p.id === agent.providerId) ??
     config.providers.find((p) => p.id === config.settings.defaultProviderId) ??
     config.providers[0];
   if (!provider) throw new AgentError('no_model', 'Connect an AI model to get started — it takes a minute.');
-  const model = agent.model.trim() || provider.defaultModel.trim();
+  const model = site?.model.trim() || (siteProvider ? provider.defaultModel.trim() : agent.model.trim() || provider.defaultModel.trim());
   if (!model) throw new AgentError('no_model', `Choose which model to use with ${provider.name}.`);
   return { provider, model };
 }
@@ -155,9 +160,9 @@ export class AgentRun {
 
   private async loop(browser: BrowserController, tab: chrome.tabs.Tab | null): Promise<string> {
     const { agent, config, request } = this.options;
-    const { provider, model } = resolveProvider(agent, config);
-    const client = createClient(provider);
     const url = tab?.url ?? '';
+    const { provider, model } = resolveProvider(agent, config, url);
+    const client = createClient(provider);
     const toolset = buildToolset(agent, config, url);
     const specs = toolSpecs(toolset.tools);
     // Room for the conversation: the server's context window minus the tool definitions sent with every call.
@@ -173,6 +178,7 @@ export class AgentRun {
       onDemandSkills: toolset.onDemandSkills,
       page: { title: tab?.title ?? '', url, note: pageNote ? `${pageNote} Navigate to a website if the task needs one.` : undefined },
       readOnly: matchesSite(url, config.settings.readOnlySites),
+      siteKnowledge: knowledgeSection(toolset.sites, request).text,
     });
     // Earlier answers are context, not facts about the page now.
     const history = this.options.history.slice(-12).map((m): ChatMessage => (m.role === 'assistant' ? { ...m, content: `(Earlier answer — may be out of date)\n${m.content}` } : m));
@@ -440,7 +446,7 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
   }
 }
 
-const BUILT_IN_NAMES = new Set([...BUILT_IN_TOOL_IDS, 'load_skill']);
+const BUILT_IN_NAMES = new Set([...BUILT_IN_TOOL_IDS, 'load_skill', 'site_knowledge']);
 const READ_PAGE = BROWSER_TOOLS.find((t) => t.name === 'read_page')!;
 
 /** What the user sees when the task stops because they declined a step. */

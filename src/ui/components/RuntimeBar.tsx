@@ -1,5 +1,6 @@
 import { Popover } from 'antd';
-import { Cloud, Cpu, Laptop, Mic, RefreshCw, Server } from 'lucide-react';
+import { BookOpen, Cloud, Cpu, Laptop, Mic, RefreshCw, Server } from 'lucide-react';
+import { sitesFor } from '@/agent/tools/registry';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { Location } from '@/shared/constants/providers';
 import type { AgentConfig, AppConfig } from '@/shared/types/config';
@@ -54,8 +55,9 @@ function Detail({ title, icon, part, action }: { title: string; icon: ReactNode;
 }
 
 /** “Running on” — which model does the work, which one hears you, and where each runs. */
-export function RuntimeBar({ agent, config }: { agent: AgentConfig; config: AppConfig }) {
-  const { actions, voice, checkedAt, refresh } = useRuntimeStatus(agent, config);
+export function RuntimeBar({ agent, config, url = '' }: { agent: AgentConfig; config: AppConfig; url?: string }) {
+  const { actions, voice, checkedAt, refresh } = useRuntimeStatus(agent, config, url);
+  const sites = sitesFor(config, url);
   const [, tick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => tick((n) => n + 1), 30_000);
@@ -82,6 +84,27 @@ export function RuntimeBar({ agent, config }: { agent: AgentConfig; config: AppC
           <div className="rt-health checking">Off — set up Whisper or Omi on your Kaggle notebook.</div>
         </div>
       )}
+      {sites.map((site) => {
+        const entries = site.knowledge.filter((k) => k.enabled).length;
+        const custom = site.model.trim() || site.providerId;
+        return (
+          <div key={site.id} className="rt-section">
+            <div className="rt-section-head">
+              <span className="rt-section-title">
+                <BookOpen size={13} /> Site setup
+              </span>
+              <button type="button" className="link-btn small" onClick={() => void openConfiguration(`/sites/${site.id}`)}>
+                Edit
+              </button>
+            </div>
+            <div className="rt-model">{site.name}</div>
+            <div className="rt-place-line">
+              {entries} knowledge {entries === 1 ? 'entry' : 'entries'} · {site.skillIds.length} skills · {site.customToolIds.length} tools
+              {custom ? ' · its own model' : ''}
+            </div>
+          </div>
+        );
+      })}
       <div className="rt-pop-foot">
         <span>{checkedAt ? `Checked ${formatRelative(checkedAt).toLowerCase()}` : 'Checking…'}</span>
         <button type="button" className="link-btn small" onClick={() => void refresh()}>
@@ -96,6 +119,12 @@ export function RuntimeBar({ agent, config }: { agent: AgentConfig; config: AppC
       <button type="button" className="runtime-bar" aria-label="What the agent runs on — show details">
         <Chip icon={<Cpu size={12} aria-hidden />} part={actions} label="Actions" />
         {voice && <Chip icon={<Mic size={12} aria-hidden />} part={voice} label="Voice" />}
+        {sites.map((site) => (
+          <span key={site.id} className="rt-chip ok rt-site" aria-label={`Using what you taught about ${site.name}`}>
+            <BookOpen size={12} aria-hidden />
+            <span className="rt-name">{site.name}</span>
+          </span>
+        ))}
       </button>
     </Popover>
   );

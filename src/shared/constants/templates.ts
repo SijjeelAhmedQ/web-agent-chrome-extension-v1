@@ -1,4 +1,4 @@
-import type { AgentConfig, SkillConfig } from '../types/config';
+import type { AgentConfig, KnowledgeEntry, SiteProfile, SkillConfig } from '../types/config';
 import { uid } from '../utils';
 import { BUILT_IN_TOOL_IDS, READ_ONLY_TOOL_IDS } from './tools';
 
@@ -118,3 +118,81 @@ export function careflowTeam(providerId: string | null): { skill: SkillConfig; a
   };
   return { skill, agents, coordinator };
 }
+
+// ---------- Site-based setups (Configuration → Sites → From a template) ----------
+
+const entry = (kind: KnowledgeEntry['kind'], title: string, content: string, trigger?: string): KnowledgeEntry => {
+  const now = Date.now();
+  return { id: uid('kb_'), kind, title, content, ...(trigger ? { trigger } : {}), enabled: true, createdAt: now, updatedAt: now };
+};
+
+const site = (name: string, color: string, sites: string[], description: string, knowledge: KnowledgeEntry[]): SiteProfile => {
+  const now = Date.now();
+  return { id: uid('site_'), name, description, color, sites, enabled: true, providerId: null, model: '', skillIds: [], customToolIds: [], disabledToolIds: [], knowledge, createdAt: now, updatedAt: now };
+};
+
+export interface SiteTemplate {
+  key: string;
+  name: string;
+  description: string;
+  /** The address is the user's own (e.g. their practice's Indici address). */
+  needsAddress: boolean;
+  make: () => SiteProfile;
+}
+
+export const SITE_TEMPLATES: SiteTemplate[] = [
+  {
+    key: 'indici',
+    name: 'Indici PMS',
+    description: 'Hover menus, Patient Search (Search & List), opening a patient by name.',
+    needsAddress: true,
+    make: () =>
+      site('Indici', '#0e7490', [], 'Indici practice management system.', [
+        entry(
+          'navigation',
+          'Top navigation menus open on hover',
+          'The menus in the top navigation bar (Patients and the others) open when the mouse is over them — clicking the top item does not open the list. Use open_menu with the path, e.g. ["Patients", "Search & List"], then click the item you want from what it returns.',
+        ),
+        entry(
+          'page',
+          'Patient Search page (Patients › Search & List)',
+          [
+            '- Search fields: Patient Name (format "Surname First Name"), DOB, NHI, Street.',
+            '- Buttons: Search, Search Vault, Reset, Clear, Show Adv. Search. To search, use **Search** — not Search Vault.',
+            '- Results table columns: Name, DOB, Age, Gender, NHI, Chart No, Address, Phone, Mobile, Provider, Fund., Enrol., Balance, Actions.',
+            '- The Actions column has icons for other jobs (patient details, edit, billing $, book appointment calendar, family members, print…). They do not select the patient.',
+            '- Struck-through rows are inactive patients.',
+          ].join('\n'),
+        ),
+        entry(
+          'rule',
+          'Open a patient by clicking the name — never an icon',
+          'Patient names in the Name column are plain text. Open a patient with click_text on the name — one click. If the same name appears more than once, add near with the DOB or NHI from the right row. Never click an icon in the Actions column to open or select a patient. The patient’s consult opens in a new tab: continue there.',
+        ),
+        entry(
+          'workflow',
+          'Select a patient from Search & List',
+          [
+            '1. open_menu ["Patients", "Search & List"], then click "Search & List". The Patient Search page opens.',
+            '2. Type the patient’s name into the Patient Name field (e.g. "STARK Arya" or "Arya STARK").',
+            '3. Click the Search button and wait for the results table.',
+            '4. click_text on the patient’s name in the Name column (near: their DOB if the name is listed twice).',
+            '5. The patient’s consult opens in a new tab — you are now working there. Read the page to confirm it is the right patient.',
+            '6. Tell the user which patient is open: name, DOB and NHI.',
+          ].join('\n'),
+          'Goto Patients and select Search & List and select Arya Stark',
+        ),
+      ]),
+  },
+  {
+    key: 'careflow',
+    name: 'CareFlow PMS',
+    description: 'Sign-in, opening a patient, the Summary tabs and their Add forms.',
+    needsAddress: false,
+    make: () =>
+      site('CareFlow', '#10b981', [...CAREFLOW_SITES], 'CareFlow practice management (local demo).', [
+        entry('workflow', 'Add records to a patient (medication, diagnosis, task, recall, appointment)', CAREFLOW_SKILL, 'Add medication Amoxicillin 500 mg twice daily for Ali Khan'),
+        entry('rule', 'Never guess form values', 'Fill only the fields the request gives values for, plus required ones. If a required value is missing (dose, frequency, date…), ask the user instead of choosing one.'),
+      ]),
+  },
+];

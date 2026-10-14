@@ -1,6 +1,6 @@
 import { defaultConfig, DEFAULT_SETTINGS } from '../constants/defaults';
 import { BUILT_IN_TOOL_IDS, BUILT_IN_TOOLS, LEGACY_TOOL_IDS } from '../constants/tools';
-import type { AppConfig } from '../types/config';
+import type { AppConfig, SiteProfile } from '../types/config';
 import { getItem, setItem, watchItem } from './kv';
 
 export const CONFIG_KEY = 'wa.config';
@@ -15,6 +15,7 @@ export function normalizeConfig(raw: Partial<AppConfig> | undefined): AppConfig 
     agents: Array.isArray(raw.agents) && raw.agents.length ? raw.agents : base.agents,
     skills: Array.isArray(raw.skills) ? raw.skills : base.skills,
     customTools: Array.isArray(raw.customTools) ? raw.customTools : base.customTools,
+    sites: Array.isArray(raw.sites) ? raw.sites.map(normalizeSite) : [],
     settings: { ...DEFAULT_SETTINGS, ...(raw.settings ?? {}), voice: { ...DEFAULT_SETTINGS.voice, ...(raw.settings?.voice ?? {}) } },
   };
   // Tools added since this config was saved: agents that read pages get the new read tools.
@@ -35,6 +36,27 @@ export function normalizeConfig(raw: Partial<AppConfig> | undefined): AppConfig 
     config.settings.defaultProviderId = config.providers[0]?.id ?? null;
   }
   return config;
+}
+
+/** A site profile with every field present (older or hand-edited files may miss some). */
+export function normalizeSite(raw: Partial<SiteProfile>): SiteProfile {
+  const now = Date.now();
+  return {
+    id: raw.id ?? `site_${now.toString(36)}`,
+    name: raw.name ?? 'Website',
+    description: raw.description ?? '',
+    color: raw.color ?? '#0ea5e9',
+    sites: Array.isArray(raw.sites) ? raw.sites : [],
+    enabled: raw.enabled ?? true,
+    providerId: raw.providerId ?? null,
+    model: raw.model ?? '',
+    skillIds: Array.isArray(raw.skillIds) ? raw.skillIds : [],
+    customToolIds: Array.isArray(raw.customToolIds) ? raw.customToolIds : [],
+    disabledToolIds: Array.isArray(raw.disabledToolIds) ? raw.disabledToolIds : [],
+    knowledge: Array.isArray(raw.knowledge) ? raw.knowledge.map((k) => ({ ...k, enabled: k.enabled ?? true })) : [],
+    createdAt: raw.createdAt ?? now,
+    updatedAt: raw.updatedAt ?? now,
+  };
 }
 
 export async function loadConfig(): Promise<AppConfig> {

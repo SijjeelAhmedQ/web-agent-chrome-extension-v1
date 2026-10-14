@@ -1,7 +1,7 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import { defaultConfig } from '@/shared/constants/defaults';
 import { CUSTOM_PREFIX } from '@/shared/constants/tools';
-import type { AgentConfig, AppConfig, CustomToolConfig, ProviderConfig, Settings, SkillConfig } from '@/shared/types/config';
+import type { AgentConfig, AppConfig, CustomToolConfig, KnowledgeEntry, ProviderConfig, Settings, SiteProfile, SkillConfig } from '@/shared/types/config';
 
 interface ConfigState {
   config: AppConfig;
@@ -67,6 +67,7 @@ export const configSlice = createSlice({
     deleteSkill(state, action: PayloadAction<string>) {
       state.config.skills = state.config.skills.filter((s) => s.id !== action.payload);
       for (const agent of state.config.agents) agent.skillIds = agent.skillIds.filter((id) => id !== action.payload);
+      for (const site of state.config.sites) site.skillIds = site.skillIds.filter((id) => id !== action.payload);
       touch(state);
     },
     upsertCustomTool(state, action: PayloadAction<{ tool: CustomToolConfig; agentIds?: string[] }>) {
@@ -87,6 +88,51 @@ export const configSlice = createSlice({
       state.config.customTools = state.config.customTools.filter((t) => t.id !== action.payload);
       const key = `${CUSTOM_PREFIX}${action.payload}`;
       for (const agent of state.config.agents) agent.toolIds = agent.toolIds.filter((id) => id !== key);
+      for (const site of state.config.sites) site.customToolIds = site.customToolIds.filter((id) => id !== action.payload);
+      touch(state);
+    },
+    // ---- Site-based configuration
+    upsertSite(state, action: PayloadAction<SiteProfile>) {
+      upsert(state.config.sites, { ...action.payload, updatedAt: Date.now() });
+      touch(state);
+    },
+    /** Deletes a site; its own skills and tools go too, unless an agent uses them. */
+    deleteSite(state, action: PayloadAction<string>) {
+      const site = state.config.sites.find((s) => s.id === action.payload);
+      if (!site) return;
+      state.config.sites = state.config.sites.filter((s) => s.id !== action.payload);
+      const usedSkills = new Set([...state.config.agents.flatMap((a) => a.skillIds), ...state.config.sites.flatMap((s) => s.skillIds)]);
+      state.config.skills = state.config.skills.filter((sk) => !site.skillIds.includes(sk.id) || usedSkills.has(sk.id));
+      const usedTools = new Set([...state.config.agents.flatMap((a) => a.toolIds), ...state.config.sites.flatMap((s) => s.customToolIds.map((id) => `${CUSTOM_PREFIX}${id}`))]);
+      state.config.customTools = state.config.customTools.filter((t) => !site.customToolIds.includes(t.id) || usedTools.has(`${CUSTOM_PREFIX}${t.id}`));
+      touch(state);
+    },
+    upsertKnowledge(state, action: PayloadAction<{ siteId: string; entry: KnowledgeEntry }>) {
+      const site = state.config.sites.find((s) => s.id === action.payload.siteId);
+      if (!site) return;
+      upsert(site.knowledge, { ...action.payload.entry, updatedAt: Date.now() });
+      site.updatedAt = Date.now();
+      touch(state);
+    },
+    deleteKnowledge(state, action: PayloadAction<{ siteId: string; entryId: string }>) {
+      const site = state.config.sites.find((s) => s.id === action.payload.siteId);
+      if (!site) return;
+      site.knowledge = site.knowledge.filter((k) => k.id !== action.payload.entryId);
+      touch(state);
+    },
+    /** Creates or edits a skill that belongs to a site. */
+    upsertSiteSkill(state, action: PayloadAction<{ siteId: string; skill: SkillConfig }>) {
+      const site = state.config.sites.find((s) => s.id === action.payload.siteId);
+      if (!site) return;
+      upsert(state.config.skills, { ...action.payload.skill, updatedAt: Date.now() });
+      if (!site.skillIds.includes(action.payload.skill.id)) site.skillIds.push(action.payload.skill.id);
+      touch(state);
+    },
+    upsertSiteTool(state, action: PayloadAction<{ siteId: string; tool: CustomToolConfig }>) {
+      const site = state.config.sites.find((s) => s.id === action.payload.siteId);
+      if (!site) return;
+      upsert(state.config.customTools, { ...action.payload.tool, updatedAt: Date.now() });
+      if (!site.customToolIds.includes(action.payload.tool.id)) site.customToolIds.push(action.payload.tool.id);
       touch(state);
     },
     toggleToolForAgent(state, action: PayloadAction<{ agentId: string; toolId: string; on: boolean }>) {

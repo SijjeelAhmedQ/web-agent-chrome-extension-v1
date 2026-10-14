@@ -57,6 +57,33 @@ npm run build          # typecheck + build into dist/
 
 Local servers usually reject requests coming from a `chrome-extension://` origin. The service worker installs a `declarativeNetRequest` rule that removes the `Origin` header from **this extension's own** requests to `localhost`, `127.0.0.1` and `0.0.0.0`, so Ollama needs no `OLLAMA_ORIGINS` setup.
 
+### Site base: knowledge per website
+
+Configuration has two levels:
+- **Extension base:** Agents, Skills, Tools, Models and Voice. Used on every site.
+- **Site base (Sites):** one setup per website. It switches on by itself when the agent's tab is on one of the site's addresses, and adds to the agent's own setup.
+
+Each site has:
+- **Knowledge base:** what you teach the agent about the site. There are four kinds:
+  - *Rule:* "open a patient by clicking the name, never an icon".
+  - *Navigation:* menus and addresses.
+  - *Page & controls:* what columns, icons and buttons mean.
+  - *Workflow:* an example request with its steps.
+
+  Rules, navigation and page notes always go into the prompt. Workflows go in full only when they match the request; the others are listed by title, and the agent reads them with the `site_knowledge` tool.
+- **Skills and custom tools:** every agent gets them, but only on this site.
+- **Built-in tools:** any of them can be switched off for this site.
+- **Model:** run every agent on this site with a given connection or model.
+- **Preview:** shows exactly what an agent gets for a sample request.
+
+The side panel's status bar shows a chip, such as **Indici**, while a site setup is in use.
+
+**Sites → From a template** has two ready-made setups:
+- **Indici:** you add your practice's address. It covers hover menus, the Patient Search page, opening a patient by name, and the "select a patient from Search & List" workflow.
+- **CareFlow:** for the local CareFlow app.
+
+Everything is ordinary configuration: you can edit or delete it, and it is included in Export and Import.
+
 ### Teams: agents working at the same time
 
 **Agents → New agent → CareFlow team** creates:

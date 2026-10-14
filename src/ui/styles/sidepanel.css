@@ -970,3 +970,7 @@ body {
 :root[data-motion='reduce'] .hero-aura {
   animation: none;
 }
+
+.rt-chip.rt-site svg {
+  color: var(--accent, #10b981);
+}

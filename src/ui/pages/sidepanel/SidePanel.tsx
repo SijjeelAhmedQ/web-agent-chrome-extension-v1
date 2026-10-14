@@ -128,7 +128,7 @@ export function SidePanel() {
           <Settings2 size={16} />
         </IconButton>
       </header>
-      {providers.length > 0 && <RuntimeBar agent={agent} config={config} />}
+      {providers.length > 0 && <RuntimeBar agent={agent} config={config} url={tab.url} />}
 
       {view === 'history' ? (
         <HistoryView onBack={() => setView('chat')} onRunAgain={onSend} />

@@ -7,6 +7,8 @@ export interface PromptContext {
   onDemandSkills: SkillConfig[];
   page: { title: string; url: string; note?: string };
   readOnly: boolean;
+  /** What the user taught about the site the agent is on (from its site profile). */
+  siteKnowledge?: string;
   now?: Date;
 }
 
@@ -65,6 +67,8 @@ export function buildSystemPrompt(ctx: PromptContext): string {
   if (agent.instructions.trim()) {
     lines.push('', '## Instructions from the user for this agent', agent.instructions.trim());
   }
+
+  if (ctx.siteKnowledge?.trim()) lines.push('', ctx.siteKnowledge.trim());
 
   if (ctx.alwaysSkills.length) {
     lines.push('', '## Skills');

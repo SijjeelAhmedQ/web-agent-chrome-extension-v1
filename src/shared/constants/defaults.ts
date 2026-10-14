@@ -118,6 +118,7 @@ export function defaultConfig(): AppConfig {
     agents: DEFAULT_AGENTS,
     skills: DEFAULT_SKILLS,
     customTools: [],
+    sites: [],
     settings: DEFAULT_SETTINGS,
   });
 }

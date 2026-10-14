@@ -98,6 +98,54 @@ export interface SkillConfig {
   updatedAt: number;
 }
 
+/**
+ * rule       – always/never do this here (“Open a patient by clicking the name, never an icon”)
+ * navigation – where things are and how to get there (menus, addresses)
+ * page       – what a page or control means (columns, icons, buttons)
+ * workflow   – how to do a task, step by step, for requests like an example
+ */
+export type KnowledgeKind = 'rule' | 'navigation' | 'page' | 'workflow';
+
+/** One piece of what the user knows about a website. */
+export interface KnowledgeEntry {
+  id: string;
+  kind: KnowledgeKind;
+  title: string;
+  /** Workflows: an example of what the user asks (“Goto Patients … select Arya Stark”). */
+  trigger?: string;
+  /** Markdown. For a workflow: the steps. */
+  content: string;
+  enabled: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * Site-based configuration: knowledge, skills, tools and model for one website. Used
+ * automatically — on top of the agent's own setup — whenever the agent's tab is on it.
+ */
+export interface SiteProfile {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  /** Host patterns (e.g. `localhost:5173`, `*.indici.co.nz`). */
+  sites: string[];
+  enabled: boolean;
+  /** Model for this site. null and '' → the agent's own. */
+  providerId: string | null;
+  model: string;
+  /** Skills that apply on this site, for every agent. */
+  skillIds: string[];
+  /** Custom tools available on this site, for every agent. */
+  customToolIds: string[];
+  /** Built-in tools switched off on this site. */
+  disabledToolIds: string[];
+  knowledge: KnowledgeEntry[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export type ToolParamType = 'string' | 'number' | 'boolean';
 
 export interface CustomToolParam {
@@ -193,5 +241,7 @@ export interface AppConfig {
   agents: AgentConfig[];
   skills: SkillConfig[];
   customTools: CustomToolConfig[];
+  /** Site-based configuration (knowledge, skills, tools, model per website). */
+  sites: SiteProfile[];
   settings: Settings;
 }

@@ -48,7 +48,7 @@ function AssignPopover({ toolId, agents }: { toolId: string; agents: AgentConfig
 }
 
 export function ToolsPage() {
-  const { agents, customTools, settings } = useAppSelector((s) => s.config.config);
+  const { agents, customTools, settings, sites } = useAppSelector((s) => s.config.config);
   const dispatch = useAppDispatch();
   const { modal, message } = App.useApp();
   const [editing, setEditing] = useState<{ tool: CustomToolConfig; isNew: boolean } | null>(null);
@@ -127,6 +127,13 @@ export function ToolsPage() {
                 </span>
               </span>
               <span className="list-side" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                {sites
+                  .filter((site) => site.customToolIds.includes(t.id))
+                  .map((site) => (
+                    <span key={site.id} className="pill">
+                      {site.name}
+                    </span>
+                  ))}
                 {t.needsApproval && <span className="pill warning">Asks first</span>}
                 <AssignPopover toolId={`${CUSTOM_PREFIX}${t.id}`} agents={agents} />
               </span>
@@ -185,9 +192,11 @@ interface EditorProps {
   onClose: () => void;
   onSave: (tool: CustomToolConfig, agentIds: string[]) => void;
   onDelete: (tool: CustomToolConfig) => void;
+  /** Editing a site's tool: every agent gets it on that site. */
+  siteName?: string;
 }
 
-function CustomToolEditor({ value, existingNames, onClose, onSave, onDelete }: EditorProps) {
+export function CustomToolEditor({ value, existingNames, onClose, onSave, onDelete, siteName }: EditorProps) {
   const agents = useAppSelector((s) => s.config.config.agents);
   const [draft, setDraft] = useState<CustomToolConfig | null>(null);
   const [assigned, setAssigned] = useState<string[]>([]);
@@ -317,6 +326,9 @@ function CustomToolEditor({ value, existingNames, onClose, onSave, onDelete }: E
           </div>
           <Switch checked={draft.needsApproval} onChange={(v) => set({ needsApproval: v })} aria-label="Ask before each use" />
         </div>
+        {siteName ? (
+          <div className="inline-note">Every agent can use it while you are on {siteName}.</div>
+        ) : (
         <div>
           <FieldLabel>Agents with this tool</FieldLabel>
           <div className="check-list">
@@ -329,6 +341,7 @@ function CustomToolEditor({ value, existingNames, onClose, onSave, onDelete }: E
             ))}
           </div>
         </div>
+        )}
         <Collapse
           size="small"
           items={[{ key: 'spec', label: 'Exactly what the model receives', children: <pre className="spec-json mono">{JSON.stringify(specOf(customTool(draft)), null, 2)}</pre> }]}

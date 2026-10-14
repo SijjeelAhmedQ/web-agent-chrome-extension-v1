@@ -14,7 +14,7 @@ const blank = (): SkillConfig => {
 };
 
 export function SkillsPage() {
-  const { skills, agents } = useAppSelector((s) => s.config.config);
+  const { skills, agents, sites } = useAppSelector((s) => s.config.config);
   const dispatch = useAppDispatch();
   const { modal, message } = App.useApp();
   const [editing, setEditing] = useState<{ skill: SkillConfig; isNew: boolean } | null>(null);
@@ -56,6 +56,13 @@ export function SkillsPage() {
                   <span className="list-desc">{s.description || 'No description'}</span>
                 </span>
                 <span className="list-side">
+                  {sites
+                    .filter((site) => site.skillIds.includes(s.id))
+                    .map((site) => (
+                      <span key={site.id} className="pill" title={`Part of the ${site.name} site setup`}>
+                        <Globe size={11} /> {site.name}
+                      </span>
+                    ))}
                   {s.sites.length > 0 && (
                     <span className="pill" title={s.sites.join(', ')}>
                       <Globe size={11} /> {s.sites.length === 1 ? s.sites[0] : `${s.sites.length} sites`}
@@ -100,9 +107,11 @@ interface EditorProps {
   onClose: () => void;
   onSave: (skill: SkillConfig, agentIds: string[]) => void;
   onDelete: (skill: SkillConfig) => void;
+  /** Editing a site's skill: it applies to every agent on that site, so no agents or sites to pick. */
+  siteName?: string;
 }
 
-function SkillEditor({ value, onClose, onSave, onDelete }: EditorProps) {
+export function SkillEditor({ value, onClose, onSave, onDelete, siteName }: EditorProps) {
   const agents = useAppSelector((s) => s.config.config.agents);
   const [draft, setDraft] = useState<SkillConfig | null>(null);
   const [assigned, setAssigned] = useState<string[]>([]);
@@ -181,6 +190,10 @@ function SkillEditor({ value, onClose, onSave, onDelete }: EditorProps) {
             ))}
           </div>
         </div>
+        {siteName ? (
+          <div className="inline-note">Used by every agent while you are on {siteName}.</div>
+        ) : (
+          <>
         <div>
           <FieldLabel hint="Leave empty for every site">Only on these sites</FieldLabel>
           <Select
@@ -206,6 +219,8 @@ function SkillEditor({ value, onClose, onSave, onDelete }: EditorProps) {
             ))}
           </div>
         </div>
+          </>
+        )}
       </div>
     </Drawer>
   );

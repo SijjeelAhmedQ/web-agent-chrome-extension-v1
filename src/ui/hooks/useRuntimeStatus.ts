@@ -48,15 +48,15 @@ async function checkActions(provider: ProviderConfig, model: string, signal: Abo
  * What powers the side panel right now — the active agent's model and the voice engine —
  * where each runs, and whether it answers. Re-checked on change, on focus and every 2 minutes.
  */
-export function useRuntimeStatus(agent: AgentConfig, config: AppConfig) {
+export function useRuntimeStatus(agent: AgentConfig, config: AppConfig, url = '') {
   const voice = config.settings.voice;
   const resolved = useMemo(() => {
     try {
-      return resolveProvider(agent, config);
+      return resolveProvider(agent, config, url);
     } catch {
       return null;
     }
-  }, [agent, config]);
+  }, [agent, config, url]);
 
   const [actionsHealth, setActionsHealth] = useState<Health>(CHECKING);
   const [voiceHealth, setVoiceHealth] = useState<Health>(CHECKING);
