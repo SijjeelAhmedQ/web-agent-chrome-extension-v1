@@ -79,3 +79,26 @@ describe('never-click buttons', () => {
     expect(sent).not.toContain('click');
   });
 });
+
+describe('loop guard: repeated cycles of steps', () => {
+  const type = 'Typing “Metformin” into “Find Medicine”';
+  const search = 'Clicking “search (icon)”';
+  const pick = 'Clicking “Metformin”';
+
+  it('stops a type → search → pick cycle before its third round', async () => {
+    const { repeatedCycle } = await import('./runtime/agentRun');
+    expect(repeatedCycle([type, search, pick], type)).toBeNull();
+    expect(repeatedCycle([type, search, pick, type, search, pick], type)).toEqual([type, search, pick]);
+    expect(repeatedCycle(['A', 'B', 'A', 'B'], 'A')).toEqual(['A', 'B']);
+  });
+
+  it('lets a single repeated click through (paging), but not the same typing a third time', async () => {
+    const { repeatedCycle } = await import('./runtime/agentRun');
+    const next = 'Clicking “Next”';
+    expect(repeatedCycle([next, next, next, next], next)).toBeNull();
+    expect(repeatedCycle([type, search], type)).toBeNull();
+    expect(repeatedCycle([type, search, type, 'Clicking “Clear”'], type)).toEqual([type]);
+    // A different next step is fine.
+    expect(repeatedCycle([type, search, pick, type, search, pick], 'Typing “2” into “Take”')).toBeNull();
+  });
+});

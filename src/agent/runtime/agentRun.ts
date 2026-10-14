@@ -63,6 +63,8 @@ export class AgentRun {
   private readonly repeats = new Map<string, number>();
   /** Actions in this task that changed nothing at all. */
   private noEffect = 0;
+  /** What each page action did, in order (its label, e.g. “Typing “x” into “Find Medicine””) — to spot cycles. */
+  private readonly actionTrail: string[] = [];
   /** click_text targets that were not found, by text — to stop retrying with other wording. */
   private readonly notFound = new Map<string, number>();
   /** Set when the task must end now, with this answer. */
@@ -341,6 +343,16 @@ export class AgentRun {
 
     // The exact same action that already did nothing twice won't work a third time.
     const key = tool.risk !== 'read' && tool.touchesPage ? `${tool.name} ${JSON.stringify(args)}` : '';
+    // A cycle of page actions — type → search → pick, again and again — is a loop even when each
+    // step "worked". Compare what was done (labels), not ids: ids change as the page re-renders.
+    const isAction = tool.risk !== 'read' && tool.touchesPage;
+    if (isAction) {
+      const cycle = repeatedCycle(this.actionTrail, step.label);
+      if (cycle) {
+        finish({ status: 'skipped', note: 'Loop stopped' });
+        return `Not done: this would start the same steps a third time — ${cycle.join(' → ')}. It is a loop; repeating it won’t change the result. Read the page and continue with the next step of the task using what is already on the screen (for example a form that has opened), or tell the user where you are stuck.`;
+      }
+    }
     const textKey = tool.name === 'click_text' ? String((args as { text?: unknown }).text ?? '').trim().toLowerCase() : '';
     if (textKey && (this.notFound.get(textKey) ?? 0) >= 2) {
       finish({ status: 'skipped', note: 'Not found twice — use the element list' });
@@ -380,6 +392,7 @@ export class AgentRun {
         this.upsertStep(step);
       }
 
+      if (isAction) this.actionTrail.push(step.label);
       const outcome = await this.inFront(ctx, () => tool.execute(args, ctx));
       if (textKey && outcome.note === 'Text not found') this.notFound.set(textKey, (this.notFound.get(textKey) ?? 0) + 1);
       if (outcome.noEffect) {
@@ -463,6 +476,23 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
 
 const BUILT_IN_NAMES = new Set([...BUILT_IN_TOOL_IDS, 'load_skill', 'site_knowledge']);
 const READ_PAGE = BROWSER_TOOLS.find((t) => t.name === 'read_page')!;
+
+/**
+ * The steps that would repeat for the third time if `next` ran: the trail ends with the same
+ * 2–4 steps twice and `next` starts them again. Typing the same text into the same field
+ * counts on its own too. (A single click repeated — "Next page" — is normal and not counted.)
+ */
+export function repeatedCycle(trail: string[], next: string): string[] | null {
+  for (let len = 2; len <= 4; len++) {
+    if (trail.length < 2 * len) continue;
+    const last = trail.slice(-len);
+    const before = trail.slice(-2 * len, -len);
+    // A "cycle" of one step repeated (Next, Next…) is paging, not a loop.
+    if (new Set(last).size > 1 && last.every((l, i) => l === before[i]) && next === last[0]) return last;
+  }
+  if (next.startsWith('Typing') && trail.filter((l) => l === next).length >= 2) return [next];
+  return null;
+}
 
 /** What the user sees when the task stops because they declined a step. */
 export function declinedAnswer(title: string): string {
