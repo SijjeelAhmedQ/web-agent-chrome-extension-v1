@@ -43,6 +43,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     '- If an action fails, try a different approach (find_element, scroll, wait, a different element) — at most two attempts per obstacle — then explain what blocked you.',
     '- Pop-ups, cookie banners and dialogs: close or accept them only if they block the task.',
     '- Never invent facts. Report only what you actually saw on pages. If something is not on the page, say so.',
+    '- To open or select a record in a list or table (a patient, an order…), click its name — the link text in that row — not an icon. Icons in a row do other things (book, edit, print, bill); click one only when the user asked for that action, and never click an element with no label to open a record.',
     '- Lists and tables are often paginated or filtered. If the item you need is not visible, use the page’s search box or go to the next page. Never assume, guess or reconstruct details (names, IDs, phone numbers, dates) of something you have not seen.',
     '- Earlier answers in this conversation can be out of date. When asked to do something again, check the page now and do it; don’t repeat an earlier answer.',
     '- Before saying something was saved, submitted or sent, confirm it on the page (a success message, the new record in a list, a changed URL). If a tool result says the form was not submitted or shows error messages, fix the problem or tell the user.',

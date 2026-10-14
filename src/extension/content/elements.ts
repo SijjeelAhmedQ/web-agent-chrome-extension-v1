@@ -7,7 +7,9 @@
 
 const ids = new WeakMap<Element, number>();
 const refs = new Map<number, WeakRef<Element>>();
-let nextId = 1;
+// Each document starts at a different base, so an id from a page that is gone can't
+// silently point at a different element on the next page.
+let nextId = 1000 + Math.floor(Math.random() * 90) * 100;
 
 export const OVERLAY_HOST_ID = '__web-agent-overlay__';
 
@@ -39,7 +41,7 @@ const INTERACTIVE_ROLES = new Set([
 const NATIVE_INTERACTIVE = new Set(['A', 'BUTTON', 'INPUT', 'TEXTAREA', 'SELECT', 'SUMMARY', 'OPTION']);
 
 /** Tags worth checking for `cursor: pointer` — clickable divs and spans in modern apps. */
-const POINTER_CANDIDATES = new Set(['DIV', 'SPAN', 'LI', 'IMG', 'svg', 'I', 'TD', 'TR', 'LABEL', 'P', 'H1', 'H2', 'H3', 'H4', 'SECTION', 'ARTICLE']);
+const POINTER_CANDIDATES = new Set(['A', 'B', 'STRONG', 'FONT', 'DIV', 'SPAN', 'LI', 'IMG', 'svg', 'I', 'TD', 'TR', 'LABEL', 'P', 'H1', 'H2', 'H3', 'H4', 'SECTION', 'ARTICLE']);
 
 export function isExplicitlyInteractive(el: Element): boolean {
   const tag = el.tagName;
@@ -131,7 +133,7 @@ export function accessibleName(el: Element): string {
     const labels = Array.from(el.labels ?? []).map((l) => textOf(l)).filter(Boolean);
     if (labels.length) return clean(labels.join(' '));
     if (el instanceof HTMLInputElement && ['button', 'submit', 'reset'].includes(el.type) && el.value) return clean(el.value);
-    if (el instanceof HTMLInputElement && el.type === 'image') return clean(el.alt || el.value || 'Submit');
+    if (el instanceof HTMLInputElement && el.type === 'image') return clean(el.alt || el.value || el.title) || iconName(el) || 'Submit';
     const placeholder = clean(el.getAttribute('placeholder'));
     if (placeholder) return placeholder;
     const title = clean(el.getAttribute('title'));
@@ -145,7 +147,7 @@ export function accessibleName(el: Element): string {
     return clean(el.getAttribute('name') ?? el.id ?? '');
   }
 
-  if (el.tagName === 'IMG') return clean((el as HTMLImageElement).alt || el.getAttribute('title'));
+  if (el.tagName === 'IMG') return clean((el as HTMLImageElement).alt || el.getAttribute('title')) || iconName(el);
 
   const text = textOf(el);
   if (text) return text;
@@ -159,8 +161,98 @@ export function accessibleName(el: Element): string {
   if (svgTitle?.textContent) return clean(svgTitle.textContent);
   const labelledChild = el.querySelector('[aria-label]');
   if (labelledChild) return clean(labelledChild.getAttribute('aria-label'));
-  const tooltip = clean(el.getAttribute('data-tooltip') ?? el.getAttribute('data-title'));
-  return tooltip;
+  const tooltip = tooltipOf(el) || tooltipOf(el.querySelector(`[title],${TOOLTIP_ATTRS.map((a) => `[${a}]`).join(',')}`));
+  return tooltip || iconName(el);
+}
+
+/** Tooltip libraries move `title` into these (Bootstrap: data-original-title / data-bs-original-title). */
+const TOOLTIP_ATTRS = ['data-original-title', 'data-bs-original-title', 'data-bs-title', 'data-tooltip', 'data-title', 'data-tip', 'data-hint', 'data-balloon'];
+
+function tooltipOf(el: Element | null): string {
+  if (!el) return '';
+  for (const attr of ['title', ...TOOLTIP_ATTRS]) {
+    const v = clean(el.getAttribute(attr));
+    if (v) return v;
+  }
+  return '';
+}
+
+const ICON_CLASS = /^(?:fa[srldbtk]?|fa-solid|glyphicon|bi|icon|icons?|ti|la[srb]?|mdi|ion|ionicons?|ri|bx|bxs|feather|lni|zmdi|oi|typcn|si|material-icons|ki|flaticon)-([a-z][a-z0-9-]*)$/i;
+const ICON_MODIFIER = /^(lg|xs|sm|xl|[0-9]+x|fw|spin|pulse|border|inverse|solid|regular|light|thin|duotone|brands|sharp|li|ul|stack(-[0-9]x)?|pull-.*|flip-.*|rotate-.*|beat|fade|bounce|shake|outline|filled|round|rounded|line|fill)$/i;
+const IGNORED_CALLS = new Set(['return', 'javascript', 'void', 'function', 'if', 'event', 'this', 'window', 'document', 'location', 'false', 'true', 'setTimeout', 'preventDefault', 'stopPropagation']);
+
+/** "OpenBookAppointment" / "book_appt" / "user-edit" → "open book appointment" / "book appt" / "user edit". */
+const words = (s: string) =>
+  s
+    .replace(/\.[a-z0-9]{2,5}$/i, '')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[-_.]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+
+/**
+ * A best-effort name for an icon-only control with no label at all: the function its
+ * onclick calls, the page its link opens, its image file, or its icon-font class.
+ * Shown as “… (icon)” so the agent knows it is inferred.
+ */
+function iconName(el: Element): string {
+  const handler = el.getAttribute('onclick') ?? '';
+  const href = el.getAttribute('href') ?? '';
+  const code = `${handler} ${/^javascript:/i.test(href) ? href.slice(11) : ''}`;
+  const calls = Array.from(code.matchAll(/([A-Za-z_$][\w$]*)\s*\(/g), (m) => m[1].split('.').pop() ?? '').filter(
+    (f) => f.length > 2 && !IGNORED_CALLS.has(f),
+  );
+  const strings = Array.from(code.matchAll(/(['"])([^'"]{3,200})\1/g), (m) => m[2]);
+  const candidates = [
+    // bookAppointment(4) — a descriptive function name says what the icon does…
+    ...calls.filter((f) => words(f).includes(' ') && !GENERIC_CALL.test(words(f))).map(words),
+    // …unlike openWindow('Appointments/Book.aspx') or __doPostBack('ctl00$grid$lnkBook'), where the argument does.
+    ...strings.map((v) => (/[/.](aspx?|php|html?|jsp|do)\b|\//i.test(v) ? pathWords(v) : controlWords(v))),
+    controlWords(el.id),
+    href && !/^(javascript:|#)/i.test(href) ? pathWords(href) : '',
+    ...pictureNames(el),
+    ...calls.filter((f) => !GENERIC_CALL.test(words(f)) && !HELPER_CALL.test(f)).map(words),
+  ];
+  const name = candidates.find((c) => /[a-z]{3}/.test(c));
+  return name ? `${name} (icon)` : '';
+}
+
+/** Helpers that only open or show something — their name says nothing about the action. */
+const GENERIC_CALL = /^(open|show|load|go|goto|call|do|run|submit|post|popup|redirect|navigate|window|modal|dialog|url|page|link|click|handle|on|fn|func|action|ajax|get|set)( (window|popup|pop up|modal|dialog|url|page|link|click|action|post back|form|new window|in new tab|tab|frame|iframe|win))*$/;
+const HELPER_CALL = /^(say|log|alert|confirm|prompt|go|fn|cb|f|h)$/i;
+
+/** "/Appointments/BookAppointment.aspx?id=4" → "book appointment". */
+function pathWords(url: string): string {
+  const seg = url.split(/[?#]/)[0].split('/').filter(Boolean).pop() ?? '';
+  const w = words(seg);
+  return /^\d+$/.test(seg) || /^(index|default|home|void 0|)$/.test(w) ? '' : w;
+}
+
+/** "ctl00_Main_grid_ctl03_lnkBookAppt" / "btnPrintLabel" → "book appt" / "print label". Skips generated ids. */
+function controlWords(id: string): string {
+  const last = id.split(/[_$:]/).filter((part) => /[a-z]{3}/i.test(part) && !/^ctl\d*$/i.test(part)).pop() ?? '';
+  if (!last || /\d{3}|^[a-z]{1,3}\d|^(ember|react|radix|mui|ext|el|id|rc|r|w)[-\d]/i.test(last) || /^[0-9a-f-]{8,}$/i.test(last)) return '';
+  return words(last.replace(/^(lnk|lb|btn|img|imgbtn|ib|hl|cmd|link|button|icon|ico)(?=[A-Z])/, ''));
+}
+
+/** Names from the icon's picture: image file, SVG sprite id, icon-font class. */
+function pictureNames(el: Element): string[] {
+  const out: string[] = [];
+  for (const node of [el, ...Array.from(el.querySelectorAll('img,i,span,svg,use,em'))].slice(0, 6)) {
+    const src = node.tagName === 'IMG' || node instanceof HTMLInputElement ? node.getAttribute('src') ?? '' : '';
+    if (src && !src.startsWith('data:')) {
+      const file = src.split(/[?#]/)[0].split('/').pop() ?? '';
+      if (!/[0-9a-f]{12}/.test(file)) out.push(words(file).replace(/\b(icon|ico|img|btn|image|small|large|\d+)\b/g, '').replace(/\s+/g, ' ').trim());
+    }
+    const use = node.tagName.toLowerCase() === 'use' ? node.getAttribute('href') ?? node.getAttribute('xlink:href') ?? '' : '';
+    if (use.includes('#')) out.push(words(use.split('#').pop()!.replace(/^(icon|ico|i)[-_]/i, '')));
+    for (const cls of Array.from(node.classList ?? [])) {
+      const m = ICON_CLASS.exec(cls);
+      if (m && !ICON_MODIFIER.test(m[1])) out.push(words(m[1].replace(/-o$/, '')));
+    }
+  }
+  return out;
 }
 
 /** Dialog, form or table-row context, so the agent can tell similar elements apart. */
@@ -177,8 +269,12 @@ export function contextOf(el: Element): string | undefined {
     const index = rows.indexOf(row);
     const header = table?.querySelector('thead tr, [role=row]:has([role=columnheader])');
     const position = header ? index : index + 1;
-    const first = clean(row.querySelector('td,[role=gridcell],[role=cell]')?.textContent, 40);
-    if (index >= 0 && row !== header) return `row ${position}${first ? ` “${first}”` : ''}`;
+    const cells = Array.from(row.querySelectorAll(':scope > td, :scope > th, [role=gridcell], [role=cell]'))
+      .map((c) => clean(c.textContent, 40))
+      .filter((t) => t && t.length < 40)
+      .slice(0, 3);
+    const lead = clean(cells.join(' · '), 80);
+    if (index >= 0 && row !== header) return `row ${position}${lead ? ` “${lead}”` : ''}`;
   }
   const form = el.closest('form');
   if (form) {

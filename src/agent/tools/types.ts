@@ -6,12 +6,20 @@ import type { ElementInfo } from '@/shared/types/page';
 
 /** What the agent remembers about element ids it has seen, for readable activity labels. */
 export class ElementMemory {
-  private map = new Map<number, Pick<ElementInfo, 'name' | 'role' | 'type'>>();
+  private map = new Map<number, Pick<ElementInfo, 'id' | 'name' | 'role' | 'type' | 'context'> & { batch: number }>();
+  private batch = 0;
   remember(elements: ElementInfo[]) {
-    for (const e of elements) this.map.set(e.id, { name: e.name, role: e.role, type: e.type });
+    this.batch++;
+    for (const e of elements) this.map.set(e.id, { id: e.id, name: e.name, role: e.role, type: e.type, context: e.context, batch: this.batch });
   }
   get(id: number) {
     return this.map.get(id);
+  }
+  /** Elements whose name matches, from the latest read that had any (older ones may be gone), in page order. */
+  named(name: string, matches: (expected: string, actual: string) => boolean) {
+    const found = [...this.map.values()].filter((e) => e.name && matches(name, e.name));
+    const newest = Math.max(0, ...found.map((e) => e.batch));
+    return found.filter((e) => e.batch === newest).sort((a, b) => a.id - b.id);
   }
   clear() {
     this.map.clear();

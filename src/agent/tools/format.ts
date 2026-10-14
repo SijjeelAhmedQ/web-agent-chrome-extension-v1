@@ -11,7 +11,7 @@ const IMPLIED_TYPES = new Set(['text', 'submit', 'button', 'reset', 'image', 'se
 const q = (s: string) => `"${s.replace(/"/g, "'")}"`;
 
 export function formatElement(e: ElementInfo): string {
-  const parts = [`[${e.id}]`, e.role === 'clickable' ? e.tag : e.role, e.name ? q(e.name) : '(no label)'];
+  const parts = [`[${e.id}]`, e.role === 'clickable' ? e.tag : e.role, e.name ? q(e.name) : '(no label — unknown action)'];
   if (e.type && !IMPLIED_TYPES.has(e.type) && e.type !== e.role) parts.push(`type=${e.type}`);
   if (e.value !== undefined && e.value !== '' && e.role !== 'link') parts.push(`value=${q(e.value)}`);
   else if (e.value === '' && /textbox|searchbox|combobox|spinbutton/.test(e.role)) parts.push('(empty)');

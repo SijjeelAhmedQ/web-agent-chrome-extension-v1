@@ -19,7 +19,34 @@ const quote = (s: string) => `“${clip(s, 40)}”`;
 
 function nameOf(ctx: ToolContext, elementId: number, fallback = 'the element'): string {
   const e = ctx.elements.get(elementId);
-  return e?.name ? quote(e.name) : fallback;
+  if (e?.name) return quote(e.name);
+  if (e?.context && fallback === 'the element') return `an unlabeled ${e.role === 'clickable' ? 'element' : e.role} in ${e.context}`;
+  return fallback;
+}
+
+const norm = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+
+/** Lenient: every word of one name appears in the other (“Arya STARK” ~ “STARK, Arya”). */
+function sameName(expected: string, actual: string): boolean {
+  const a = norm(expected).split(' ').filter(Boolean);
+  const b = norm(actual).split(' ').filter(Boolean);
+  if (!a.length) return true;
+  if (!b.length) return false;
+  return a.every((w) => b.includes(w)) || b.filter((w) => w !== 'icon').every((w) => a.includes(w));
+}
+
+/** A model that mixes up ids (common with small models) clicks the wrong row or icon: stop that. */
+function wrongTarget(ctx: ToolContext, elementId: number, expected: string): string | null {
+  const known = ctx.elements.get(elementId);
+  if (!expected.trim() || !known || sameName(expected, known.name)) return null;
+  const what = known.name ? `${known.role} “${clip(known.name, 50)}”` : `an unlabeled ${known.role === 'clickable' ? 'element' : known.role}`;
+  const others = ctx.elements
+    .named(expected, sameName)
+    .slice(0, 5)
+    .map((e) => `[${e.id}] ${e.role} “${clip(e.name, 50)}”${e.context ? ` in ${e.context}` : ''}`);
+  return `Not clicked: [${elementId}] is ${what}${known.context ? ` in ${known.context}` : ''}, not “${clip(expected, 50)}”. ${
+    others.length ? `Elements with that name: ${others.join('; ')}. Click the right id.` : 'Use find_element or read_page to find it.'
+  }`;
 }
 
 function isSecretField(ctx: ToolContext, elementId: number): boolean {
@@ -99,15 +126,21 @@ const findElement: AgentTool<{ query: string }> = {
   },
 };
 
-const click: AgentTool<{ id: number }> = {
+const click: AgentTool<{ id: number; name: string }> = {
   name: 'click',
-  description: 'Click an element (button, link, tab, checkbox, menu item, row…). Waits for the page to react.',
-  schema: z.object({ id }),
+  description:
+    'Click an element (button, link, tab, checkbox, menu item, row…). Waits for the page to react. Always pass name: the element’s name as listed — the click is refused if the id is a different element.',
+  schema: z.object({
+    id,
+    name: z.coerce.string().optional().default('').describe('The name of the element you mean, as listed (e.g. "Arya STARK"). Guards against a wrong id.'),
+  }),
   risk: 'sensitive',
   touchesPage: true,
   label: (a, ctx) => `Clicking ${nameOf(ctx, a.id)}`,
   assess: (a, ctx) => approvalFor(ctx, a.id, 'click', `Click ${nameOf(ctx, a.id, 'this')}?`),
   async execute(a, ctx) {
+    const mismatch = wrongTarget(ctx, a.id, a.name);
+    if (mismatch) return { output: mismatch, note: 'Wrong element — not clicked' };
     const before = await pageUrl(ctx);
     let res;
     try {
