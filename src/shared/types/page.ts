@@ -16,6 +16,8 @@ export interface ElementInfo {
   hasMenu?: boolean;
   disabled?: boolean;
   required?: boolean;
+  /** A field that shows a value but can’t be typed into. */
+  readonly?: boolean;
   href?: string;
   options?: string[];
   /** Dialog, form or table-row the element belongs to. */

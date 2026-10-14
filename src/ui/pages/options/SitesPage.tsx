@@ -2,7 +2,8 @@ import { App, Button, Checkbox, Dropdown, Input, Modal, Segmented, Select, Switc
 import { ArrowLeft, BookOpen, ChevronDown, Compass, FileText, Globe, ListOrdered, Plus, ShieldCheck, Sparkles, Trash2, Webhook, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { KNOWLEDGE_KINDS, knowledgeSection } from '@/agent/planner/siteKnowledge';
+import { KNOWLEDGE_KINDS, knowledgeBudget, knowledgeSection } from '@/agent/planner/siteKnowledge';
+import { contextWindowOf } from '@/agent/runtime/agentRun';
 import { BUILT_IN_TOOLS, CUSTOM_PREFIX } from '@/shared/constants/tools';
 import { SITE_TEMPLATES, type SiteTemplate } from '@/shared/constants/templates';
 import type { AgentConfig, CustomToolConfig, KnowledgeEntry, KnowledgeKind, SiteProfile, SkillConfig } from '@/shared/types/config';
@@ -26,7 +27,7 @@ const COLORS = ['#0e7490', '#10b981', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6'
 
 const newSite = (name = '', sites: string[] = []): SiteProfile => {
   const now = Date.now();
-  return { id: uid('site_'), name, description: '', color: COLORS[Math.floor(Math.random() * COLORS.length)], sites, enabled: true, providerId: null, model: '', agentIds: [], skillIds: [], disabledSkillIds: [], customToolIds: [], disabledToolIds: [], knowledge: [], createdAt: now, updatedAt: now };
+  return { id: uid('site_'), name, description: '', color: COLORS[Math.floor(Math.random() * COLORS.length)], sites, enabled: true, providerId: null, model: '', agentIds: [], skillIds: [], disabledSkillIds: [], customToolIds: [], disabledToolIds: [], neverClick: [], knowledge: [], createdAt: now, updatedAt: now };
 };
 
 const newEntry = (kind: KnowledgeKind): KnowledgeEntry => {
@@ -972,6 +973,23 @@ function SettingsTab({ site, update }: { site: SiteProfile; update: (patch: Part
           <div className="field-help">The setup is used when the agent’s tab is on one of these. A * matches any part.</div>
         </div>
         <div>
+          <FieldLabel hint="Exact button names">Never click these</FieldLabel>
+          <Select
+            mode="tags"
+            style={{ width: '100%' }}
+            value={site.neverClick ?? []}
+            onChange={(v: string[]) => update({ neverClick: v.map((x) => x.trim()).filter(Boolean) })}
+            tokenSeparators={[',']}
+            placeholder="e.g. Pharmac, Delete patient"
+            open={false}
+            suffixIcon={null}
+            aria-label="Buttons the agent never clicks"
+          />
+          <div className="field-help">
+            The agent stops before these and leaves them to you — even if it forgets a rule. Names must match the button exactly. A name here blocks that button everywhere on this site, pop-ups included (e.g. “Save” would also block the Save of the patient-file reason pop-up).
+          </div>
+        </div>
+        <div>
           <FieldLabel htmlFor="site-set-desc">Description</FieldLabel>
           <Input.TextArea id="site-set-desc" value={site.description} onChange={(e) => update({ description: e.target.value })} autoSize={{ minRows: 2, maxRows: 5 }} />
         </div>
@@ -991,9 +1009,12 @@ function SettingsTab({ site, update }: { site: SiteProfile; update: (patch: Part
 // ---------- Preview ----------
 
 function PreviewTab({ site }: { site: SiteProfile }) {
-  const { skills, customTools } = useAppSelector((s) => s.config.config);
+  const { skills, customTools, providers, settings } = useAppSelector((s) => s.config.config);
   const [request, setRequest] = useState(site.knowledge.find((k) => k.kind === 'workflow' && k.trigger)?.trigger ?? '');
-  const text = useMemo(() => knowledgeSection([site], request).text, [site, request]);
+  // The same room the agent gets: from this site's model, or the default connection.
+  const provider = providers.find((p) => p.id === site.providerId) ?? providers.find((p) => p.id === settings.defaultProviderId) ?? providers[0];
+  const budget = knowledgeBudget(provider ? contextWindowOf(provider) : undefined);
+  const text = useMemo(() => knowledgeSection([site], request, budget).text, [site, request, budget]);
   const siteSkills = site.skillIds.map((id) => skills.find((s) => s.id === id)?.name).filter(Boolean);
   const siteTools = site.customToolIds.map((id) => customTools.find((t) => t.id === id)?.label).filter(Boolean);
   return (
@@ -1012,6 +1033,8 @@ function PreviewTab({ site }: { site: SiteProfile }) {
             <Webhook size={11} /> Tools: {siteTools.length ? siteTools.join(', ') : 'none'}
           </span>
           {site.disabledToolIds.length > 0 && <span className="pill warning">Off here: {site.disabledToolIds.join(', ')}</span>}
+          {(site.neverClick ?? []).length > 0 && <span className="pill">Never clicks: {site.neverClick!.join(', ')}</span>}
+          <span className="pill">Room: ~{Math.round(budget / 1000)}k characters</span>
         </div>
         <pre className="spec-json mono site-preview">{text || 'No knowledge yet.'}</pre>
       </div>

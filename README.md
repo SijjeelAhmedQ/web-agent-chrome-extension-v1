@@ -75,6 +75,8 @@ Each site has:
 - **Skills and custom tools:** every agent gets them, but only on this site. *Remove all* clears the site's list; the skills and tools themselves stay in the Extension base.
 - **Built-in tools:** switch them off one by one, or use *All on* / *All off*. If *Read page* is off, a warning offers to turn reading back on, because without it the agent can't see the site.
 - **Model:** run every agent on this site with a given connection or model.
+- **Never click these (Settings):** exact button names, such as `Pharmac`. The agent stops before them and leaves them to you, even if it forgets a rule. Clicks on them are refused and no approval is asked. A name blocks that button everywhere on the site, pop-ups included.
+- **Room for knowledge:** about a fifth of the model's context window, between 3,000 and 24,000 characters. For example, Kaggle's 16k-token models get about 13,000 characters. The Preview shows the room.
 - **Preview:** shows exactly what an agent gets for a sample request.
 
 The side panel's status bar shows a chip, such as **Indici**, while a site setup is in use.

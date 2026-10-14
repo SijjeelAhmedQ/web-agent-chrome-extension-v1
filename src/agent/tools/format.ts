@@ -22,6 +22,7 @@ export function formatElement(e: ElementInfo): string {
   else if (e.expanded !== undefined) parts.push(e.expanded ? '(expanded)' : '(collapsed)');
   if (e.disabled) parts.push('(disabled)');
   if (e.required) parts.push('(required)');
+  if (e.readonly) parts.push('(read-only)');
   if (e.options?.length) parts.push(`options: ${e.options.join(' | ')}`);
   if (e.href) parts.push(`→ ${e.href}`);
   if (e.context) parts.push(`in ${e.context}`);

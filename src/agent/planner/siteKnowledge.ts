@@ -38,10 +38,19 @@ export function formatEntry(e: KnowledgeEntry): string {
 
 export const activeKnowledge = (profiles: SiteProfile[]) => profiles.flatMap((p) => p.knowledge.filter((k) => k.enabled && (k.title.trim() || k.content.trim())));
 
+/**
+ * How many characters of site knowledge fit a model: about a fifth of its context window
+ * (16k tokens → ~13k characters), never less than 3,000 or more than 24,000.
+ */
+export function knowledgeBudget(contextTokens: number | undefined): number {
+  if (!contextTokens) return 12_000;
+  return Math.min(24_000, Math.max(3_000, Math.round(contextTokens * 0.8)));
+}
+
 /** The prompt section for the sites the agent is on, within about `budget` characters. */
-export function knowledgeSection(profiles: SiteProfile[], request: string, budget = 6000): { text: string; left: number } {
+export function knowledgeSection(profiles: SiteProfile[], request: string, budget = 12_000): { text: string; left: number } {
   const entries = activeKnowledge(profiles);
-  if (!entries.length) return { text: '', left: 0 };
+  if (!entries.length && !profiles.some((p) => p.neverClick?.length)) return { text: '', left: 0 };
   const ranked = entries
     .map((e) => ({ e, score: relevance(e, request) }))
     .sort((a, b) => {
@@ -56,6 +65,10 @@ export function knowledgeSection(profiles: SiteProfile[], request: string, budge
     `## What the user has taught you about ${names}`,
     'This comes from the user and is correct for this website. Follow it over your own guesses. When a workflow matches the request, follow its steps in order.',
   ];
+  const never = [...new Set(profiles.flatMap((p) => p.neverClick ?? []).map((n) => n.trim()).filter(Boolean))];
+  if (never.length) {
+    lines.push('', `### Rule: Buttons you never click here`, `The user clicks these themselves: ${never.map((n) => `“${n}”`).join(', ')}. When everything before them is done, stop and tell the user it is ready.`);
+  }
   let used = lines.join('\n').length;
   const skipped: KnowledgeEntry[] = [];
   for (const { e } of ranked) {

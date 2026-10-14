@@ -39,6 +39,20 @@ function sameName(expected: string, actual: string): boolean {
   return a.every((w) => b.includes(w)) || b.filter((w) => w !== 'icon').every((w) => a.includes(w));
 }
 
+/** The element's name, when this site has buttons the agent must never click and it is one of them. */
+async function neverClickName(ctx: ToolContext, elementId: number): Promise<string | null> {
+  const list = (ctx.neverClick ?? []).map(norm).filter(Boolean);
+  if (!list.length) return null;
+  const info = await ctx.browser.send({ kind: 'describe', id: elementId }).catch(() => null);
+  const name = info?.name ?? ctx.elements.get(elementId)?.name ?? '';
+  return name && list.includes(norm(name)) ? name : null;
+}
+
+const neverClickOutcome = (name: string): ToolOutcome => ({
+  output: `Not clicked: “${name}” is on this site’s never-click list — the user clicks it themselves. Do not try to press it another way. Stop and tell the user what is ready for them.`,
+  note: `“${clip(name, 30)}” is for you to click`,
+});
+
 /** A model that mixes up ids (common with small models) clicks the wrong row or icon: stop that. */
 function wrongTarget(ctx: ToolContext, elementId: number, expected: string): string | null {
   const known = ctx.elements.get(elementId);
@@ -246,10 +260,16 @@ const click: AgentTool<{ id: number; name: string; double: boolean }> = {
   risk: 'sensitive',
   touchesPage: true,
   label: (a, ctx) => `${a.double ? 'Double-clicking' : 'Clicking'} ${nameOf(ctx, a.id)}`,
-  assess: (a, ctx) => approvalFor(ctx, a.id, 'click', `Click ${nameOf(ctx, a.id, 'this')}?`),
+  async assess(a, ctx) {
+    // A never-click button is refused, not offered for approval.
+    if (await neverClickName(ctx, a.id)) return null;
+    return approvalFor(ctx, a.id, 'click', `Click ${nameOf(ctx, a.id, 'this')}?`);
+  },
   async execute(a, ctx) {
     const mismatch = wrongTarget(ctx, a.id, a.name);
     if (mismatch) return { output: mismatch, note: 'Wrong element — not clicked' };
+    const never = await neverClickName(ctx, a.id);
+    if (never) return neverClickOutcome(never);
     return clickById(ctx, a.id, a.double);
   },
 };
@@ -287,7 +307,8 @@ const clickText: AgentTool<ClickTextArgs> = {
   label: (a) => `${a.double ? 'Double-clicking' : 'Clicking'} ${quote(a.text)}${a.near ? ` (with ${quote(a.near)})` : ''}`,
   async assess(a, ctx) {
     const res = await textTarget(a, ctx);
-    return res.total === 1 ? approvalFor(ctx, res.matches[0].id, 'click', `Click ${quote(a.text)}?`) : null;
+    if (res.total !== 1 || (await neverClickName(ctx, res.matches[0].id))) return null;
+    return approvalFor(ctx, res.matches[0].id, 'click', `Click ${quote(a.text)}?`);
   },
   async execute(a, ctx) {
     const res = await textTarget(a, ctx);
@@ -304,6 +325,8 @@ const clickText: AgentTool<ClickTextArgs> = {
         note: `${res.total} matches — not clicked`,
       };
     }
+    const never = await neverClickName(ctx, res.matches[0].id);
+    if (never) return neverClickOutcome(never);
     return clickById(ctx, res.matches[0].id, a.double);
   },
 };

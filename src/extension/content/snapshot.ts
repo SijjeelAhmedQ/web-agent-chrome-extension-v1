@@ -31,6 +31,7 @@ export function describeElement(el: Element): ElementInfo {
     else if (!['button', 'submit', 'reset', 'image'].includes(el.type)) info.value = clip(el.value, 120);
     if (el.placeholder && el.placeholder !== info.name) info.placeholder = clip(el.placeholder, 60);
     if (el.required) info.required = true;
+    if (el.readOnly && !['button', 'submit', 'reset', 'image', 'checkbox', 'radio'].includes(el.type)) info.readonly = true;
   } else if (el instanceof HTMLTextAreaElement) {
     info.value = clip(el.value, 200);
     if (el.placeholder && el.placeholder !== info.name) info.placeholder = clip(el.placeholder, 60);

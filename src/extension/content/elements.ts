@@ -134,10 +134,15 @@ export function accessibleName(el: Element): string {
     if (labels.length) return clean(labels.join(' '));
     if (el instanceof HTMLInputElement && ['button', 'submit', 'reset'].includes(el.type) && el.value) return clean(el.value);
     if (el instanceof HTMLInputElement && el.type === 'image') return clean(el.alt || el.value || el.title) || iconName(el) || 'Submit';
+    // Older forms lay out label and field in table cells: <td>Take:</td><td><input></td>.
+    const cellLabel = tableLabel(el);
+    if (cellLabel) return cellLabel;
     const placeholder = clean(el.getAttribute('placeholder'));
     if (placeholder) return placeholder;
     const title = clean(el.getAttribute('title'));
     if (title) return title;
+    const columnLabel = neighbourLabel(el);
+    if (columnLabel) return columnLabel;
     // A label-like sibling right before the field ("Name" <input>) is common in hand-built forms.
     const prev = el.previousElementSibling;
     if (prev && ['LABEL', 'SPAN', 'DIV', 'P'].includes(prev.tagName)) {
@@ -163,6 +168,38 @@ export function accessibleName(el: Element): string {
   if (labelledChild) return clean(labelledChild.getAttribute('aria-label'));
   const tooltip = tooltipOf(el) || tooltipOf(el.querySelector(`[title],${TOOLTIP_ATTRS.map((a) => `[${a}]`).join(',')}`));
   return tooltip || iconName(el);
+}
+
+const FIELDS = 'input:not([type=hidden]),select,textarea,button,[role=combobox],[contenteditable=true]';
+
+/** “Frequency: *” → “Frequency”. */
+const asLabel = (text: string) => text.replace(/[\s:*]+$/, '').replace(/^[\s*]+/, '').trim();
+
+/** The text of the cell before the field's cell, in the same table row (skipping empty cells). */
+function tableLabel(el: Element): string {
+  const cell = el.closest('td,th');
+  if (!cell) return '';
+  let prev = cell.previousElementSibling;
+  for (let i = 0; prev && i < 3; i++, prev = prev.previousElementSibling) {
+    if (prev.querySelector(FIELDS)) return '';
+    const text = asLabel(textOf(prev));
+    if (text) return text.length <= 40 ? text : '';
+  }
+  return '';
+}
+
+/** Grid layouts: <div><span>Take</span></div><div><input></div> — a short text box right before the field's box. */
+function neighbourLabel(el: Element): string {
+  let box = el.parentElement;
+  for (let depth = 0; box && depth < 2; depth++, box = box.parentElement) {
+    if (box.querySelectorAll(FIELDS).length > 1) return '';
+    const prev = box.previousElementSibling;
+    if (prev && !prev.querySelector(FIELDS) && !prev.matches(FIELDS)) {
+      const text = asLabel(textOf(prev));
+      if (text && text.length <= 40) return text;
+    }
+  }
+  return '';
 }
 
 /** Tooltip libraries move `title` into these (Bootstrap: data-original-title / data-bs-original-title). */

@@ -32,6 +32,8 @@ export interface ToolContext {
   signal: AbortSignal;
   elements: ElementMemory;
   skills: SkillConfig[];
+  /** Names of buttons the agent may never click on this site (from its site setup). */
+  neverClick?: string[];
 }
 
 export interface ToolOutcome {

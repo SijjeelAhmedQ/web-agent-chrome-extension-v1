@@ -12,7 +12,7 @@ import { BROWSER_TOOLS } from '../tools/browserTools';
 import { DEFAULT_CONTEXT_WINDOW } from '../llm/ollama';
 import type { ChatMessage, ToolCall } from '../llm/types';
 import { buildSystemPrompt } from '../planner/systemPrompt';
-import { knowledgeSection } from '../planner/siteKnowledge';
+import { knowledgeBudget, knowledgeSection } from '../planner/siteKnowledge';
 import { buildToolset, sitesFor, toolSpecs } from '../tools/registry';
 import { ElementMemory, type AgentTool, type ApprovalRequest, type ToolContext } from '../tools/types';
 import { budgetFor, clipToolOutput, compactMessages } from './context';
@@ -168,7 +168,14 @@ export class AgentRun {
     // Room for the conversation: the server's context window minus the tool definitions sent with every call.
     let budget = budgetFor(contextWindowOf(provider)) - JSON.stringify(specs).length;
     const byName = new Map(toolset.tools.map((t) => [t.name, t]));
-    const ctx: ToolContext = { browser, settings: config.settings, signal: this.abort.signal, elements: new ElementMemory(), skills: toolset.onDemandSkills };
+    const ctx: ToolContext = {
+      browser,
+      settings: config.settings,
+      signal: this.abort.signal,
+      elements: new ElementMemory(),
+      skills: toolset.onDemandSkills,
+      neverClick: toolset.sites.flatMap((s) => s.neverClick ?? []),
+    };
 
     const pageNote = scriptableReason(url) ?? undefined;
     const system = buildSystemPrompt({
@@ -178,7 +185,7 @@ export class AgentRun {
       onDemandSkills: toolset.onDemandSkills,
       page: { title: tab?.title ?? '', url, note: pageNote ? `${pageNote} Navigate to a website if the task needs one.` : undefined },
       readOnly: matchesSite(url, config.settings.readOnlySites),
-      siteKnowledge: knowledgeSection(toolset.sites, request).text,
+      siteKnowledge: knowledgeSection(toolset.sites, request, knowledgeBudget(contextWindowOf(provider))).text,
     });
     // Earlier answers are context, not facts about the page now.
     const history = this.options.history.slice(-12).map((m): ChatMessage => (m.role === 'assistant' ? { ...m, content: `(Earlier answer — may be out of date)\n${m.content}` } : m));
@@ -459,7 +466,7 @@ const CUT_OFF_PROMPT = 'Your last reply was cut off because the conversation got
 const CONTINUE_PROMPT = 'You have not finished the task yet — you described a next step instead of doing it. Continue by calling the next tool. If the task is truly complete, reply with your final answer for the user.';
 
 /** The server's context window in tokens, when known. */
-function contextWindowOf(provider: ProviderConfig): number | undefined {
+export function contextWindowOf(provider: ProviderConfig): number | undefined {
   if (provider.contextWindow) return provider.contextWindow;
   if (provider.preset === 'kaggle') return KAGGLE_CONTEXT_WINDOW;
   return provider.kind === 'ollama' ? DEFAULT_CONTEXT_WINDOW : undefined;

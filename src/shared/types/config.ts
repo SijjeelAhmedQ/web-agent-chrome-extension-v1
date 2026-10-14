@@ -145,6 +145,8 @@ export interface SiteProfile {
   customToolIds: string[];
   /** Tools switched off on this site: built-in ids and custom tools as `custom:<id>`. */
   disabledToolIds: string[];
+  /** Buttons and links the agent may never click here (exact names, e.g. “Pharmac”) — the user clicks them. */
+  neverClick?: string[];
   knowledge: KnowledgeEntry[];
   createdAt: number;
   updatedAt: number;
