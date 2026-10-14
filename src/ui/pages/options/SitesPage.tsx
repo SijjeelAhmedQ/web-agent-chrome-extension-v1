@@ -16,6 +16,7 @@ import { NamedIcon } from '../../components/icons';
 import { AvatarStack, EmptyBlock, FieldLabel, PageHeader, Section } from './parts';
 import { SkillEditor } from './SkillsPage';
 import { CustomToolEditor } from './ToolsPage';
+import { FitList, SectionGroup } from './layout';
 
 const KIND_ICON: Record<KnowledgeKind, typeof Compass> = { rule: ShieldCheck, navigation: Compass, page: FileText, workflow: ListOrdered };
 const KIND_HELP: Record<KnowledgeKind, string> = {
@@ -94,7 +95,7 @@ export function SitesPage() {
           }
         />
       ) : (
-        <div className="list-card">
+        <FitList className="list-card" label="Sites">
           {sites.map((site) => (
             <div key={site.id} className={`list-row site-row ${site.enabled ? '' : 'is-off'}`} role="button" tabIndex={0} onClick={() => navigate(`/sites/${site.id}`)} onKeyDown={(e) => e.key === 'Enter' && navigate(`/sites/${site.id}`)}>
               <SiteMark site={site} />
@@ -118,7 +119,7 @@ export function SitesPage() {
               </span>
             </div>
           ))}
-        </div>
+        </FitList>
       )}
 
       <NewSiteModal
@@ -248,6 +249,7 @@ export function SiteDetailPage() {
       {!site.sites.length && <div className="inline-note warning">Add the site’s address under Settings — until then this setup is never used.</div>}
 
       <Tabs
+        className="site-tabs tabs-fill fill"
         activeKey={tab}
         onChange={setTab}
         items={[
@@ -311,7 +313,7 @@ function KnowledgeTab({ site }: { site: SiteProfile }) {
           }
         />
       ) : (
-        <div className="list-card">
+        <FitList className="list-card" label="Knowledge">
           {shown.map((k) => {
             const Icon = KIND_ICON[k.kind];
             return (
@@ -330,7 +332,7 @@ function KnowledgeTab({ site }: { site: SiteProfile }) {
               </div>
             );
           })}
-        </div>
+        </FitList>
       )}
 
       <KnowledgeEditor
@@ -482,14 +484,17 @@ const toolLabel = (key: string, customTools: CustomToolConfig[]) => {
 function AgentsTab({ site }: { site: SiteProfile }) {
   const { agents } = useAppSelector((s) => s.config.config);
   const { update } = useSiteSwitches(site);
+  // One agent's switches are open at a time; the first chosen agent's to begin with.
+  const [expanded, setExpanded] = useState<string | null>(site.agentIds[0] ?? null);
   const select = (agent: AgentConfig, on: boolean) =>
     on
       ? // Its skills and tools come on here — any that were switched off on this site come back on.
+        (setExpanded(agent.id),
         update({
           agentIds: [...site.agentIds, agent.id],
           disabledSkillIds: site.disabledSkillIds.filter((id) => !agent.skillIds.includes(id)),
           disabledToolIds: site.disabledToolIds.filter((id) => !agent.toolIds.includes(id)),
-        })
+        }))
       : update({ agentIds: site.agentIds.filter((id) => id !== agent.id) });
 
   return (
@@ -505,10 +510,11 @@ function AgentsTab({ site }: { site: SiteProfile }) {
           Clear
         </Button>
       </div>
-      <div className="list-card">
+      <FitList className="list-card" label="Agents" estimate={60}>
         {agents.map((a) => {
           const on = site.agentIds.includes(a.id);
           const first = site.agentIds[0] === a.id;
+          const open = on && expanded === a.id;
           return (
             <div key={a.id} className={`site-agent ${on ? 'on' : ''}`}>
               <div className="site-agent-head">
@@ -526,12 +532,27 @@ function AgentsTab({ site }: { site: SiteProfile }) {
                       Make default
                     </Button>
                   ))}
+                {on && (
+                  <button
+                    type="button"
+                    className="site-agent-toggle"
+                    aria-expanded={open}
+                    aria-controls={`site-agent-${a.id}`}
+                    onClick={() => setExpanded(open ? null : a.id)}
+                  >
+                    Skills &amp; tools <ChevronDown size={14} className={`chev ${open ? 'open' : ''}`} aria-hidden />
+                  </button>
+                )}
               </div>
-              {on && <AgentOnSite site={site} agent={a} />}
+              {open && (
+                <div id={`site-agent-${a.id}`}>
+                  <AgentOnSite site={site} agent={a} />
+                </div>
+              )}
             </div>
           );
         })}
-      </div>
+      </FitList>
     </>
   );
 }
@@ -630,6 +651,7 @@ function SkillsTab({ site }: { site: SiteProfile }) {
 
   return (
     <>
+      <SectionGroup>
       <Section
         title={`${site.name}’s own skills`}
         description={`Instructions every agent gets while it is on ${site.name}.`}
@@ -668,6 +690,7 @@ function SkillsTab({ site }: { site: SiteProfile }) {
             New skill
           </Button>
         </div>
+        <FitList label="Site skills">
         {own.map((s) => (
           <div key={s.id} className="list-row" role="button" tabIndex={0} onClick={() => setEditing({ skill: s, isNew: false })} onKeyDown={(e) => e.key === 'Enter' && setEditing({ skill: s, isNew: false })}>
             <span className="list-icon">
@@ -685,6 +708,7 @@ function SkillsTab({ site }: { site: SiteProfile }) {
             </span>
           </div>
         ))}
+        </FitList>
         {own.length === 0 && <div className="muted small padded-note">None yet. Most site know-how fits in the knowledge base; use a skill for longer instructions.</div>}
       </Section>
 
@@ -704,6 +728,7 @@ function SkillsTab({ site }: { site: SiteProfile }) {
           )
         }
       >
+        <FitList label="Agents’ skills">
         {fromAgents.map((s) => (
           <div key={s.id} className={`tool-row ${sw.skillOn(s.id) ? '' : 'is-off'}`}>
             <span className="list-icon">
@@ -719,8 +744,10 @@ function SkillsTab({ site }: { site: SiteProfile }) {
             </span>
           </div>
         ))}
+        </FitList>
         {fromAgents.length === 0 && <div className="muted small padded-note">{siteAgents.length ? 'These agents have no other skills.' : 'No agents chosen for this site yet.'}</div>}
       </Section>
+      </SectionGroup>
 
       <SkillEditor
         value={editing}
@@ -771,6 +798,7 @@ function ToolsTab({ site }: { site: SiteProfile }) {
   return (
     <>
       <ReadPageWarning site={site} />
+      <SectionGroup>
       <Section
         title="Built-in tools on this site"
         description="Switch a tool off to keep agents from using it here — e.g. no navigating away, no typing."
@@ -785,6 +813,7 @@ function ToolsTab({ site }: { site: SiteProfile }) {
           </span>
         }
       >
+        <FitList label="Built-in tools">
         {BUILT_IN_TOOLS.map((t) => {
           const on = sw.toolOn(t.id);
           return (
@@ -803,6 +832,7 @@ function ToolsTab({ site }: { site: SiteProfile }) {
             </div>
           );
         })}
+        </FitList>
       </Section>
 
       <Section
@@ -843,6 +873,7 @@ function ToolsTab({ site }: { site: SiteProfile }) {
             New custom tool
           </Button>
         </div>
+        <FitList label="Custom tools">
         {own.map((t) => (
           <div key={t.id} className="tool-row clickable" role="button" tabIndex={0} onClick={() => setEditing({ tool: t, isNew: false })} onKeyDown={(e) => e.key === 'Enter' && setEditing({ tool: t, isNew: false })}>
             <span className="list-icon">
@@ -861,6 +892,7 @@ function ToolsTab({ site }: { site: SiteProfile }) {
             </span>
           </div>
         ))}
+        </FitList>
       </Section>
 
       {agentCustom.length > 0 && (
@@ -877,6 +909,7 @@ function ToolsTab({ site }: { site: SiteProfile }) {
             </span>
           }
         >
+          <FitList label="Agents’ custom tools">
           {agentCustom.map(({ key, tool }) => (
             <div key={key} className={`tool-row ${sw.toolOn(key) ? '' : 'is-off'}`}>
               <span className="list-icon">
@@ -892,8 +925,10 @@ function ToolsTab({ site }: { site: SiteProfile }) {
               </span>
             </div>
           ))}
+          </FitList>
         </Section>
       )}
+      </SectionGroup>
 
       <CustomToolEditor
         value={editing}
@@ -1028,8 +1063,9 @@ function PreviewTab({ site }: { site: SiteProfile }) {
   const text = useMemo(() => knowledgeSection([site], request, budget).text, [site, request, budget]);
   const siteSkills = site.skillIds.map((id) => skills.find((s) => s.id === id)?.name).filter(Boolean);
   const siteTools = site.customToolIds.map((id) => customTools.find((t) => t.id === id)?.label).filter(Boolean);
+  const editor = useKnowledgeTextEditor(site);
   return (
-    <>
+    <SectionGroup>
       <Section
         title="What the agent gets"
         description={`For a request on ${site.name}. Everything goes in while it fits; workflows that match the request come first.`}
@@ -1039,7 +1075,7 @@ function PreviewTab({ site }: { site: SiteProfile }) {
           </Button>
         }
       >
-        <div className="form-stack padded">
+        <div className="form-stack padded fill preview-pane">
           <div>
             <FieldLabel htmlFor="site-preview">Try a request</FieldLabel>
             <Input id="site-preview" value={request} onChange={(e) => setRequest(e.target.value)} placeholder="e.g. Goto Patients and select Search & List and select Arya Stark" />
@@ -1058,13 +1094,19 @@ function PreviewTab({ site }: { site: SiteProfile }) {
           <pre className="spec-json mono site-preview">{text || 'No knowledge yet.'}</pre>
         </div>
       </Section>
-      <KnowledgeTextEditor site={site} />
-    </>
+      <Section
+        title="Knowledge as text"
+        description="The whole knowledge base in the format the agent reads. Copy it, edit it, or paste text in — then Apply turns every “### Kind: Title” block into an entry."
+        actions={editor.actions}
+      >
+        {editor.body}
+      </Section>
+    </SectionGroup>
   );
 }
 
 /** The whole knowledge base as editable text: copy it, paste into it, and apply it back as entries. */
-function KnowledgeTextEditor({ site }: { site: SiteProfile }) {
+function useKnowledgeTextEditor(site: SiteProfile) {
   const dispatch = useAppDispatch();
   const { message } = App.useApp();
   const copy = useCopy();
@@ -1104,11 +1146,8 @@ function KnowledgeTextEditor({ site }: { site: SiteProfile }) {
     setRemoveMissing(false);
   };
 
-  return (
-    <Section
-      title="Knowledge as text"
-      description="The whole knowledge base in the format the agent reads. Copy it, edit it, or paste text in — then Apply turns every “### Kind: Title” block into an entry."
-      actions={
+  return {
+    actions: (
         <span className="row-gap">
           <Button size="small" icon={<Copy size={13} />} onClick={() => void copy(draft)} disabled={!draft.trim()}>
             Copy
@@ -1123,9 +1162,10 @@ function KnowledgeTextEditor({ site }: { site: SiteProfile }) {
             Apply
           </Button>
         </span>
-      }
-    >
-      <div className="form-stack padded">
+    ),
+    body: (
+      <>
+      <div className="form-stack padded fill knowledge-text">
         <Input.TextArea
           className="mono-area"
           value={draft}
@@ -1166,6 +1206,7 @@ function KnowledgeTextEditor({ site }: { site: SiteProfile }) {
           )}
         </div>
       </Modal>
-    </Section>
-  );
+      </>
+    ),
+  };
 }

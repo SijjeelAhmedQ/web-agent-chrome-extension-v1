@@ -7,8 +7,9 @@ import { formatDuration } from '@/shared/utils';
 import { useAppSelector } from '@/store';
 import { ActivityCard } from '../../components/Activity';
 import { Markdown } from '../../components/Markdown';
-import { TaskList, TaskStatusIcon } from '../../components/TaskList';
+import { TaskRow, TaskStatusIcon } from '../../components/TaskList';
 import { EmptyBlock, PageHeader } from './parts';
+import { FitList } from './layout';
 
 type Filter = 'all' | 'running' | 'done' | 'failed' | 'cancelled';
 
@@ -38,7 +39,7 @@ export function ActivityPage() {
       {tasks.length === 0 ? (
         <EmptyBlock icon={<History size={22} />} title="No activity yet" text="Tasks you run from the side panel will appear here." />
       ) : (
-        <div className="activity-layout">
+        <div className="activity-layout fill">
           <div className="activity-list-pane">
             <div className="activity-tools">
               <Input allowClear prefix={<Search size={14} className="muted" />} placeholder="Search tasks" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search tasks" />
@@ -56,7 +57,15 @@ export function ActivityPage() {
                 ]}
               />
             </div>
-            <div className="activity-list-scroll">{visible.length ? <TaskList tasks={visible} selectedId={selected?.id} onSelect={(t) => setSelectedId(t.id)} /> : <div className="muted small pad">No tasks match.</div>}</div>
+            {visible.length ? (
+              <FitList className="activity-list-fit" itemsAs="ul" itemsClassName="task-list" label="Tasks" estimate={76}>
+                {visible.map((t) => (
+                  <TaskRow key={t.id} task={t} selected={selected?.id === t.id} onSelect={(task) => setSelectedId(task.id)} />
+                ))}
+              </FitList>
+            ) : (
+              <div className="muted small pad">No tasks match.</div>
+            )}
           </div>
           <div className="activity-detail-pane">
             {selected ? (

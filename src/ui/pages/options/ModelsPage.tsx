@@ -11,6 +11,7 @@ import { toAgentError } from '@/shared/utils/errors';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { configActions } from '@/store/configSlice';
 import { FieldLabel, PageHeader, Section } from './parts';
+import { FitList } from './layout';
 
 type TestState = { status: 'idle' | 'testing' | 'ok' | 'error'; message?: string };
 
@@ -103,7 +104,7 @@ export function ModelsPage() {
           <PresetGrid onPick={startFromPreset} />
         </Section>
       ) : (
-        <div className="list-card">
+        <FitList className="list-card" label="Connections" estimate={70}>
           {providers.map((p) => {
             const preset = presetById(p.preset);
             const test = tests[p.id] ?? { status: 'idle' };
@@ -164,7 +165,7 @@ export function ModelsPage() {
               </div>
             );
           })}
-        </div>
+        </FitList>
       )}
 
       <p className="footnote">

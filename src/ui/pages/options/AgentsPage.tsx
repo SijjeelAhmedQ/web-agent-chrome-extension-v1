@@ -10,6 +10,7 @@ import { configActions } from '@/store/configSlice';
 import { AgentAvatar } from '../../components/Brand';
 import { AgentEditor } from './AgentEditor';
 import { PageHeader } from './parts';
+import { FitList } from './layout';
 
 const POLICY_LABEL = { smart: 'Asks before important actions', always: 'Asks before every action', never: 'Acts without asking' } as const;
 
@@ -84,7 +85,7 @@ export function AgentsPage() {
         }
       />
 
-      <div className="card-grid">
+      <FitList layout="grid" minItemWidth={260} gap={14} label="Agents" estimate={210}>
         {agents.map((a) => {
           const toolCount = a.toolIds.filter((id) => !id.startsWith('custom:') || customTools.some((t) => `custom:${t.id}` === id)).length;
           const skillCount = a.skillIds.filter((id) => skills.some((s) => s.id === id)).length;
@@ -171,14 +172,14 @@ export function AgentsPage() {
             </div>
           );
         })}
-        <button type="button" className="agent-card add" onClick={create}>
+        <button key="add" type="button" className="agent-card add" onClick={create}>
           <span className="add-icon">
             <Plus size={18} />
           </span>
           <span>Create an agent</span>
           <span className="muted small">For a site, a workflow or a team</span>
         </button>
-      </div>
+      </FitList>
 
       <AgentEditor
         agent={editing}

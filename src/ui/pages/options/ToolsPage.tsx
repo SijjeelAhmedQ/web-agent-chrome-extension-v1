@@ -11,7 +11,8 @@ import { configActions } from '@/store/configSlice';
 import { AgentAvatar } from '../../components/Brand';
 import { NamedIcon } from '../../components/icons';
 import { BuiltInToolEditor } from './BuiltInToolEditor';
-import { AvatarStack, EmptyBlock, FieldLabel, PageHeader, Section } from './parts';
+import { AvatarStack, EmptyBlock, FieldLabel, PageHeader } from './parts';
+import { Accordion, FitList, useFitMode } from './layout';
 
 const RISK = {
   read: { label: 'Reads only', cls: '' },
@@ -74,9 +75,18 @@ export function ToolsPage() {
         }
       />
 
-      {(Object.keys(TOOL_CATEGORIES) as ToolCategory[]).map((cat) => (
-        <Section key={cat} title={TOOL_CATEGORIES[cat].label} description={TOOL_CATEGORIES[cat].description}>
-          {BUILT_IN_TOOLS.filter((t) => t.category === cat).map((t) => {
+      <Accordion
+        panels={[
+          ...(Object.keys(TOOL_CATEGORIES) as ToolCategory[]).map((cat) => {
+            const list = BUILT_IN_TOOLS.filter((t) => t.category === cat);
+            return {
+              key: cat,
+              title: TOOL_CATEGORIES[cat].label,
+              description: TOOL_CATEGORIES[cat].description,
+              meta: `${list.filter((t) => !settings.disabledToolIds.includes(t.id)).length} of ${list.length} on`,
+              children: (
+                <FitList className="list-card" label={TOOL_CATEGORIES[cat].label}>
+          {list.map((t) => {
             const on = !settings.disabledToolIds.includes(t.id);
             const override = settings.toolOverrides?.[t.id];
             return (
@@ -108,10 +118,17 @@ export function ToolsPage() {
               </div>
             );
           })}
-        </Section>
-      ))}
-
-      <Section title="Custom tools" description="Call your own HTTP endpoints — a backend, an automation webhook, an internal API.">
+                </FitList>
+              ),
+            };
+          }),
+          {
+            key: 'custom',
+            title: 'Custom tools',
+            description: 'Call your own HTTP endpoints — a backend, an automation webhook, an internal API.',
+            meta: `${customTools.length}`,
+            children: (
+              <FitList className="list-card" label="Custom tools">
         {customTools.length === 0 ? (
           <EmptyBlock icon={<Webhook size={20} />} title="No custom tools" text="Give agents new abilities by connecting an endpoint." action={<Button onClick={() => setEditing({ tool: newTool(), isNew: true })}>Create a tool</Button>} />
         ) : (
@@ -140,7 +157,11 @@ export function ToolsPage() {
             </div>
           ))
         )}
-      </Section>
+              </FitList>
+            ),
+          },
+        ]}
+      />
 
       <BuiltInToolEditor meta={viewing} onClose={() => setViewing(null)} />
 
@@ -201,6 +222,7 @@ export function CustomToolEditor({ value, existingNames, onClose, onSave, onDele
   const [draft, setDraft] = useState<CustomToolConfig | null>(null);
   const [assigned, setAssigned] = useState<string[]>([]);
   const [nameTouched, setNameTouched] = useState(false);
+  const fit = useFitMode();
 
   useEffect(() => {
     if (!value) return;
@@ -229,7 +251,8 @@ export function CustomToolEditor({ value, existingNames, onClose, onSave, onDele
     <Drawer
       open
       onClose={onClose}
-      width={640}
+width={fit ? 'min(980px, 94vw)' : 640}
+      rootClassName="fit-drawer"
       title={value.isNew ? 'New custom tool' : draft.label || draft.name}
       footer={
         <div className="drawer-foot">
@@ -246,7 +269,9 @@ export function CustomToolEditor({ value, existingNames, onClose, onSave, onDele
         </div>
       }
     >
-      <div className="form-stack">
+      <div className="drawer-cols-wrap">
+      <div className="form-stack drawer-cols">
+        <div className="drawer-col">
         <div className="two-col">
           <div>
             <FieldLabel htmlFor="tool-label">Name</FieldLabel>
@@ -290,13 +315,15 @@ export function CustomToolEditor({ value, existingNames, onClose, onSave, onDele
           </div>
           <div className="field-help">{draft.method === 'GET' ? 'Arguments are sent as query parameters.' : 'Arguments are sent as a JSON body.'}</div>
         </div>
-        <div>
+        <div className="fill fill-textarea">
           <FieldLabel htmlFor="tool-headers" hint="Optional · one per line">
             Headers
           </FieldLabel>
           <Input.TextArea id="tool-headers" className="mono-area" value={draft.headers} onChange={(e) => set({ headers: e.target.value })} autoSize={{ minRows: 2, maxRows: 6 }} placeholder="Authorization: Bearer …" />
           <div className="field-help">Stored only in this browser.</div>
         </div>
+        </div>
+        <div className="drawer-col">
         <div>
           <FieldLabel>Parameters</FieldLabel>
           <div className="param-list">
@@ -329,9 +356,9 @@ export function CustomToolEditor({ value, existingNames, onClose, onSave, onDele
         {siteName ? (
           <div className="inline-note">Every agent can use it while you are on {siteName}.</div>
         ) : (
-        <div>
+        <div className="fill">
           <FieldLabel>Agents with this tool</FieldLabel>
-          <div className="check-list">
+          <FitList className="check-list" label="Agents" estimate={44}>
             {agents.map((a) => (
               <label key={a.id} className="check-row compact">
                 <Checkbox checked={assigned.includes(a.id)} onChange={(e) => setAssigned((ids) => (e.target.checked ? [...ids, a.id] : ids.filter((x) => x !== a.id)))} />
@@ -339,13 +366,15 @@ export function CustomToolEditor({ value, existingNames, onClose, onSave, onDele
                 <span className="check-title">{a.name}</span>
               </label>
             ))}
-          </div>
+          </FitList>
         </div>
         )}
         <Collapse
           size="small"
           items={[{ key: 'spec', label: 'Exactly what the model receives', children: <pre className="spec-json mono">{JSON.stringify(specOf(customTool(draft)), null, 2)}</pre> }]}
         />
+        </div>
+      </div>
       </div>
     </Drawer>
   );

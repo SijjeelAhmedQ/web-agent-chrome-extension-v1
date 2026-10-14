@@ -10,6 +10,7 @@ import { toAgentError } from '@/shared/utils/errors';
 import { useAppSelector } from '@/store';
 import { AgentAvatar } from '../../components/Brand';
 import { NamedIcon } from '../../components/icons';
+import { Accordion, FitList, useFitMode } from './layout';
 import { FieldLabel } from './parts';
 
 interface Props {
@@ -38,6 +39,7 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
   const [models, setModels] = useState<string[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
+  const fit = useFitMode();
 
   useEffect(() => {
     setDraft(agent ? structuredClone(agent) : null);
@@ -78,7 +80,8 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
     <Drawer
       open={!!agent}
       onClose={onClose}
-      width={620}
+      width={fit ? 'min(980px, 94vw)' : 620}
+      rootClassName="fit-drawer"
       title={
         <div className="drawer-title">
           <AgentAvatar avatar={draft.avatar} size={30} />
@@ -101,6 +104,7 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
       }
     >
       <Tabs
+        className="tabs-fill"
         activeKey={tab}
         onChange={setTab}
         items={[
@@ -243,17 +247,17 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
             key: 'tools',
             label: `Tools · ${toolCount}`,
             children: (
-              <div className="form-stack">
-                {categories.map((cat) => {
-                  const tools = BUILT_IN_TOOLS.filter((t) => t.category === cat);
-                  const allOn = tools.every((t) => draft.toolIds.includes(t.id));
-                  return (
-                    <div key={cat} className="tool-group">
-                      <div className="tool-group-head">
-                        <div>
-                          <div className="tool-group-title">{TOOL_CATEGORIES[cat].label}</div>
-                          <div className="tool-group-desc">{TOOL_CATEGORIES[cat].description}</div>
-                        </div>
+              <Accordion
+                panels={[
+                  ...categories.map((cat) => {
+                    const tools = BUILT_IN_TOOLS.filter((t) => t.category === cat);
+                    const allOn = tools.every((t) => draft.toolIds.includes(t.id));
+                    return {
+                      key: cat,
+                      title: TOOL_CATEGORIES[cat].label,
+                      description: TOOL_CATEGORIES[cat].description,
+                      meta: `${tools.filter((t) => draft.toolIds.includes(t.id)).length} of ${tools.length}`,
+                      actions: (
                         <button
                           type="button"
                           className="link-btn small"
@@ -261,63 +265,70 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
                         >
                           {allOn ? 'Turn all off' : 'Turn all on'}
                         </button>
-                      </div>
-                      {tools.map((t) => {
-                        const off = settings.disabledToolIds.includes(t.id);
-                        return (
-                          <label key={t.id} className={`check-row ${off ? 'is-off' : ''}`}>
-                            <Checkbox checked={draft.toolIds.includes(t.id)} onChange={(e) => toggleTool(t.id, e.target.checked)} />
-                            <span className="check-icon">
-                              <NamedIcon name={t.icon} size={15} />
-                            </span>
-                            <span className="check-text">
-                              <span className="check-title">{t.label}</span>
-                              <span className="check-desc">{t.description}</span>
-                            </span>
-                            {off ? <span className="pill">Off everywhere</span> : <span className={`pill ${RISK_PILL[t.risk].cls}`}>{RISK_PILL[t.risk].label}</span>}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
-                <div className="tool-group">
-                  <div className="tool-group-head">
-                    <div>
-                      <div className="tool-group-title">Custom tools</div>
-                      <div className="tool-group-desc">Your own HTTP tools, created in Tools</div>
-                    </div>
-                  </div>
-                  {customTools.length === 0 && <div className="muted small pad">No custom tools yet.</div>}
-                  {customTools.map((t) => {
-                    const key = `${CUSTOM_PREFIX}${t.id}`;
-                    return (
-                      <label key={t.id} className="check-row">
-                        <Checkbox checked={draft.toolIds.includes(key)} onChange={(e) => toggleTool(key, e.target.checked)} />
-                        <span className="check-icon">
-                          <NamedIcon name="Webhook" size={15} />
-                        </span>
-                        <span className="check-text">
-                          <span className="check-title">{t.label || t.name}</span>
-                          <span className="check-desc">{t.description}</span>
-                        </span>
-                        {t.needsApproval && <span className="pill warning">Asks first</span>}
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
+                      ),
+                      children: (
+                        <FitList layout="grid" minItemWidth={400} gap={0} className="check-grid" label={TOOL_CATEGORIES[cat].label} estimate={58}>
+                          {tools.map((t) => {
+                            const off = settings.disabledToolIds.includes(t.id);
+                            return (
+                              <label key={t.id} className={`check-row ${off ? 'is-off' : ''}`}>
+                                <Checkbox checked={draft.toolIds.includes(t.id)} onChange={(e) => toggleTool(t.id, e.target.checked)} />
+                                <span className="check-icon">
+                                  <NamedIcon name={t.icon} size={15} />
+                                </span>
+                                <span className="check-text">
+                                  <span className="check-title">{t.label}</span>
+                                  <span className="check-desc">{t.description}</span>
+                                </span>
+                                {off ? <span className="pill">Off everywhere</span> : <span className={`pill ${RISK_PILL[t.risk].cls}`}>{RISK_PILL[t.risk].label}</span>}
+                              </label>
+                            );
+                          })}
+                        </FitList>
+                      ),
+                    };
+                  }),
+                  {
+                    key: 'custom',
+                    title: 'Custom tools',
+                    description: 'Your own HTTP tools, created in Tools',
+                    meta: `${customTools.filter((t) => draft.toolIds.includes(`${CUSTOM_PREFIX}${t.id}`)).length} of ${customTools.length}`,
+                    children: (
+                      <FitList layout="grid" minItemWidth={400} gap={0} className="check-grid" label="Custom tools" estimate={58}>
+                        {customTools.length === 0 && <div key="none" className="muted small pad">No custom tools yet.</div>}
+                        {customTools.map((t) => {
+                          const key = `${CUSTOM_PREFIX}${t.id}`;
+                          return (
+                            <label key={t.id} className="check-row">
+                              <Checkbox checked={draft.toolIds.includes(key)} onChange={(e) => toggleTool(key, e.target.checked)} />
+                              <span className="check-icon">
+                                <NamedIcon name="Webhook" size={15} />
+                              </span>
+                              <span className="check-text">
+                                <span className="check-title">{t.label || t.name}</span>
+                                <span className="check-desc">{t.description}</span>
+                              </span>
+                              {t.needsApproval && <span className="pill warning">Asks first</span>}
+                            </label>
+                          );
+                        })}
+                      </FitList>
+                    ),
+                  },
+                ]}
+              />
             ),
           },
           {
             key: 'skills',
             label: `Skills · ${draft.skillIds.filter((id) => skills.some((s) => s.id === id)).length}`,
             children: (
-              <div className="form-stack">
+              <div className="form-stack fill">
                 <p className="muted small" style={{ margin: 0 }}>
                   Skills are reusable know-how. “Always on” skills are part of every task; “When relevant” skills are loaded by the agent when it needs them.
                 </p>
                 {skills.length === 0 && <div className="muted small">No skills yet — create them in Skills.</div>}
+                <FitList layout="grid" minItemWidth={400} gap={0} className="check-grid" label="Skills" estimate={58}>
                 {skills.map((s) => (
                   <label key={s.id} className="check-row">
                     <Checkbox checked={draft.skillIds.includes(s.id)} onChange={(e) => toggleSkill(s.id, e.target.checked)} />
@@ -331,6 +342,7 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
                     <span className={`pill ${s.activation === 'always' ? 'success' : ''}`}>{s.activation === 'always' ? 'Always on' : 'When relevant'}</span>
                   </label>
                 ))}
+                </FitList>
               </div>
             ),
           },
@@ -343,14 +355,14 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
               const candidates = agents.filter((a) => a.id !== draft.id && !a.team?.memberIds.length);
               const leads = team.memberIds.length > 0;
               return (
-                <div className="form-stack">
+                <div className="form-stack fill">
                   <p className="muted small" style={{ margin: 0 }}>
                     A team agent doesn’t do the work itself: it splits your request into one task per member — for example medications to the Medication agent, diagnoses to the Diagnosis agent — and the members do their parts.
                   </p>
-                  <div>
+                  <div className="fill">
                     <FieldLabel hint={leads ? `${team.memberIds.length} selected` : 'None — works alone'}>Team members</FieldLabel>
-                    <div className="check-list">
-                      {candidates.length === 0 && <div className="muted small pad">Create the member agents first.</div>}
+                    <FitList layout="grid" minItemWidth={320} gap={0} className="check-list check-grid" label="Team members" estimate={52}>
+                      {candidates.length === 0 && <div key="none" className="muted small pad">Create the member agents first.</div>}
                       {candidates.map((a) => (
                         <label key={a.id} className="check-row compact">
                           <Checkbox
@@ -364,7 +376,7 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
                           </span>
                         </label>
                       ))}
-                    </div>
+                    </FitList>
                   </div>
                   {leads && (
                     <>

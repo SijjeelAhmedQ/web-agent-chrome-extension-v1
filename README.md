@@ -137,6 +137,23 @@ The tunnel address changes every time the notebook restarts. Update it under Mod
 
 ---
 
+### Layout on different screens
+
+**Side panel (Web Agent):** only the conversation scrolls. The header and the message box stay in place at every width.
+
+**Configuration page:**
+
+| Screen | Behaviour |
+|---|---|
+| Phones (under 768 px wide, or under 600 px tall) | Top bar with a menu drawer. The page scrolls naturally and every list shows all its items. |
+| Tablets and larger (768 px wide and 600 px tall, and up) | The page never scrolls. Long lists are paged to fit the space (‹ 1 / 3 ›). Long pages and drawers use sections that expand and collapse (one open at a time). Wide drawers use two columns. |
+
+On tablets and larger screens, a few things still scroll inside themselves:
+- large text boxes (skill instructions, "What the agent is told", "Knowledge as text", the preview);
+- the selected task in Activity.
+
+Closing a section keeps everything typed in it.
+
 ## Architecture
 
 ```

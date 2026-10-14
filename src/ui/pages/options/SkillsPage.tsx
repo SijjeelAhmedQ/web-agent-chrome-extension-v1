@@ -7,6 +7,7 @@ import { useAppDispatch, useAppSelector } from '@/store';
 import { configActions } from '@/store/configSlice';
 import { AgentAvatar } from '../../components/Brand';
 import { AvatarStack, EmptyBlock, FieldLabel, PageHeader } from './parts';
+import { FitList, useFitMode } from './layout';
 
 const blank = (): SkillConfig => {
   const now = Date.now();
@@ -43,7 +44,7 @@ export function SkillsPage() {
           }
         />
       ) : (
-        <div className="list-card">
+        <FitList className="list-card" label="Skills">
           {skills.map((s) => {
             const users = agents.filter((a) => a.skillIds.includes(s.id));
             return (
@@ -74,7 +75,7 @@ export function SkillsPage() {
               </button>
             );
           })}
-        </div>
+        </FitList>
       )}
 
       <SkillEditor
@@ -115,6 +116,7 @@ export function SkillEditor({ value, onClose, onSave, onDelete, siteName }: Edit
   const agents = useAppSelector((s) => s.config.config.agents);
   const [draft, setDraft] = useState<SkillConfig | null>(null);
   const [assigned, setAssigned] = useState<string[]>([]);
+  const fit = useFitMode();
 
   useEffect(() => {
     if (!value) return;
@@ -130,7 +132,8 @@ export function SkillEditor({ value, onClose, onSave, onDelete, siteName }: Edit
     <Drawer
       open
       onClose={onClose}
-      width={620}
+width={fit ? 'min(980px, 94vw)' : 620}
+      rootClassName="fit-drawer"
       title={value.isNew ? 'New skill' : draft.name || 'Skill'}
       footer={
         <div className="drawer-foot">
@@ -147,18 +150,19 @@ export function SkillEditor({ value, onClose, onSave, onDelete, siteName }: Edit
         </div>
       }
     >
-      <div className="form-stack">
-        <div>
+      <div className="drawer-cols-wrap">
+      <div className="form-stack skill-form">
+        <div className="area-name">
           <FieldLabel htmlFor="skill-name">Name</FieldLabel>
           <Input id="skill-name" value={draft.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Patient chart workflow" maxLength={60} autoFocus={value.isNew} />
         </div>
-        <div>
+        <div className="area-when">
           <FieldLabel htmlFor="skill-desc" hint="The agent reads this to decide when to use the skill">
             When to use it
           </FieldLabel>
           <Input id="skill-desc" value={draft.description} onChange={(e) => set({ description: e.target.value })} placeholder="e.g. Use when adding medications or diagnoses in the PMS" maxLength={160} />
         </div>
-        <div>
+        <div className="area-instr fill-textarea">
           <FieldLabel htmlFor="skill-body" hint="Markdown supported">
             Instructions
           </FieldLabel>
@@ -171,7 +175,7 @@ export function SkillEditor({ value, onClose, onSave, onDelete, siteName }: Edit
             placeholder={'- Open the patient from Patients before anything else\n- Medications live under Summary → Medication\n- Always confirm dose and frequency with the user'}
           />
         </div>
-        <div>
+        <div className="area-how">
           <FieldLabel>How the agent gets it</FieldLabel>
           <div className="radio-cards two">
             {(
@@ -191,10 +195,10 @@ export function SkillEditor({ value, onClose, onSave, onDelete, siteName }: Edit
           </div>
         </div>
         {siteName ? (
-          <div className="inline-note">Used by every agent while you are on {siteName}.</div>
+          <div className="inline-note area-note">Used by every agent while you are on {siteName}.</div>
         ) : (
           <>
-        <div>
+        <div className="area-sites">
           <FieldLabel hint="Leave empty for every site">Only on these sites</FieldLabel>
           <Select
             mode="tags"
@@ -207,9 +211,9 @@ export function SkillEditor({ value, onClose, onSave, onDelete, siteName }: Edit
             suffixIcon={null}
           />
         </div>
-        <div>
+        <div className="area-agents">
           <FieldLabel>Agents with this skill</FieldLabel>
-          <div className="check-list">
+          <FitList layout="grid" minItemWidth={170} className="check-list check-grid" label="Agents" estimate={40}>
             {agents.map((a) => (
               <label key={a.id} className="check-row compact">
                 <Checkbox checked={assigned.includes(a.id)} onChange={(e) => setAssigned((ids) => (e.target.checked ? [...ids, a.id] : ids.filter((x) => x !== a.id)))} />
@@ -217,10 +221,11 @@ export function SkillEditor({ value, onClose, onSave, onDelete, siteName }: Edit
                 <span className="check-title">{a.name}</span>
               </label>
             ))}
-          </div>
+          </FitList>
         </div>
           </>
         )}
+      </div>
       </div>
     </Drawer>
   );

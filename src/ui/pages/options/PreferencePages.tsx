@@ -10,6 +10,7 @@ import { useAppDispatch, useAppSelector } from '@/store';
 import { configActions } from '@/store/configSlice';
 import { AgentAvatar } from '../../components/Brand';
 import { PageHeader, Section, SettingRow } from './parts';
+import { FitList, SectionGroup } from './layout';
 
 function useSettings() {
   const settings = useAppSelector((s) => s.config.config.settings);
@@ -116,6 +117,7 @@ export function BehaviorPage() {
   return (
     <>
       <PageHeader title="Agent behavior" description="How agents show their work and when they check with you." />
+      <SectionGroup>
       <Section title="While working">
         <SettingRow label="Highlight what the agent touches" description="A soft outline shows on the page around each button or field before the agent uses it, and the page edge glows while it works.">
           <Switch checked={settings.highlightActions} onChange={(v) => update({ highlightActions: v })} aria-label="Highlight actions" />
@@ -125,6 +127,7 @@ export function BehaviorPage() {
         </SettingRow>
       </Section>
       <Section title="Approvals" description="Choose per agent when it should ask before acting. Purchases, messages, deletions and form submissions are detected automatically.">
+        <FitList label="Agents" estimate={58}>
         {agents.map((a) => (
           <SettingRow
             key={a.id}
@@ -143,7 +146,9 @@ export function BehaviorPage() {
             />
           </SettingRow>
         ))}
+        </FitList>
       </Section>
+      </SectionGroup>
     </>
   );
 }
@@ -327,6 +332,7 @@ export function AdvancedPage() {
   return (
     <>
       <PageHeader title="Advanced" description="For power users and developers. The defaults work well for most people." />
+      <SectionGroup>
       <Section title="Developer view">
         <SettingRow label="Show technical details" description="Adds tool names, arguments, raw results, timings and error details to the activity view.">
           <Switch checked={settings.developerMode} onChange={(v) => update({ developerMode: v })} aria-label="Show technical details" />
@@ -397,6 +403,7 @@ export function AdvancedPage() {
           </Button>
         </SettingRow>
       </Section>
+      </SectionGroup>
     </>
   );
 }

@@ -124,8 +124,9 @@ function Shell() {
   const hydrated = useAppSelector((s) => s.config.hydrated);
   const providers = useAppSelector((s) => s.config.config.providers.length);
   const version = typeof chrome !== 'undefined' && chrome.runtime?.getManifest ? chrome.runtime.getManifest().version : 'dev';
-  const phone = useMediaQuery('(max-width: 767px)');
-  const rail = useMediaQuery('(min-width: 768px) and (max-width: 1099px)');
+  // A phone held sideways is wide but short: it gets the phone layout (top bar + menu) too.
+  const phone = useMediaQuery('(max-width: 767px), (max-height: 599px)');
+  const rail = useMediaQuery('(min-width: 768px) and (max-width: 1099px) and (min-height: 600px)');
   const [menuOpen, setMenuOpen] = useState(false);
   const { pathname } = useLocation();
   useEffect(() => setMenuOpen(false), [pathname]);

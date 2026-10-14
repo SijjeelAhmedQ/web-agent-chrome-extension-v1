@@ -9,6 +9,7 @@ import { configActions } from '@/store/configSlice';
 import { useVoiceInput } from '../../hooks/useVoiceInput';
 import { micPermission, type MicPermission } from '../../voice/recorder';
 import { FieldLabel, PageHeader, Section, SettingRow } from './parts';
+import { SectionGroup } from './layout';
 
 export function VoicePage() {
   const voice = useAppSelector((s) => s.config.config.settings.voice);
@@ -55,6 +56,7 @@ export function VoicePage() {
         description="Speak your requests instead of typing. Speech is recorded only while the microphone button is on, and sent to your speech server — the CareFlow Kaggle notebook."
       />
 
+      <SectionGroup>
       <Section title="Speech server" description="Run kaggle/careflow_kaggle.ipynb on Kaggle (GPU T4, Internet on). It prints an address and a key.">
         <div className="pad-block form-stack">
           <div className="two-col">
@@ -196,6 +198,7 @@ export function VoicePage() {
           </Button>
         </SettingRow>
       </Section>
+      </SectionGroup>
     </>
   );
 }

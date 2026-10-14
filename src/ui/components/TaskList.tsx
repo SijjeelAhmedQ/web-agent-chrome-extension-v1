@@ -26,12 +26,11 @@ interface Props {
   onSelect: (task: TaskRecord) => void;
 }
 
-export const TaskList = memo(function TaskList({ tasks, selectedId, onSelect }: Props) {
+/** One task as a list item (used by TaskList, and by paged lists on the configuration page). */
+export function TaskRow({ task: t, selected, onSelect }: { task: TaskRecord; selected: boolean; onSelect: (task: TaskRecord) => void }) {
   return (
-    <ul className="task-list">
-      {tasks.map((t) => (
-        <li key={t.id}>
-          <button type="button" className={`task-row ${selectedId === t.id ? 'selected' : ''}`} onClick={() => onSelect(t)}>
+        <li>
+          <button type="button" className={`task-row ${selected ? 'selected' : ''}`} onClick={() => onSelect(t)}>
             <TaskStatusIcon status={t.status} />
             <span className="task-main">
               <span className="task-request">{t.request}</span>
@@ -46,6 +45,14 @@ export const TaskList = memo(function TaskList({ tasks, selectedId, onSelect }: 
             </span>
           </button>
         </li>
+  );
+}
+
+export const TaskList = memo(function TaskList({ tasks, selectedId, onSelect }: Props) {
+  return (
+    <ul className="task-list">
+      {tasks.map((t) => (
+        <TaskRow key={t.id} task={t} selected={selectedId === t.id} onSelect={onSelect} />
       ))}
     </ul>
   );

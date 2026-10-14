@@ -10,6 +10,7 @@ import { configActions } from '@/store/configSlice';
 import { AgentAvatar } from '../../components/Brand';
 import { NamedIcon } from '../../components/icons';
 import { FieldLabel } from './parts';
+import { FitList, useFitMode } from './layout';
 
 interface ParamInfo {
   name: string;
@@ -45,6 +46,7 @@ export function BuiltInToolEditor({ meta, onClose }: { meta: ToolMeta | null; on
   const tool = useMemo(() => BROWSER_TOOLS.find((t) => t.name === meta?.id) ?? null, [meta]);
   const saved = (meta && settings.toolOverrides?.[meta.id]) || undefined;
   const [draft, setDraft] = useState<ToolOverride>({});
+  const fit = useFitMode();
 
   useEffect(() => {
     if (meta) setDraft(structuredClone(settings.toolOverrides?.[meta.id] ?? {}));
@@ -82,7 +84,8 @@ export function BuiltInToolEditor({ meta, onClose }: { meta: ToolMeta | null; on
     <Drawer
       open
       onClose={onClose}
-      width={640}
+width={fit ? 'min(980px, 94vw)' : 640}
+      rootClassName="fit-drawer"
       title={
         <span className="tool-drawer-title">
           <span className="list-icon">
@@ -107,10 +110,12 @@ export function BuiltInToolEditor({ meta, onClose }: { meta: ToolMeta | null; on
         </div>
       }
     >
-      <div className="form-stack">
+      <div className="drawer-cols-wrap">
+      <div className="form-stack drawer-cols">
+        <div className="drawer-col">
         <p className="tool-drawer-lede">{meta.description}</p>
 
-        <div>
+        <div className="fill fill-textarea">
           <FieldLabel htmlFor="tool-model-desc" hint="The agent decides when and how to use the tool from this">
             What the agent is told
           </FieldLabel>
@@ -151,6 +156,8 @@ export function BuiltInToolEditor({ meta, onClose }: { meta: ToolMeta | null; on
           )}
         </div>
 
+        </div>
+        <div className="drawer-col">
         <div>
           <FieldLabel>Approval</FieldLabel>
           <div className="field-help tool-asks">{WHEN_IT_ASKS[meta.risk]}</div>
@@ -163,9 +170,9 @@ export function BuiltInToolEditor({ meta, onClose }: { meta: ToolMeta | null; on
           </div>
         </div>
 
-        <div>
+        <div className="fill">
           <FieldLabel hint={enabled ? undefined : 'Switched off for all agents'}>Agents with this tool</FieldLabel>
-          <div className="check-list">
+          <FitList className="check-list" label="Agents" estimate={44}>
             {agents.map((a) => (
               <label key={a.id} className="check-row compact">
                 <Checkbox checked={a.toolIds.includes(meta.id)} onChange={(e) => dispatch(configActions.toggleToolForAgent({ agentId: a.id, toolId: meta.id, on: e.target.checked }))} />
@@ -173,7 +180,7 @@ export function BuiltInToolEditor({ meta, onClose }: { meta: ToolMeta | null; on
                 <span className="check-title">{a.name}</span>
               </label>
             ))}
-          </div>
+          </FitList>
           {users.length === 0 && <div className="field-help">No agent uses this tool yet.</div>}
         </div>
 
@@ -187,6 +194,8 @@ export function BuiltInToolEditor({ meta, onClose }: { meta: ToolMeta | null; on
             },
           ]}
         />
+        </div>
+      </div>
       </div>
     </Drawer>
   );

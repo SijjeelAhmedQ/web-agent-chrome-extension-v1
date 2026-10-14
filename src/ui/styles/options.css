@@ -1871,3 +1871,624 @@ textarea.mono-area {
 .site-agent-col-head .link-btn {
   white-space: nowrap;
 }
+
+/* ================= Fit-to-screen (tablets and larger) =================
+ * The page itself never scrolls from 768px wide and 600px tall up (shorter windows — a phone
+ * held sideways — keep the natural, scrolling layout): lists are paged to fit (FitList) and long
+ * pages are organised into sections that expand and collapse (Accordion). Phones keep the
+ * natural, scrolling layout. `.content-inner` keeps overflow:auto only as a last-resort
+ * safety net for extremely short windows — at normal sizes nothing overflows.
+ */
+
+.fit-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.fit-list.grid > .fit-items {
+  display: grid;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 46px;
+  padding: 0 10px 0 16px;
+  flex: none;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.fit-list.grid > .pager {
+  border-top: 0;
+  padding: 10px 2px 0;
+}
+
+.pager-info,
+.pager-pages {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pager-pages {
+  min-width: 52px;
+  text-align: center;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.pager-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  background: transparent;
+}
+
+/* ---------- Accordion ---------- */
+
+.accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.acc-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+}
+
+.acc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 12px;
+}
+
+.acc-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  min-height: 52px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: var(--radius-xl);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease);
+}
+
+.acc-toggle:hover {
+  background: var(--hover);
+}
+
+.acc-chev {
+  flex: none;
+  color: var(--text-muted);
+  transform: rotate(-90deg);
+  transition: transform var(--dur) var(--ease);
+}
+
+.acc-panel.open .acc-chev {
+  transform: none;
+}
+
+.acc-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.acc-title {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.acc-desc {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.acc-meta {
+  margin-left: auto;
+  padding-left: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.acc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  flex: none;
+}
+
+.acc-body {
+  min-width: 0;
+  border-top: 1px solid var(--border-subtle);
+  animation: fade-up 180ms var(--ease) both;
+}
+
+.acc-body[hidden] {
+  display: none !important;
+}
+
+/* Cards inside a section body lose their own frame. */
+.acc-body > .section-card,
+.acc-body > .list-card,
+.acc-body > .fit-list.list-card {
+  margin: 0;
+  border: 0;
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+  box-shadow: none;
+  background: transparent;
+}
+
+.acc-body > .form-stack {
+  padding: 16px 18px;
+}
+
+:root[data-motion='reduce'] .acc-body {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .acc-body {
+    animation: none;
+  }
+}
+
+@media (min-width: 768px) and (min-height: 600px) {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .options {
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+  }
+
+  .sidebar {
+    height: 100%;
+  }
+
+  .sidebar-nav {
+    overflow: visible;
+  }
+
+  .content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .content-inner {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    max-width: 1160px;
+    padding: 28px 40px 20px;
+    overflow-y: auto;
+  }
+
+  .content-inner > * {
+    flex: none;
+  }
+
+  .content-inner > .page-head {
+    margin-bottom: 18px;
+  }
+
+  .content-inner > .section {
+    margin-bottom: 16px;
+  }
+
+  /* The part of a page that takes the room left: a paged list or the open section. */
+  .content-inner > .fit-list.is-fit,
+  .content-inner > .accordion.is-fit,
+  .content-inner > .fill,
+  .fill > .fit-list.is-fit,
+  .accordion.is-fit > .acc-panel.open:has(.fit-list.is-fit, .fill),
+  .accordion.is-fit > .acc-panel.open:has(.fit-list.is-fit, .fill) > .acc-body,
+  .acc-body > .fit-list.is-fit {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .content-inner > .fill:not(.activity-layout),
+  .accordion.is-fit > .acc-panel.open > .acc-body {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Wide screens: a section header is one line — title, then its description. */
+  .acc-toggle {
+    min-height: 48px;
+    padding-block: 8px;
+  }
+
+  .acc-title-wrap {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 10px;
+  }
+
+  .page-head p {
+    max-width: 82ch;
+  }
+
+  .list-card.fit-list {
+    margin-bottom: 0;
+  }
+}
+
+/* Short windows (768px-tall laptops): tighter navigation and headers so everything fits. */
+@media (min-width: 768px) and (min-height: 600px) and (max-height: 860px) {
+  .sidebar {
+    padding-top: 14px;
+  }
+
+  .sidebar-brand {
+    padding-bottom: 12px;
+  }
+
+  .sidebar-nav {
+    gap: 10px;
+  }
+
+  .nav-item {
+    height: 32px;
+  }
+
+  .nav-group-label {
+    padding-bottom: 3px;
+  }
+
+  .content-inner {
+    padding-top: 22px;
+  }
+
+  .page-head h1 {
+    font-size: 24px;
+  }
+}
+
+/* Large monitors and LED displays: use the width, read comfortably from further away. */
+@media (min-width: 1600px) {
+  .content-inner {
+    max-width: 1360px;
+  }
+}
+
+@media (min-width: 2200px) {
+  :root {
+    --fs-base: 15px;
+  }
+
+  .content-inner {
+    max-width: 1560px;
+    padding: 40px 56px 28px;
+  }
+}
+
+/* Site → Agents: an agent's skill and tool switches fold behind this toggle. */
+.site-agent-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.site-agent-toggle:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* ---------- Fit-to-screen: tabs, sections and panes that fill the page ---------- */
+
+@media (min-width: 768px) and (min-height: 600px) {
+  /* Antd tabs: the active tab's content gets the height left under the tab bar. */
+  .tabs-fill > .ant-tabs-content-holder {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .tabs-fill .ant-tabs-content,
+  .tabs-fill .ant-tabs-tabpane-active {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .tabs-fill .ant-tabs-tabpane-active > .fit-list.is-fit,
+  .tabs-fill .ant-tabs-tabpane-active > .accordion.is-fit,
+  .tabs-fill .ant-tabs-tabpane-active > .fill {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .site-tabs.fill .ant-tabs-nav {
+    margin-bottom: 14px;
+  }
+
+  /* A section's card fills the open section, and a paged list fills the card. */
+  .accordion.is-fit > .acc-panel.open:has(.fit-list.is-fit, .fill) > .acc-body > .section-card {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .section-card > .fit-list.is-fit,
+  .section-card > .fill {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  /* Big text boxes are the one place that scrolls inside itself (agreed exception). */
+  .preview-pane.fill,
+  .knowledge-text.fill {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .preview-pane.fill > .site-preview {
+    flex: 1 1 auto;
+    min-height: 120px;
+    max-height: none;
+    overflow: auto;
+  }
+
+  .knowledge-text.fill > .ant-input,
+  .knowledge-text.fill > textarea {
+    flex: 1 1 auto;
+    min-height: 140px;
+    height: auto !important;
+    resize: none;
+    overflow: auto !important;
+  }
+
+  /* Activity: the paged list on the left, the selected task on the right. */
+  .activity-layout.fill {
+    align-items: stretch;
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  /* Tablets stack the list over the selected task; each gets half the height. */
+  @media (max-width: 1099px) {
+    .activity-layout.fill {
+      grid-template-rows: minmax(0, 1.15fr) minmax(0, 1fr);
+    }
+  }
+
+  .activity-layout.fill .activity-list-pane {
+    max-height: none;
+    min-height: 0;
+  }
+
+  .activity-layout.fill .activity-list-fit {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 6px;
+  }
+
+  .activity-layout.fill .activity-list-fit > .pager {
+    margin: 0 -6px -6px;
+  }
+
+  .activity-layout.fill .activity-detail-pane {
+    position: static;
+    min-height: 0;
+    overflow-y: auto;
+  }
+}
+
+/* Tablet rail on short screens: compact icons so the whole navigation fits. */
+@media (min-width: 768px) and (min-height: 600px) and (max-height: 860px) {
+  .options.is-rail .nav-item {
+    height: 36px;
+  }
+
+  .options.is-rail .nav-group {
+    gap: 2px;
+  }
+
+  .options.is-rail .sidebar-foot .ant-segmented {
+    transform: scale(0.8);
+  }
+}
+
+/* ---------- Fit-to-screen: drawers (agent, skill and tool editors) ---------- */
+
+@media (min-width: 768px) and (min-height: 600px) {
+  .tabs-fill {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .fit-drawer .ant-drawer-body {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .fit-drawer .ant-drawer-body > .drawer-cols-wrap,
+  .fit-drawer .ant-drawer-body > .tabs-fill {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .drawer-cols-wrap {
+    display: flex;
+    flex-direction: column;
+    container-type: inline-size;
+  }
+
+  .drawer-cols-wrap > .form-stack {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .drawer-col {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .drawer-col > .fill,
+  .skill-form > .area-agents,
+  .form-stack.fill > .fill {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .form-stack.fill {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .fill > .fit-list.is-fit,
+  .area-agents > .fit-list.is-fit {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  /* A text box that takes the height left in its column (it scrolls inside itself). */
+  .fill-textarea > textarea,
+  .fill-textarea > .ant-input {
+    flex: 1 1 auto;
+    min-height: 120px;
+    height: auto !important;
+    resize: none;
+    overflow: auto !important;
+  }
+
+  .fill-textarea {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  /* Check lists shown as a grid: no double borders between neighbours. */
+  .check-grid > .fit-items {
+    column-gap: 12px;
+  }
+}
+
+/* Two columns when the drawer is wide enough. */
+@container (min-width: 760px) {
+  .drawer-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    column-gap: 28px;
+    height: 100%;
+  }
+
+  .skill-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    grid-template-rows: auto auto auto auto minmax(0, 1fr);
+    grid-template-areas:
+      'name instr'
+      'when instr'
+      'how instr'
+      'sites instr'
+      'agents instr';
+    column-gap: 28px;
+    row-gap: 18px;
+    height: 100%;
+  }
+
+  .skill-form > .area-note {
+    grid-area: sites;
+    align-self: start;
+  }
+
+  .skill-form > .area-instr {
+    grid-area: instr;
+  }
+
+  .skill-form > .area-name {
+    grid-area: name;
+  }
+
+  .skill-form > .area-when {
+    grid-area: when;
+  }
+
+  .skill-form > .area-how {
+    grid-area: how;
+  }
+
+  .skill-form > .area-sites {
+    grid-area: sites;
+  }
+
+  .skill-form > .area-agents {
+    grid-area: agents;
+  }
+
+}
+
+/* One-column drawers (tablet portrait): the last column takes the height that is left. */
+@media (min-width: 768px) and (min-height: 600px) {
+  .drawer-cols > .drawer-col:last-child {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+}
