@@ -77,7 +77,12 @@ Each site has:
 - **Model:** run every agent on this site with a given connection or model.
 - **Never click these (Settings):** exact button names, such as `Pharmac`. The agent stops before them and leaves them to you, even if it forgets a rule. Clicks on them are refused and no approval is asked. A name blocks that button everywhere on the site, pop-ups included.
 - **Room for knowledge:** about a fifth of the model's context window, between 3,000 and 24,000 characters. For example, Kaggle's 16k-token models get about 13,000 characters. The Preview shows the room.
-- **Preview:** shows exactly what an agent gets for a sample request.
+- **Preview:** shows exactly what an agent gets for a sample request, with a **Copy** button.
+- **Knowledge as text (Preview tab):** the whole knowledge base as editable text in the same `### Rule: …`, `### Navigation: …`, `### Page: …`, `### Workflow: …` format.
+  - Copy it, edit it, or paste text in (the Paste button, or Ctrl+V).
+  - **Apply** turns every block into an entry. Entries with the same kind and title are updated, and new ones are added.
+  - Entries that aren't in the text are kept unless you choose to delete them.
+  - Write `### Rule (off): …` to keep an entry switched off, and use a `### Rule: Buttons you never click here` block to set the never-click list.
 
 The side panel's status bar shows a chip, such as **Indici**, while a site setup is in use.
 

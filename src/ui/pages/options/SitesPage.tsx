@@ -1,7 +1,8 @@
 import { App, Button, Checkbox, Dropdown, Input, Modal, Segmented, Select, Switch, Tabs } from 'antd';
-import { ArrowLeft, BookOpen, ChevronDown, Compass, FileText, Globe, ListOrdered, Plus, ShieldCheck, Sparkles, Trash2, Webhook, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, ChevronDown, ClipboardPaste, Compass, Copy, FileText, Globe, ListOrdered, Plus, RotateCcw, ShieldCheck, Sparkles, Trash2, Webhook, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { knowledgeAsText, mergeKnowledge, parseKnowledgeText } from '@/agent/planner/knowledgeText';
 import { KNOWLEDGE_KINDS, knowledgeBudget, knowledgeSection } from '@/agent/planner/siteKnowledge';
 import { contextWindowOf } from '@/agent/runtime/agentRun';
 import { BUILT_IN_TOOLS, CUSTOM_PREFIX } from '@/shared/constants/tools';
@@ -1008,8 +1009,18 @@ function SettingsTab({ site, update }: { site: SiteProfile; update: (patch: Part
 
 // ---------- Preview ----------
 
+function useCopy() {
+  const { message } = App.useApp();
+  return (text: string) =>
+    navigator.clipboard.writeText(text).then(
+      () => message.success('Copied'),
+      () => message.error('Couldn’t copy — select the text and press Ctrl+C'),
+    );
+}
+
 function PreviewTab({ site }: { site: SiteProfile }) {
   const { skills, customTools, providers, settings } = useAppSelector((s) => s.config.config);
+  const copy = useCopy();
   const [request, setRequest] = useState(site.knowledge.find((k) => k.kind === 'workflow' && k.trigger)?.trigger ?? '');
   // The same room the agent gets: from this site's model, or the default connection.
   const provider = providers.find((p) => p.id === site.providerId) ?? providers.find((p) => p.id === settings.defaultProviderId) ?? providers[0];
@@ -1019,25 +1030,142 @@ function PreviewTab({ site }: { site: SiteProfile }) {
   const siteTools = site.customToolIds.map((id) => customTools.find((t) => t.id === id)?.label).filter(Boolean);
   return (
     <>
-      <p className="muted tab-lede">What an agent gets on {site.name} for a request. Everything goes in while it fits; workflows that match the request come first.</p>
-      <div className="form-stack">
-        <div>
-          <FieldLabel htmlFor="site-preview">Try a request</FieldLabel>
-          <Input id="site-preview" value={request} onChange={(e) => setRequest(e.target.value)} placeholder="e.g. Goto Patients and select Search & List and select Arya Stark" />
+      <Section
+        title="What the agent gets"
+        description={`For a request on ${site.name}. Everything goes in while it fits; workflows that match the request come first.`}
+        actions={
+          <Button size="small" icon={<Copy size={13} />} onClick={() => void copy(text)} disabled={!text}>
+            Copy
+          </Button>
+        }
+      >
+        <div className="form-stack padded">
+          <div>
+            <FieldLabel htmlFor="site-preview">Try a request</FieldLabel>
+            <Input id="site-preview" value={request} onChange={(e) => setRequest(e.target.value)} placeholder="e.g. Goto Patients and select Search & List and select Arya Stark" />
+          </div>
+          <div className="preview-meta">
+            <span className="pill">
+              <Sparkles size={11} /> Skills: {siteSkills.length ? siteSkills.join(', ') : 'none'}
+            </span>
+            <span className="pill">
+              <Webhook size={11} /> Tools: {siteTools.length ? siteTools.join(', ') : 'none'}
+            </span>
+            {site.disabledToolIds.length > 0 && <span className="pill warning">Off here: {site.disabledToolIds.join(', ')}</span>}
+            {(site.neverClick ?? []).length > 0 && <span className="pill">Never clicks: {site.neverClick!.join(', ')}</span>}
+            <span className="pill">Room: ~{Math.round(budget / 1000)}k characters</span>
+          </div>
+          <pre className="spec-json mono site-preview">{text || 'No knowledge yet.'}</pre>
+        </div>
+      </Section>
+      <KnowledgeTextEditor site={site} />
+    </>
+  );
+}
+
+/** The whole knowledge base as editable text: copy it, paste into it, and apply it back as entries. */
+function KnowledgeTextEditor({ site }: { site: SiteProfile }) {
+  const dispatch = useAppDispatch();
+  const { message } = App.useApp();
+  const copy = useCopy();
+  const current = useMemo(() => knowledgeAsText(site), [site]);
+  const [draft, setDraft] = useState(current);
+  const [baseline, setBaseline] = useState(current);
+  const [confirming, setConfirming] = useState(false);
+  const [removeMissing, setRemoveMissing] = useState(false);
+
+  // Knowledge changed elsewhere (another tab, a saved entry): follow it unless the text has edits.
+  useEffect(() => {
+    setDraft((d) => (d === baseline ? current : d));
+    setBaseline(current);
+  }, [current]);
+
+  const parsed = useMemo(() => parseKnowledgeText(draft), [draft]);
+  const preview = useMemo(() => mergeKnowledge(site.knowledge, parsed.entries, removeMissing, () => 'new'), [site.knowledge, parsed, removeMissing]);
+  const counts = (Object.keys(KNOWLEDGE_KINDS) as KnowledgeKind[])
+    .map((k) => [k, parsed.entries.filter((e) => e.kind === k).length] as const)
+    .filter(([, n]) => n > 0)
+    .map(([k, n]) => `${n} ${KNOWLEDGE_KINDS[k].label.toLowerCase()}`);
+  const edited = draft !== current;
+  const canApply = parsed.entries.length > 0 || parsed.neverClick !== null;
+
+  const paste = () =>
+    navigator.clipboard.readText().then(
+      (t) => setDraft((d) => (d.trim() ? `${d.trimEnd()}\n\n${t.trim()}` : t.trim())),
+      () => message.error('Couldn’t read the clipboard — click in the box and press Ctrl+V'),
+    );
+
+  const apply = () => {
+    const merge = mergeKnowledge(site.knowledge, parsed.entries, removeMissing, () => uid('kb_'));
+    const neverClick = parsed.neverClick ?? (removeMissing ? [] : (site.neverClick ?? []));
+    dispatch(configActions.upsertSite({ ...site, knowledge: merge.knowledge, neverClick }));
+    message.success([`${merge.added} added`, `${merge.updated} updated`, merge.removed ? `${merge.removed} removed` : ''].filter(Boolean).join(' · '));
+    setConfirming(false);
+    setRemoveMissing(false);
+  };
+
+  return (
+    <Section
+      title="Knowledge as text"
+      description="The whole knowledge base in the format the agent reads. Copy it, edit it, or paste text in — then Apply turns every “### Kind: Title” block into an entry."
+      actions={
+        <span className="row-gap">
+          <Button size="small" icon={<Copy size={13} />} onClick={() => void copy(draft)} disabled={!draft.trim()}>
+            Copy
+          </Button>
+          <Button size="small" icon={<ClipboardPaste size={13} />} onClick={() => void paste()}>
+            Paste
+          </Button>
+          <Button size="small" icon={<RotateCcw size={13} />} onClick={() => setDraft(current)} disabled={!edited}>
+            Reset
+          </Button>
+          <Button size="small" type="primary" onClick={() => setConfirming(true)} disabled={!edited || !canApply}>
+            Apply
+          </Button>
+        </span>
+      }
+    >
+      <div className="form-stack padded">
+        <Input.TextArea
+          className="mono-area"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          autoSize={{ minRows: 12, maxRows: 36 }}
+          aria-label="Knowledge base as text"
+          placeholder={
+            '### Rule: Open a patient by clicking the name\nPatient names are plain text — click the name, never an icon.\n\n### Navigation: Top menus open on hover\nUse open_menu ["Patients", "Search & List"].\n\n### Page: Patient Search page\n- Search with the "Search" button, not "Search Vault".\n\n### Workflow: Select a patient\nFor requests like: “goto patients and select luke king”\n1. …\n2. …'
+          }
+        />
+        <div className="field-help">
+          Each entry starts with a line <span className="mono">### Rule: Title</span>, <span className="mono">### Navigation: …</span>, <span className="mono">### Page: …</span> or{' '}
+          <span className="mono">### Workflow: …</span>; the lines below it are its text. A workflow’s example goes on the line after its heading:{' '}
+          <span className="mono">For requests like: “…”</span>. Write <span className="mono">### Rule (off): …</span> to keep an entry switched off. Text copied from the preview above can be pasted here too.
         </div>
         <div className="preview-meta">
-          <span className="pill">
-            <Sparkles size={11} /> Skills: {siteSkills.length ? siteSkills.join(', ') : 'none'}
-          </span>
-          <span className="pill">
-            <Webhook size={11} /> Tools: {siteTools.length ? siteTools.join(', ') : 'none'}
-          </span>
-          {site.disabledToolIds.length > 0 && <span className="pill warning">Off here: {site.disabledToolIds.join(', ')}</span>}
-          {(site.neverClick ?? []).length > 0 && <span className="pill">Never clicks: {site.neverClick!.join(', ')}</span>}
-          <span className="pill">Room: ~{Math.round(budget / 1000)}k characters</span>
+          <span className="pill">{counts.length ? `Found ${counts.join(' · ')}` : 'No entries found yet'}</span>
+          {parsed.neverClick && <span className="pill">Never clicks: {parsed.neverClick.join(', ') || 'none'}</span>}
+          {edited && canApply && (
+            <span className="pill">
+              {preview.added} new · {preview.updated} changed{preview.missing ? ` · ${preview.missing} not in the text` : ''}
+            </span>
+          )}
+          {parsed.unknown.length > 0 && <span className="pill warning">Not understood: {parsed.unknown.slice(0, 2).join(' · ')}</span>}
         </div>
-        <pre className="spec-json mono site-preview">{text || 'No knowledge yet.'}</pre>
       </div>
-    </>
+
+      <Modal open={confirming} onCancel={() => setConfirming(false)} onOk={apply} okText="Apply" title={`Update ${site.name}’s knowledge base?`}>
+        <div className="form-stack">
+          <p className="muted">
+            {preview.added} new {preview.added === 1 ? 'entry' : 'entries'} and {preview.updated} changed. Entries with the same kind and title are updated in place.
+          </p>
+          {preview.missing > 0 && (
+            <label className="row-gap align-center">
+              <Checkbox checked={removeMissing} onChange={(e) => setRemoveMissing(e.target.checked)} />
+              Also delete the {preview.missing} {preview.missing === 1 ? 'entry' : 'entries'} that aren’t in the text
+            </label>
+          )}
+        </div>
+      </Modal>
+    </Section>
   );
 }
