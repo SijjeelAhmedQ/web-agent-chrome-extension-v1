@@ -998,7 +998,7 @@ function PreviewTab({ site }: { site: SiteProfile }) {
   const siteTools = site.customToolIds.map((id) => customTools.find((t) => t.id === id)?.label).filter(Boolean);
   return (
     <>
-      <p className="muted tab-lede">What an agent gets on {site.name} for a request — the workflows that match it come in full.</p>
+      <p className="muted tab-lede">What an agent gets on {site.name} for a request. Everything goes in while it fits; workflows that match the request come first.</p>
       <div className="form-stack">
         <div>
           <FieldLabel htmlFor="site-preview">Try a request</FieldLabel>

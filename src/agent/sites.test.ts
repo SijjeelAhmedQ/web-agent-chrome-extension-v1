@@ -101,10 +101,19 @@ describe('site-based setup', () => {
     expect(prompt).toContain('### Workflow: Select a patient from Search & List');
   });
 
-  it('lists workflows that don’t match by title only, for site_knowledge', () => {
+  it('sends workflows in full while they fit, even when the request is worded differently', () => {
     const config = withIndici();
-    const { text, left } = knowledgeSection(config.sites, 'print the invoice');
-    expect(text).not.toMatch(/### Workflow:/);
+    expect(knowledgeSection(config.sites, 'patient kholo luke ka').text).toMatch(/### Workflow: Select a patient from Search & List/);
+    expect(knowledgeSection(config.sites, '').text).toMatch(/### Workflow: Select a patient from Search & List/);
+  });
+
+  it('lists what doesn’t fit by title only, matching workflows first', () => {
+    const config = withIndici();
+    const base = config.sites[0].knowledge.find((k) => k.kind === 'workflow')!;
+    config.sites[0].knowledge.push({ ...base, id: 'w2', title: 'Print an invoice', trigger: 'print the invoice', content: 'Open Billing. '.repeat(100) });
+    const budget = knowledgeSection(config.sites, '').text.length - 300;
+    const { text, left } = knowledgeSection(config.sites, 'print the invoice', budget);
+    expect(text).toMatch(/### Workflow: Print an invoice/);
     expect(left).toBe(1);
     expect(text).toMatch(/call site_knowledge.*“Select a patient from Search & List”/);
     expect(searchKnowledge(config.sites, 'select a patient')[0].title).toBe('Select a patient from Search & List');

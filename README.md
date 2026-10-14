@@ -70,7 +70,7 @@ Each site has:
   - *Page & controls:* what columns, icons and buttons mean.
   - *Workflow:* an example request with its steps.
 
-  Rules, navigation and page notes always go into the prompt. Workflows go in full only when they match the request; the others are listed by title, and the agent reads them with the `site_knowledge` tool.
+  Rules, navigation and page notes always go into the prompt. Everything goes in full while it fits, with workflows that match the request first. If the knowledge base outgrows the space, the rest is listed by title and the agent reads it with the `site_knowledge` tool.
 - **Agents:** choose which agents work on the site. The first one opens by itself in the side panel when you arrive there. Choosing an agent switches its skills and tools on for the site, and you can turn any of them off just for this site.
 - **Skills and custom tools:** every agent gets them, but only on this site. *Remove all* clears the site's list; the skills and tools themselves stay in the Extension base.
 - **Built-in tools:** switch them off one by one, or use *All on* / *All off*. If *Read page* is off, a warning offers to turn reading back on, because without it the agent can't see the site.

@@ -2,8 +2,9 @@ import type { KnowledgeEntry, KnowledgeKind, SiteProfile } from '@/shared/types/
 
 /**
  * Turns a site's knowledge base into the part of the system prompt the agent reads on that
- * site. Rules, navigation and page notes come first; workflows are ranked by how well they
- * match the request, so the one for this task is in full and the rest are listed by title.
+ * site. Rules, navigation and page notes come first, then workflows — those matching the
+ * request first. Everything goes in full while it fits the budget (a request worded unlike a
+ * workflow's example must not lose it); what doesn't fit is listed by title for site_knowledge.
  */
 
 export const KNOWLEDGE_KINDS: Record<KnowledgeKind, { label: string; heading: string }> = {
@@ -57,15 +58,11 @@ export function knowledgeSection(profiles: SiteProfile[], request: string, budge
   ];
   let used = lines.join('\n').length;
   const skipped: KnowledgeEntry[] = [];
-  let workflowsInFull = 0;
-  for (const { e, score } of ranked) {
-    // Only the workflows that match this request are worth their space.
-    const fits = e.kind !== 'workflow' || (score > 0 && workflowsInFull < 3);
+  for (const { e } of ranked) {
     const block = formatEntry(e);
-    if (fits && used + block.length + 2 <= budget) {
+    if (used + block.length + 2 <= budget) {
       lines.push('', block);
       used += block.length + 2;
-      if (e.kind === 'workflow') workflowsInFull++;
     } else skipped.push(e);
   }
   if (skipped.length) {
