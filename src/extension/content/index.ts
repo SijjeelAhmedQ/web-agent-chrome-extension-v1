@@ -28,7 +28,7 @@ async function handle(request: ContentRequest): Promise<unknown> {
     case 'describe':
       return describeRisk(resolve(request.id));
     case 'click':
-      return click(request.id, request.highlight);
+      return click(request.id, request.highlight, request.double);
     case 'type':
       return type(request.id, request.text, request.clear, request.highlight);
     case 'clear':

@@ -137,7 +137,7 @@ export function snapshot(mode: ReadMode, maxElements: number, maxTextChars: numb
     text,
     textTruncated: truncated,
     frames,
-    dialogOpen: !!document.querySelector('dialog[open],[role=dialog]:not([aria-hidden=true]),[aria-modal=true]'),
+    dialogOpen: Array.from(document.querySelectorAll('dialog[open],[role=dialog]:not([aria-hidden=true]),[aria-modal=true]')).some((d) => isVisible(d)),
   };
 }
 

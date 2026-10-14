@@ -134,11 +134,11 @@ const findElement: AgentTool<{ query: string }> = {
 };
 
 /** Clicks a known element id and reports what happened. Shared by click and click_text. */
-async function clickById(ctx: ToolContext, elementId: number): Promise<ToolOutcome> {
+async function clickById(ctx: ToolContext, elementId: number, double = false): Promise<ToolOutcome> {
   const before = await pageUrl(ctx);
   let res;
   try {
-    res = await ctx.browser.send({ kind: 'click', id: elementId, highlight: ctx.settings.highlightActions });
+    res = await ctx.browser.send({ kind: 'click', id: elementId, highlight: ctx.settings.highlightActions, double });
   } catch (err) {
     if (err instanceof PageError && err.code === 'navigating') {
       const after = await ctx.browser.settleAfterAction(before, ctx.signal);
@@ -161,31 +161,47 @@ async function clickById(ctx: ToolContext, elementId: number): Promise<ToolOutco
   const after = await ctx.browser.settleAfterAction(before, ctx.signal);
   const covered = res.covered ? ' Note: something was covering it (a pop-up or banner?) — check the result.' : '';
   if (res.invalidFields) return { output: `Clicked ${label}.${invalidReport(res.invalidFields)}`, note: 'Form has missing or invalid fields' };
-  return { output: `Clicked ${label}.${changeReport(after)}${covered}`, note: after.navigated ? 'Opened a new page' : undefined };
+  const verb = double ? 'Double-clicked' : 'Clicked';
+  const effect = after.navigated ? undefined : after.effect;
+  if (effect && !effect.added.length && !effect.removed && !after.alerts.length) {
+    // Saying so stops the model from clicking the same thing again and again.
+    const retry = double
+      ? 'Repeating it won’t help: look for a link, button or icon that opens it, or tell the user what you tried.'
+      : 'Clicking it again won’t help. If it should open something, try once with double: true (some lists open a record on double-click), or a link, button or icon that opens it.';
+    return effect.styleChanges
+      ? { output: `${verb} ${label}. Only its look changed (it may be selected or highlighted now) — nothing new appeared on the page. ${retry}${covered}`, note: 'Selected — nothing opened' }
+      : { output: `${verb} ${label}, but nothing on the page changed. ${retry}${covered}`, note: 'Nothing changed' };
+  }
+  const appeared = effect?.added.length ? ` New on the page: ${effect.added.map((l) => `“${clip(l, 80)}”`).join(', ')}.` : '';
+  return { output: `${verb} ${label}.${appeared}${changeReport(after)}${covered}`, note: after.navigated ? 'Opened a new page' : effect?.added.length ? 'The page changed' : undefined };
 }
 
-const click: AgentTool<{ id: number; name: string }> = {
+const double = bool(false).describe('Double-click instead (default false) — for lists that open an item on double-click');
+
+const click: AgentTool<{ id: number; name: string; double: boolean }> = {
   name: 'click',
   description:
     'Click an element (button, link, tab, checkbox, menu item, row…). Waits for the page to react. Always pass name: the element’s name as listed — the click is refused if the id is a different element.',
   schema: z.object({
     id,
     name: z.coerce.string().optional().default('').describe('The name of the element you mean, as listed (e.g. "Arya STARK"). Guards against a wrong id.'),
+    double,
   }),
   risk: 'sensitive',
   touchesPage: true,
-  label: (a, ctx) => `Clicking ${nameOf(ctx, a.id)}`,
+  label: (a, ctx) => `${a.double ? 'Double-clicking' : 'Clicking'} ${nameOf(ctx, a.id)}`,
   assess: (a, ctx) => approvalFor(ctx, a.id, 'click', `Click ${nameOf(ctx, a.id, 'this')}?`),
   async execute(a, ctx) {
     const mismatch = wrongTarget(ctx, a.id, a.name);
     if (mismatch) return { output: mismatch, note: 'Wrong element — not clicked' };
-    return clickById(ctx, a.id);
+    return clickById(ctx, a.id, a.double);
   },
 };
 
 interface ClickTextArgs {
   text: string;
   near: string;
+  double: boolean;
 }
 
 /** The page is searched once per call (approval check and click share it). */
@@ -208,10 +224,11 @@ const clickText: AgentTool<ClickTextArgs> = {
   schema: z.object({
     text: str(z.string().min(1)).describe('The visible text to click, e.g. "Arya STARK"'),
     near: z.coerce.string().optional().default('').describe('Optional: other text in the same row or item, to pick the right one (e.g. "03-12-2015")'),
+    double,
   }),
   risk: 'sensitive',
   touchesPage: true,
-  label: (a) => `Clicking ${quote(a.text)}${a.near ? ` (with ${quote(a.near)})` : ''}`,
+  label: (a) => `${a.double ? 'Double-clicking' : 'Clicking'} ${quote(a.text)}${a.near ? ` (with ${quote(a.near)})` : ''}`,
   async assess(a, ctx) {
     const res = await textTarget(a, ctx);
     return res.total === 1 ? approvalFor(ctx, res.matches[0].id, 'click', `Click ${quote(a.text)}?`) : null;
@@ -231,7 +248,7 @@ const clickText: AgentTool<ClickTextArgs> = {
         note: `${res.total} matches — not clicked`,
       };
     }
-    return clickById(ctx, res.matches[0].id);
+    return clickById(ctx, res.matches[0].id, a.double);
   },
 };
 

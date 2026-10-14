@@ -1,4 +1,4 @@
-import { CHANNEL, type ContentError, type ContentRequest, type ContentResponse, type Envelope, type ResponseMap } from '../messaging/protocol';
+import { CHANNEL, type ContentError, type ContentRequest, type ContentResponse, type Envelope, type ResponseMap, type ClickEffect } from '../messaging/protocol';
 import { sleep } from '@/shared/utils';
 
 /**
@@ -145,7 +145,7 @@ export class BrowserController {
    * After a click or key press: waits for a navigation if one starts, otherwise for the DOM
    * to go quiet. Reports whether the page changed.
    */
-  async settleAfterAction(urlBefore: string, signal?: AbortSignal): Promise<{ navigated: boolean; url: string; title: string; alerts: string[] }> {
+  async settleAfterAction(urlBefore: string, signal?: AbortSignal): Promise<{ navigated: boolean; url: string; title: string; alerts: string[]; effect?: ClickEffect }> {
     const tab = await this.currentTab();
     const tabId = tab.id!;
     const navStarted = new Promise<boolean>((resolve) => {
@@ -163,14 +163,17 @@ export class BrowserController {
     const settled = this.send({ kind: 'settle', quietMs: 350, timeoutMs: 2500 }).catch(() => null);
     const navigated = await navStarted;
     let alerts: string[] = [];
+    let effect: ClickEffect | undefined;
     if (navigated) {
       await this.waitForLoad(tabId, 15_000, signal);
       await sleep(300);
     } else {
-      alerts = (await settled)?.alerts ?? [];
+      const result = await settled;
+      alerts = result?.alerts ?? [];
+      effect = result?.effect;
     }
     const after = await chrome.tabs.get(tabId);
-    return { navigated: navigated || after.url !== urlBefore, url: after.url ?? '', title: after.title ?? '', alerts };
+    return { navigated: navigated || after.url !== urlBefore, url: after.url ?? '', title: after.title ?? '', alerts, effect };
   }
 
   async navigate(url: string, signal?: AbortSignal): Promise<chrome.tabs.Tab> {

@@ -15,7 +15,7 @@ export type ContentRequest =
   | { kind: 'find'; query: string; limit: number }
   | { kind: 'findText'; text: string; near?: string; limit: number }
   | { kind: 'describe'; id: number }
-  | { kind: 'click'; id: number; highlight: boolean }
+  | { kind: 'click'; id: number; highlight: boolean; double?: boolean }
   | { kind: 'type'; id: number; text: string; clear: boolean; highlight: boolean }
   | { kind: 'clear'; id: number; highlight: boolean }
   | { kind: 'select'; id: number; option: string; highlight: boolean }
@@ -62,6 +62,16 @@ export interface MenuResult {
   options?: ElementInfo[];
   /** The last label was a final item (not a menu): it was reached but not clicked. */
   item?: ElementInfo;
+}
+
+/** What a click changed on the page (measured from just before it until the page settled). */
+export interface ClickEffect {
+  /** Lines of text that appeared — a sample. */
+  added: string[];
+  /** How many lines of text disappeared. */
+  removed: number;
+  /** Class/style/attribute changes — e.g. a row now looks selected. */
+  styleChanges: number;
 }
 
 export interface ClickResult {
@@ -122,7 +132,7 @@ export interface ResponseMap {
   select: SelectResult;
   scroll: ScrollResult;
   key: KeyResult;
-  settle: { mutations: number; url: string; title: string; alerts: string[] };
+  settle: { mutations: number; url: string; title: string; alerts: string[]; effect?: ClickEffect };
   waitForText: { found: boolean };
   presence: null;
 }

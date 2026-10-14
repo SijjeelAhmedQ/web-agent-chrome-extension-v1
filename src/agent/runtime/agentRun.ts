@@ -54,6 +54,8 @@ export class AgentRun {
   private approval: { id: string; resolve: (approved: boolean) => void } | null = null;
   /** Approvals the user declined in this task (by their title). */
   private readonly declined = new Set<string>();
+  /** How often each exact page action changed nothing in this task — to break loops. */
+  private readonly repeats = new Map<string, number>();
   /** Set when the task must end now, with this answer. */
   private endWith: string | null = null;
   private task!: TaskRecord;
@@ -320,6 +322,13 @@ export class AgentRun {
       this.upsertStep(step);
     };
 
+    // The exact same action that already did nothing twice won't work a third time.
+    const key = tool.risk !== 'read' && tool.touchesPage ? `${tool.name} ${JSON.stringify(args)}` : '';
+    if (key && (this.repeats.get(key) ?? 0) >= 2) {
+      finish({ status: 'skipped', note: 'Did nothing twice — not repeating' });
+      return 'You already did exactly this twice in this task and nothing changed either time. Do not repeat it. Try a different way (double: true, another element, a link or icon that opens it) or tell the user what you tried and what happened.';
+    }
+
     try {
       const blocked = await this.sitePolicy(tool, args, ctx);
       if (blocked) {
@@ -350,6 +359,7 @@ export class AgentRun {
       }
 
       const outcome = await this.inFront(ctx, () => tool.execute(args, ctx));
+      if (key && /^(Nothing changed|Selected — nothing opened)$/.test(outcome.note ?? '')) this.repeats.set(key, (this.repeats.get(key) ?? 0) + 1);
       finish({ status: 'done', note: outcome.note, ...(dev ? { result: clip(outcome.output, 4000) } : {}) });
       return outcome.output;
     } catch (err) {

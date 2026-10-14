@@ -1,4 +1,5 @@
 import type {
+  ClickEffect,
   ClickResult,
   ContentError,
   KeyResult,
@@ -7,7 +8,7 @@ import type {
   SelectResult,
   TypeResult,
 } from '../messaging/protocol';
-import { accessibleName, elementFor, hasHiddenMenu, isDisabled, isEditable, isVisible, roleOf } from './elements';
+import { accessibleName, elementFor, hasHiddenMenu, isDisabled, isEditable, isVisible, OVERLAY_HOST_ID, roleOf } from './elements';
 import { isHovered, openHoverMenu, releaseHoverUnlessInside } from './hover';
 import { highlight } from './overlay';
 
@@ -59,10 +60,10 @@ function centerOf(el: Element) {
   return { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
 }
 
-function dispatchPointerSequence(el: Element) {
+function dispatchPointerSequence(el: Element, detail = 1) {
   const view = el.ownerDocument.defaultView ?? window;
   const point = centerOf(el);
-  const base = { bubbles: true, cancelable: true, composed: true, view, button: 0, ...point };
+  const base = { bubbles: true, cancelable: true, composed: true, view, button: 0, detail, ...point };
   el.dispatchEvent(new PointerEvent('pointerover', { ...base, pointerType: 'mouse', isPrimary: true }));
   el.dispatchEvent(new MouseEvent('mouseover', base));
   el.dispatchEvent(new PointerEvent('pointerdown', { ...base, pointerType: 'mouse', isPrimary: true, buttons: 1 }));
@@ -85,7 +86,48 @@ function invalidFieldsOf(form: HTMLFormElement | null): string[] | undefined {
 const isSubmitControl = (el: Element) =>
   (el instanceof HTMLButtonElement && el.type === 'submit') || (el instanceof HTMLInputElement && (el.type === 'submit' || el.type === 'image'));
 
-export async function click(id: number, show: boolean): Promise<ClickResult> {
+/** Watches the page from just before a click; the next settle reports what changed. */
+let watch: { lines: Set<string>; styleChanges: number; observer: MutationObserver } | null = null;
+
+const visibleLines = () =>
+  new Set(
+    (document.body?.innerText ?? '')
+      .split('\n')
+      .map((l) => l.replace(/\s+/g, ' ').trim())
+      .filter((l) => l.length > 1),
+  );
+
+function watchEffects() {
+  watch?.observer.disconnect();
+  const w = { lines: visibleLines(), styleChanges: 0, observer: new MutationObserver(() => undefined) };
+  w.observer = new MutationObserver((records) => {
+    for (const r of records) {
+      if (r.type !== 'attributes') continue;
+      const target = r.target as Element;
+      if (target.id === OVERLAY_HOST_ID || target === document.documentElement) continue;
+      // Our own hover emulation class doesn't count.
+      if (r.attributeName === 'class' && (r.oldValue ?? '').replace(/\s*__wa-hover\b/g, '').trim() === target.getAttribute('class')?.replace(/\s*__wa-hover\b/g, '').trim()) continue;
+      w.styleChanges++;
+    }
+  });
+  w.observer.observe(document.documentElement, { subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ['class', 'style', 'aria-selected', 'aria-checked', 'aria-expanded', 'checked', 'open', 'hidden'] });
+  watch = w;
+}
+
+/** What changed since the click started — then stops watching. */
+function takeEffect(): ClickEffect | undefined {
+  if (!watch) return undefined;
+  const { lines, styleChanges, observer } = watch;
+  observer.disconnect();
+  watch = null;
+  const now = visibleLines();
+  const added = [...now].filter((l) => !lines.has(l));
+  let removed = 0;
+  for (const l of lines) if (!now.has(l)) removed++;
+  return { added: added.slice(0, 6).map((l) => (l.length > 120 ? `${l.slice(0, 119)}…` : l)), removed, styleChanges };
+}
+
+export async function click(id: number, show: boolean, double = false): Promise<ClickResult> {
   const el = resolve(id);
   if (!isVisible(el) && !(el instanceof HTMLInputElement)) fail('not_visible', 'That element is hidden right now.', 'It may be inside a closed menu or collapsed section. Open the menu first or scroll.');
   if (isDisabled(el)) fail('disabled', `“${accessibleName(el) || 'That control'}” is disabled.`, 'A required field may be empty, or a previous step is incomplete.');
@@ -112,9 +154,16 @@ export async function click(id: number, show: boolean): Promise<ClickResult> {
   const invalidFields = submitter && isSubmitControl(submitter) ? invalidFieldsOf((submitter as HTMLButtonElement).form) : undefined;
 
   releaseHoverUnlessInside(el);
+  watchEffects();
   dispatchPointerSequence(el);
   if (el instanceof HTMLElement) el.click();
   else el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, composed: true, ...centerOf(el) }));
+  if (double) {
+    // Lists that open a record on double-click: second press, then dblclick.
+    dispatchPointerSequence(el, 2);
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, composed: true, view: window, detail: 2, ...centerOf(el) }));
+    el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, composed: true, view: window, detail: 2, ...centerOf(el) }));
+  }
   return { element: summary(el), covered: covered || undefined, invalidFields };
 }
 
@@ -365,7 +414,7 @@ export function pageAlerts(): string[] {
   return [...out].slice(0, 8);
 }
 
-export function settle(quietMs: number, timeoutMs: number): Promise<{ mutations: number; url: string; title: string; alerts: string[] }> {
+export function settle(quietMs: number, timeoutMs: number): Promise<{ mutations: number; url: string; title: string; alerts: string[]; effect?: ClickEffect }> {
   return new Promise((done) => {
     let mutations = 0;
     let quietTimer = setTimeout(finish, quietMs);
@@ -380,7 +429,7 @@ export function settle(quietMs: number, timeoutMs: number): Promise<{ mutations:
       observer.disconnect();
       clearTimeout(quietTimer);
       clearTimeout(hardTimer);
-      done({ mutations, url: location.href, title: document.title, alerts: pageAlerts() });
+      done({ mutations, url: location.href, title: document.title, alerts: pageAlerts(), effect: takeEffect() });
     }
   });
 }
