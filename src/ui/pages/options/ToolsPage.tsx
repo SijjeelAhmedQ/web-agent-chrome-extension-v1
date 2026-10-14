@@ -1,14 +1,16 @@
-import { App, Button, Checkbox, Drawer, Input, Popover, Segmented, Select, Switch } from 'antd';
+import { App, Button, Checkbox, Collapse, Drawer, Input, Popover, Segmented, Select, Switch } from 'antd';
 import { Plus, Trash2, Webhook, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { TOOL_NAME_PATTERN } from '@/agent/tools/customTools';
-import { BUILT_IN_TOOLS, CUSTOM_PREFIX, TOOL_CATEGORIES, type ToolCategory } from '@/shared/constants/tools';
+import { customTool, TOOL_NAME_PATTERN } from '@/agent/tools/customTools';
+import { specOf } from '@/agent/tools/registry';
+import { BUILT_IN_TOOLS, CUSTOM_PREFIX, TOOL_CATEGORIES, type ToolCategory, type ToolMeta } from '@/shared/constants/tools';
 import type { AgentConfig, CustomToolConfig, CustomToolParam } from '@/shared/types/config';
 import { uid } from '@/shared/utils';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { configActions } from '@/store/configSlice';
 import { AgentAvatar } from '../../components/Brand';
 import { NamedIcon } from '../../components/icons';
+import { BuiltInToolEditor } from './BuiltInToolEditor';
 import { AvatarStack, EmptyBlock, FieldLabel, PageHeader, Section } from './parts';
 
 const RISK = {
@@ -50,6 +52,7 @@ export function ToolsPage() {
   const dispatch = useAppDispatch();
   const { modal, message } = App.useApp();
   const [editing, setEditing] = useState<{ tool: CustomToolConfig; isNew: boolean } | null>(null);
+  const [viewing, setViewing] = useState<ToolMeta | null>(null);
 
   const setEnabled = (id: string, on: boolean) =>
     dispatch(configActions.updateSettings({ disabledToolIds: on ? settings.disabledToolIds.filter((t) => t !== id) : [...settings.disabledToolIds, id] }));
@@ -63,7 +66,7 @@ export function ToolsPage() {
     <>
       <PageHeader
         title="Tools"
-        description="What agents can do. Built-in browser tools work on any website; custom tools connect agents to your own services."
+        description="What agents can do. Built-in browser tools work on any website; custom tools connect agents to your own services. Open a tool to see and edit what the agent is told about it."
         actions={
           <Button icon={<Plus size={16} />} onClick={() => setEditing({ tool: newTool(), isNew: true })}>
             New custom tool
@@ -75,8 +78,17 @@ export function ToolsPage() {
         <Section key={cat} title={TOOL_CATEGORIES[cat].label} description={TOOL_CATEGORIES[cat].description}>
           {BUILT_IN_TOOLS.filter((t) => t.category === cat).map((t) => {
             const on = !settings.disabledToolIds.includes(t.id);
+            const override = settings.toolOverrides?.[t.id];
             return (
-              <div key={t.id} className={`tool-row ${on ? '' : 'is-off'}`}>
+              <div
+                key={t.id}
+                className={`tool-row clickable ${on ? '' : 'is-off'}`}
+                role="button"
+                tabIndex={0}
+                aria-label={`${t.label} — view and edit`}
+                onClick={() => setViewing(t)}
+                onKeyDown={(e) => e.key === 'Enter' && setViewing(t)}
+              >
                 <span className="list-icon">
                   <NamedIcon name={t.icon} size={16} />
                 </span>
@@ -86,7 +98,9 @@ export function ToolsPage() {
                   </span>
                   <span className="list-desc">{t.description}</span>
                 </span>
-                <span className="list-side">
+                <span className="list-side" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                  {override && <span className="pill success">Edited</span>}
+                  {override?.alwaysAsk && <span className="pill warning">Always asks</span>}
                   <span className={`pill ${RISK[t.risk].cls}`}>{RISK[t.risk].label}</span>
                   <AssignPopover toolId={t.id} agents={agents} />
                   <Switch size="small" checked={on} onChange={(v) => setEnabled(t.id, v)} aria-label={`${t.label} ${on ? 'on' : 'off'} for all agents`} />
@@ -120,6 +134,8 @@ export function ToolsPage() {
           ))
         )}
       </Section>
+
+      <BuiltInToolEditor meta={viewing} onClose={() => setViewing(null)} />
 
       <CustomToolEditor
         value={editing}
@@ -313,6 +329,10 @@ function CustomToolEditor({ value, existingNames, onClose, onSave, onDelete }: E
             ))}
           </div>
         </div>
+        <Collapse
+          size="small"
+          items={[{ key: 'spec', label: 'Exactly what the model receives', children: <pre className="spec-json mono">{JSON.stringify(specOf(customTool(draft)), null, 2)}</pre> }]}
+        />
       </div>
     </Drawer>
   );

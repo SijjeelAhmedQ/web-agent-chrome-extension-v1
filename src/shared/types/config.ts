@@ -150,6 +150,16 @@ export interface VoiceSettings {
   voiceCommands: boolean;
 }
 
+/** The user's edits to a built-in tool (Configuration → Tools). Empty fields keep the default. */
+export interface ToolOverride {
+  /** What the model reads about the tool. */
+  description?: string;
+  /** Parameter name → what the model reads about it. */
+  params?: Record<string, string>;
+  /** Ask before every use, whatever the agent's approval setting. */
+  alwaysAsk?: boolean;
+}
+
 export interface Settings {
   theme: ThemeMode;
   textSize: TextSize;
@@ -171,6 +181,8 @@ export interface Settings {
   voice: VoiceSettings;
   /** Built-in tools that existed when this config was last saved (new ones get added to agents). */
   knownToolIds?: string[];
+  /** Edited descriptions and approval settings of built-in tools, by tool id. */
+  toolOverrides?: Record<string, ToolOverride>;
 }
 
 export interface AppConfig {

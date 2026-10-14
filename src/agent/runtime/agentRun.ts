@@ -394,6 +394,10 @@ export class AgentRun {
   private async needsApproval(tool: AgentTool<any>, args: Record<string, unknown>, ctx: ToolContext, label: string): Promise<ApprovalRequest | null> {
     // Custom tools carry their own “needs approval” setting, whatever the agent's policy.
     if (!BUILT_IN_NAMES.has(tool.name)) return tool.assess ? tool.assess(args, ctx) : null;
+    if (tool.alwaysAsk) {
+      const assessed = tool.assess ? await tool.assess(args, ctx).catch(() => null) : null;
+      return assessed ?? { title: `${label}?`, detail: 'You set this tool to ask before every use.', confirmLabel: 'Allow' };
+    }
     const policy = this.options.agent.confirmation;
     if (policy === 'never') return null;
     const assessed = tool.assess ? await tool.assess(args, ctx).catch(() => null) : null;

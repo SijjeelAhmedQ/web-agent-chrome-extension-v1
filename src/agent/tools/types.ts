@@ -60,6 +60,8 @@ export interface AgentTool<A = Record<string, unknown>> {
   /** Under the “smart” policy: return a request when this particular call needs approval. */
   assess?(args: A, ctx: ToolContext): Promise<ApprovalRequest | null>;
   execute(args: A, ctx: ToolContext): Promise<ToolOutcome>;
-  /** Overrides zod-derived JSON schema (custom tools). */
+  /** Overrides zod-derived JSON schema (custom tools, edited built-in tools). */
   jsonSchema?: Record<string, unknown>;
+  /** The user set this tool to ask before every use. */
+  alwaysAsk?: boolean;
 }

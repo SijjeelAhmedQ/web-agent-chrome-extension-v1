@@ -418,6 +418,55 @@ body {
   padding: 16px 18px;
 }
 
+/* ---------- Built-in tool viewer ---------- */
+
+.tool-drawer-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tool-drawer-lede {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.tool-params {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tool-param {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+}
+
+.tool-param-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.tool-asks {
+  margin-bottom: 8px;
+}
+
+.spec-json {
+  margin: 0;
+  max-height: 360px;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ---------- List rows (skills, tools, providers) ---------- */
 
 .list-row,

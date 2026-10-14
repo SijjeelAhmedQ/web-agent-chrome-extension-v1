@@ -16,6 +16,9 @@ const id = z.coerce.number().int().positive().describe('Element id from the late
 const bool = (fallback: boolean) =>
   z.preprocess((v) => (typeof v === 'string' ? v.toLowerCase() === 'true' : v), z.boolean().optional().default(fallback));
 
+/** Required text the model may send as a number. (z.coerce.string turns a missing value into "undefined", so it would never be required.) */
+const str = (schema = z.string()) => z.preprocess((v) => (typeof v === 'number' || typeof v === 'boolean' ? String(v) : v), schema);
+
 const quote = (s: string) => `“${clip(s, 40)}”`;
 
 function nameOf(ctx: ToolContext, elementId: number, fallback = 'the element'): string {
@@ -203,7 +206,7 @@ const clickText: AgentTool<ClickTextArgs> = {
   description:
     'Click visible text that is not listed as a button or link — e.g. a name in a table or a result in a search dropdown. Matches whole words, exact text first. If the text appears more than once, pass near: other text from the same row (a date of birth, an ID).',
   schema: z.object({
-    text: z.coerce.string().min(1).describe('The visible text to click, e.g. "Arya STARK"'),
+    text: str(z.string().min(1)).describe('The visible text to click, e.g. "Arya STARK"'),
     near: z.coerce.string().optional().default('').describe('Optional: other text in the same row or item, to pick the right one (e.g. "03-12-2015")'),
   }),
   risk: 'sensitive',
@@ -237,7 +240,7 @@ const type: AgentTool<{ id: number; text: string; clear: boolean; submit: boolea
   description: 'Type text into a text field, search box, combobox or editor. Replaces the existing text unless clear is false. Set submit to true to press Enter afterwards (e.g. to run a search).',
   schema: z.object({
     id,
-    text: z.coerce.string().describe('The text to type'),
+    text: str().describe('The text to type'),
     clear: bool(true).describe('Replace existing text (default true)'),
     submit: bool(false).describe('Press Enter after typing (default false)'),
   }),
@@ -289,7 +292,7 @@ const clear: AgentTool<{ id: number }> = {
 const selectOption: AgentTool<{ id: number; option: string }> = {
   name: 'select_option',
   description: 'Choose an option in a native dropdown (<select>) by its visible text. For custom dropdowns, click to open them and then click the option instead.',
-  schema: z.object({ id, option: z.coerce.string().describe('Visible text of the option') }),
+  schema: z.object({ id, option: str().describe('Visible text of the option') }),
   risk: 'action',
   touchesPage: true,
   label: (a, ctx) => `Choosing ${quote(a.option)}${ctx.elements.get(a.id)?.name ? ` in ${nameOf(ctx, a.id)}` : ''}`,

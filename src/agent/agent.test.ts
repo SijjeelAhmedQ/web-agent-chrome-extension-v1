@@ -106,12 +106,33 @@ describe('toolset', () => {
     }
     const click = specs.find((s) => s.name === 'click')!;
     expect((click.parameters.required as string[]) ?? []).toContain('id');
+    // Text inputs the tool can't work without are marked required (not just coerced).
+    const required = (name: string) => (specs.find((s) => s.name === name)!.parameters.required as string[]) ?? [];
+    expect(required('type')).toEqual(expect.arrayContaining(['id', 'text']));
+    expect(required('click_text')).toEqual(['text']);
+    expect(required('select_option')).toEqual(expect.arrayContaining(['id', 'option']));
+    const typeTool = tools.find((t) => t.name === 'type')!;
+    expect(typeTool.schema.safeParse({ id: 3 }).success).toBe(false);
+    expect(typeTool.schema.parse({ id: 3, text: 42 })).toMatchObject({ text: '42' });
   });
   it('coerces loose arguments from small models', () => {
     const config = defaultConfig();
     const { tools } = buildToolset(config.agents[0], config, 'https://example.com');
     const type = tools.find((t) => t.name === 'type')!;
     expect(type.schema.parse({ id: '12', text: 'hi', submit: 'true' })).toEqual({ id: 12, text: 'hi', clear: true, submit: true });
+  });
+  it('sends the user’s edits of a built-in tool to the model', () => {
+    const config = defaultConfig();
+    config.settings.toolOverrides = { click_text: { description: 'Click visible text. On our PMS, click the patient name.', params: { near: 'The date of birth in that row' }, alwaysAsk: true } };
+    const { tools } = buildToolset(config.agents[0], config, 'https://x.com');
+    const spec = toolSpecs(tools).find((s) => s.name === 'click_text')!;
+    expect(spec.description).toBe('Click visible text. On our PMS, click the patient name.');
+    const props = (spec.parameters as { properties: Record<string, { description?: string }> }).properties;
+    expect(props.near.description).toBe('The date of birth in that row');
+    expect(props.text.description).toMatch(/visible text/);
+    expect(tools.find((t) => t.name === 'click_text')!.alwaysAsk).toBe(true);
+    // Untouched tools are sent as they are.
+    expect(tools.find((t) => t.name === 'click')!.alwaysAsk).toBeUndefined();
   });
   it('respects assignments, global switches and site-scoped skills', () => {
     const config = defaultConfig();
