@@ -72,6 +72,10 @@ export class AgentRun {
   private readonly notFound = new Map<string, number>();
   /** In a reply to the agent's question: page actions already done before it asked, not yet warned about. */
   private doneBefore = new Set<string>();
+  /** Pages (origin + path) the agent typed into in this task — searched or filled something there. */
+  private readonly typedOn = new Set<string>();
+  /** Pages where picking from the list before searching was already pointed out once. */
+  private readonly searchWarned = new Set<string>();
   /** Whether this task has looked at (or acted on) the page yet. */
   private sawPage = false;
   /** The items of a request with several things to do, ticked off as the agent goes. */
@@ -277,10 +281,11 @@ export class AgentRun {
             continue;
           }
         }
-        // The double-check came back clean: the user gets the answer that was checked.
-        if (checkedAnswer && /^\W*confirmed\b/i.test(answer)) return checkedAnswer;
+        // The double-check came back clean (“CONFIRMED”, maybe after some reasoning): the user gets the answer that was checked.
+        if (checkedAnswer && (/^\W*confirmed\b/i.test(answer) || /\bCONFIRMED\W*$/.test(answer))) return checkedAnswer;
         // A claim that something was done gets checked against the page before the user sees it.
-        if (!verified && agent.verify !== false && byName.has('read_page') && claimsDone(answer)) {
+        // An answer that stops to ask the user something isn't the end of the task: no check (it would lose the question).
+        if (!verified && agent.verify !== false && byName.has('read_page') && claimsDone(answer) && !asksUser(answer)) {
           verified = true;
           const page = await this.checkPage(ctx);
           if (page) {
@@ -427,6 +432,14 @@ export class AgentRun {
         return `Not typed: “${popup}” is a pop-up that can’t be closed, and the user hasn’t told you in this message what to enter. Don’t make it up and don’t reuse an answer from earlier in the chat. Stop now and ask the user what to enter in “${popup}”. When they reply, type exactly their reply.`;
       }
     }
+    // Picking a row from a list on a page with a search form, without having searched there.
+    if (tool.name === 'click_text' || tool.name === 'click') {
+      const early = await this.pickBeforeSearch(tool.name, args, ctx);
+      if (early) {
+        finish({ status: 'skipped', note: 'Search first' });
+        return early;
+      }
+    }
     const textKey = tool.name === 'click_text' ? String((args as { text?: unknown }).text ?? '').trim().toLowerCase() : '';
     if (textKey && (this.notFound.get(textKey) ?? 0) >= 2) {
       finish({ status: 'skipped', note: 'Not found twice — use the element list' });
@@ -469,6 +482,7 @@ export class AgentRun {
       if (isAction) this.actionTrail.push(step.label);
       const outcome = await this.inFront(ctx, () => tool.execute(args, ctx));
       if (tool.touchesPage) this.sawPage = true;
+      if (tool.name === 'type') this.typedOn.add(pageKey((await ctx.browser.currentTab().catch(() => null))?.url));
       if (textKey && outcome.note === 'Text not found') this.notFound.set(textKey, (this.notFound.get(textKey) ?? 0) + 1);
       if (outcome.noEffect) {
         if (key) this.repeats.set(key, (this.repeats.get(key) ?? 0) + 1);
@@ -507,6 +521,32 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
     if (!closable.length) return '';
     ctx.elements.remember(closable.map((d) => d.close!));
     return `Before you ask the user — these pop-ups came up when the page opened and can be closed:\n${formatDialogs(closable)}\nIf your instructions say to close pop-ups that come up when this page opens, close every one of them now — in front or behind — read the page again, and only then ask about what is left. Otherwise give your answer again.`;
+  }
+
+  /**
+   * Weak models pick the patient (or product, or order) the user named straight from the list a
+   * search page shows before any search — skipping the search the user's workflow requires, and
+   * sometimes opening the wrong record. Once per page: when it has a “Search” button, its search
+   * fields are still empty and nothing was typed there in this task, a pick of that named item from
+   * a table row is sent back to search first. (After a search — by the agent or the user — the
+   * fields hold it, and the pick goes through.)
+   */
+  private async pickBeforeSearch(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<string | null> {
+    const rowPick =
+      name === 'click_text'
+        ? !!String(args.near ?? '').trim()
+        : ((e) => !!e && /^row /.test(e.context ?? '') && /^(link|clickable|cell|gridcell|row)$/.test(e.role))(ctx.elements.get(Number(args.id)));
+    if (!rowPick) return null;
+    const picked = name === 'click_text' ? String(args.text ?? '') : (ctx.elements.get(Number(args.id))?.name ?? '');
+    if (!namedIn(this.options.request, picked)) return null;
+    const key = pageKey((await ctx.browser.currentTab().catch(() => null))?.url);
+    if (!key || this.typedOn.has(key) || this.searchWarned.has(key)) return null;
+    const here = ctx.elements.newest();
+    const fields = here.filter((e) => /^(textbox|searchbox|combobox)$/.test(e.role) && !/^dialog/.test(e.context ?? ''));
+    const button = here.some((e) => e.role === 'button' && /^search$/i.test(e.name.trim()));
+    if (!button || !fields.length || fields.some((f) => (f.value ?? '').trim())) return null;
+    this.searchWarned.add(key);
+    return `Not done: this page has a search form (a “Search” button), and nobody has searched on it yet — the list showing now is not a search result. Type what the user gave into the right search field, click “Search”, read the results, and then pick from them. (Only if the user asked for an item from this list as it is, call this again.)`;
   }
 
   /** A checklist item was ticked (or the list made): the next item starts with fresh loop guards. */
@@ -597,6 +637,24 @@ export function repeatedCycle(trail: string[], next: string): string[] | null {
   }
   if (next.startsWith('Typing') && trail.filter((l) => l === next).length >= 2) return [next];
   return null;
+}
+
+/** Does the request name this item — every word of it (“Arya STARK” in “select arya stark”)? */
+export function namedIn(request: string, item: string): boolean {
+  const words = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter((w) => w.length > 1);
+  const asked = new Set(words(request));
+  const want = words(item);
+  return want.length > 0 && want.every((w) => asked.has(w));
+}
+
+/** A page's identity for “did the agent search here”: origin and path, without query or hash. */
+function pageKey(url: string | undefined): string {
+  try {
+    const u = new URL(url ?? '');
+    return `${u.origin}${u.pathname}`;
+  } catch {
+    return '';
+  }
 }
 
 /** An answer that says what the page or tab shows, or what is open (“You're already on … consult”). */

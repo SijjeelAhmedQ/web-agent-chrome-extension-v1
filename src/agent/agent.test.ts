@@ -6,7 +6,7 @@ import { classifyClick, classifySubmit, classifyTyping } from './execution/riskP
 import { extractTextToolCalls, parseArguments, stripThinking } from './llm/parse';
 import { buildSystemPrompt } from './planner/systemPrompt';
 import { budgetFor, compactMessages, estimateTokens } from './runtime/context';
-import { talksAboutPage } from './runtime/agentRun';
+import { namedIn, talksAboutPage } from './runtime/agentRun';
 import { formatElement } from './tools/format';
 import { buildToolset, toolSpecs } from './tools/registry';
 import type { ChatMessage } from './llm/types';
@@ -200,6 +200,11 @@ describe('prompt and context', () => {
   });
   it('estimates more tokens for digits', () => {
     expect(estimateTokens('2026-10-15')).toBeGreaterThan(estimateTokens('abcdefghij'));
+  });
+  it('knows when the request names the item being picked', () => {
+    expect(namedIn('goto patients and select arya stark', 'Arya STARK')).toBe(true);
+    expect(namedIn('open the first patient', 'Arya STARK')).toBe(false);
+    expect(namedIn('select Patient 1', 'Patient 1')).toBe(true);
   });
   it('sends an answer about the page back when the page was never read', () => {
     expect(talksAboutPage("You're already on Arya STARK's consult (DOB 03-12-2015).")).toBe(true);

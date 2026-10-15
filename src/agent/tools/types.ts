@@ -6,11 +6,11 @@ import type { ElementInfo } from '@/shared/types/page';
 
 /** What the agent remembers about element ids it has seen, for readable activity labels. */
 export class ElementMemory {
-  private map = new Map<number, Pick<ElementInfo, 'id' | 'name' | 'role' | 'type' | 'context' | 'inBlockingPopup'> & { batch: number }>();
+  private map = new Map<number, Pick<ElementInfo, 'id' | 'name' | 'role' | 'type' | 'value' | 'context' | 'inBlockingPopup'> & { batch: number }>();
   private batch = 0;
   remember(elements: ElementInfo[]) {
     this.batch++;
-    for (const e of elements) this.map.set(e.id, { id: e.id, name: e.name, role: e.role, type: e.type, context: e.context, inBlockingPopup: e.inBlockingPopup, batch: this.batch });
+    for (const e of elements) this.map.set(e.id, { id: e.id, name: e.name, role: e.role, type: e.type, value: e.value, context: e.context, inBlockingPopup: e.inBlockingPopup, batch: this.batch });
   }
   get(id: number) {
     return this.map.get(id);
@@ -20,6 +20,11 @@ export class ElementMemory {
     const found = [...this.map.values()].filter((e) => e.name && matches(name, e.name));
     const newest = Math.max(0, ...found.map((e) => e.batch));
     return found.filter((e) => e.batch === newest).sort((a, b) => a.id - b.id);
+  }
+  /** The elements of the latest read (what is on the page now, as far as the agent knows). */
+  newest() {
+    const newest = Math.max(0, ...[...this.map.values()].map((e) => e.batch));
+    return [...this.map.values()].filter((e) => e.batch === newest);
   }
   clear() {
     this.map.clear();
