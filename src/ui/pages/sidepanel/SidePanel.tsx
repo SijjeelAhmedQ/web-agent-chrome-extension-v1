@@ -38,11 +38,12 @@ export function SidePanel() {
   // On a site with its own agents, the site's first agent takes over when you arrive there.
   const siteHere = sitesFor(config, tab.url)[0];
   const siteAgents = siteHere?.agentIds.filter((id) => agents.some((a) => a.id === id)) ?? [];
+  // …and only the site's agents are offered there (elsewhere, every agent).
+  const offered = siteAgents.length ? siteAgents.map((id) => agents.find((a) => a.id === id)!) : agents;
   useEffect(() => {
     if (!siteAgents.length || running || siteAgents.includes(agent.id)) return;
     dispatch(chatActions.setActiveAgent(siteAgents[0]));
-    // Only when the site (or its agents) changes — a manual pick on the same site sticks.
-  }, [siteHere?.id, siteAgents.join(',')]);
+  }, [siteHere?.id, siteAgents.join(','), agent.id, running]);
 
   // Keep the newest activity in view while the agent works.
   const last = turns[turns.length - 1];
@@ -126,7 +127,13 @@ export function SidePanel() {
   return (
     <div className="panel">
       <header className="panel-head">
-        <AgentSwitcher agents={agents} active={agent} disabled={running} onChange={(id) => dispatch(chatActions.setActiveAgent(id))} />
+        <AgentSwitcher
+          agents={offered}
+          title={siteAgents.length ? `Agents for ${siteHere!.name}` : 'Agents'}
+          active={agent}
+          disabled={running}
+          onChange={(id) => dispatch(chatActions.setActiveAgent(id))}
+        />
         <span className="spacer" />
         <IconButton label="New chat" onClick={newChat} disabled={running || !turns.length}>
           <SquarePen size={16} />

@@ -6,12 +6,14 @@ import { openConfiguration } from '../../utils/navigation';
 
 interface Props {
   agents: AgentConfig[];
+  /** The list's heading, e.g. “Agents for Indici” on a site with its own agents. */
+  title?: string;
   active: AgentConfig;
   disabled: boolean;
   onChange: (id: string) => void;
 }
 
-export function AgentSwitcher({ agents, active, disabled, onChange }: Props) {
+export function AgentSwitcher({ agents, title = 'Agents', active, disabled, onChange }: Props) {
   return (
     <Dropdown
       trigger={['click']}
@@ -23,7 +25,7 @@ export function AgentSwitcher({ agents, active, disabled, onChange }: Props) {
         selectedKeys: [active.id],
         onClick: ({ key }) => (key === '__manage' ? void openConfiguration('/agents') : onChange(key)),
         items: [
-          { type: 'group', label: 'Agents' },
+          { type: 'group', label: title },
           ...agents.map((a) => ({
             key: a.id,
             label: (
