@@ -25,6 +25,13 @@ export interface ElementInfo {
   inViewport: boolean;
 }
 
+/** A pop-up showing on top of the page, and the control that closes it (×, Close, Cancel), if any. */
+export interface DialogInfo {
+  title: string;
+  text: string;
+  close: ElementInfo | null;
+}
+
 export interface PageSnapshot {
   url: string;
   title: string;
@@ -37,6 +44,8 @@ export interface PageSnapshot {
   textTruncated: boolean;
   frames: string[];
   dialogOpen: boolean;
+  /** The pop-ups showing now (outermost first). */
+  dialogs?: DialogInfo[];
 }
 
 export type ReadMode = 'overview' | 'content';

@@ -1,4 +1,4 @@
-import type { ElementInfo, ElementRisk, PageSnapshot, ReadMode } from '@/shared/types/page';
+import type { DialogInfo, ElementInfo, ElementRisk, PageSnapshot, ReadMode } from '@/shared/types/page';
 
 /**
  * Typed request/response protocol between the agent (side panel) and the content script.
@@ -139,7 +139,7 @@ export interface ResponseMap {
   key: KeyResult;
   settle: { mutations: number; url: string; title: string; alerts: string[]; effect?: ClickEffect };
   waitForText: { found: boolean };
-  dialogs: { texts: string[] };
+  dialogs: { dialogs: DialogInfo[] };
   presence: null;
 }
 

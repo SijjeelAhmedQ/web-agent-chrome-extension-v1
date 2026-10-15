@@ -3,7 +3,7 @@ import { PageError } from '@/extension/browser/controller';
 import { toolMeta } from '@/shared/constants/tools';
 import { clip, siteOf, sleep } from '@/shared/utils';
 import { classifyClick, classifySubmit, classifyTyping } from '../execution/riskPolicy';
-import { formatElement, formatSnapshot } from './format';
+import { formatDialogs, formatElement, formatSnapshot } from './format';
 import type { TextResult } from '@/extension/messaging/protocol';
 import type { AgentTool, ApprovalRequest, ToolContext, ToolOutcome } from './types';
 
@@ -119,7 +119,7 @@ const readPage: AgentTool<{ mode: 'overview' | 'content' }> = {
   label: (a) => (a.mode === 'content' ? 'Reading the page content' : 'Reading the page'),
   async execute(a, ctx) {
     const snap = await ctx.browser.send({ kind: 'snapshot', mode: a.mode, maxElements: ctx.settings.maxElements, maxTextChars: ctx.settings.maxTextChars });
-    ctx.elements.remember(snap.elements);
+    ctx.elements.remember([...snap.elements, ...(snap.dialogs ?? []).flatMap((d) => (d.close ? [d.close] : []))]);
     const n = snap.elements.length + snap.omitted;
     return { output: formatSnapshot(snap, a.mode), note: `${n} controls · ${clip(snap.title || siteOf(snap.url), 40)}` };
   },
@@ -164,8 +164,9 @@ async function clickById(ctx: ToolContext, elementId: number, double = false): P
  */
 async function dialogReport(ctx: ToolContext): Promise<string> {
   const res = await ctx.browser.send({ kind: 'dialogs', waitMs: 2500 }).catch(() => null);
-  if (!res?.texts.length) return '';
-  return ` A dialog is showing on top of the page: ${res.texts.map((t) => `“${t}”`).join('; ')}. Deal with it first — read_page shows its fields and buttons — before anything else, following any rule you were given for it.`;
+  if (!res?.dialogs.length) return '';
+  ctx.elements.remember(res.dialogs.flatMap((d) => (d.close ? [d.close] : [])));
+  return ` A dialog is showing on top of the page.\n${formatDialogs(res.dialogs)}\nDeal with it first — read_page shows its fields and buttons — following any rule you were given for pop-ups.`;
 }
 
 async function followNewTab(ctx: ToolContext, tab: chrome.tabs.Tab, label: string, how = ''): Promise<ToolOutcome> {

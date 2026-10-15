@@ -1,4 +1,4 @@
-import type { ElementInfo, ElementRisk, PageSnapshot, ReadMode } from '@/shared/types/page';
+import type { DialogInfo, ElementInfo, ElementRisk, PageSnapshot, ReadMode } from '@/shared/types/page';
 import type { FindResult, TextResult } from '../messaging/protocol';
 import {
   accessibleName,
@@ -117,6 +117,45 @@ function pageText(maxChars: number): { text: string; truncated: boolean } {
   return raw.length > maxChars ? { text: raw.slice(0, maxChars), truncated: true } : { text: raw, truncated: false };
 }
 
+/** Pop-ups that cover the page: native dialogs, ARIA dialogs, Bootstrap and jQuery UI modals. */
+export const DIALOGS = 'dialog[open],[role=dialog],[role=alertdialog],[aria-modal=true],.modal.show,.modal.in,.ui-dialog';
+
+const CLOSE_NAME = /^(×|✕|✖|╳|x|close|cancel|dismiss|close dialog|close window)$/i;
+const CLOSE_CLASS = /(^|\s)(close|btn-close|ui-dialog-titlebar-close|modal-close)(\s|$)/i;
+
+/** The × / Close / Cancel control of a dialog, if it has one. */
+function closeControl(dialog: Element): Element | null {
+  const candidates = dialog.querySelectorAll(
+    'button,a,[role=button],input[type=button],input[type=submit],input[type=reset],.close,.btn-close,.ui-dialog-titlebar-close,[data-dismiss],[data-bs-dismiss],[aria-label],[title]',
+  );
+  for (const el of Array.from(candidates)) {
+    if (!isVisible(el)) continue;
+    const name = accessibleName(el).trim();
+    const cls = typeof el.className === 'string' ? el.className : '';
+    if (CLOSE_NAME.test(name) || CLOSE_CLASS.test(cls) || el.hasAttribute('data-dismiss') || el.hasAttribute('data-bs-dismiss')) return el;
+  }
+  return null;
+}
+
+function dialogTitle(dialog: Element): string {
+  const labelled = dialog.getAttribute('aria-labelledby');
+  const byId = labelled ? labelled.split(/\s+/).map((id) => dialog.ownerDocument.getElementById(id)?.textContent ?? '').join(' ') : '';
+  const heading = dialog.querySelector('.modal-title,.ui-dialog-title,[class*="title"],h1,h2,h3,h4,legend,b,strong')?.textContent ?? '';
+  const first = ((dialog as HTMLElement).innerText ?? '').split('\n').find((l) => l.trim()) ?? '';
+  return clip((byId || dialog.getAttribute('aria-label') || heading || first).replace(/\s+/g, ' ').trim(), 90);
+}
+
+/** The pop-ups showing now, outermost first, each with its close control. */
+export function showingDialogs(): DialogInfo[] {
+  return Array.from(document.querySelectorAll(DIALOGS))
+    .filter((d) => isVisible(d) && !d.parentElement?.closest(DIALOGS))
+    .slice(0, 4)
+    .map((d) => {
+      const close = closeControl(d);
+      return { title: dialogTitle(d), text: clip(((d as HTMLElement).innerText ?? '').replace(/\s+/g, ' ').trim(), 220), close: close ? describeElement(close) : null };
+    });
+}
+
 export function snapshot(mode: ReadMode, maxElements: number, maxTextChars: number): PageSnapshot {
   const { elements, frames } = collectInteractive();
   const described = elements.map(describeElement);
@@ -140,6 +179,7 @@ export function snapshot(mode: ReadMode, maxElements: number, maxTextChars: numb
     textTruncated: truncated,
     frames,
     dialogOpen: Array.from(document.querySelectorAll('dialog[open],[role=dialog]:not([aria-hidden=true]),[aria-modal=true]')).some((d) => isVisible(d)),
+    dialogs: showingDialogs(),
   };
 }
 

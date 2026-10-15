@@ -1,3 +1,4 @@
+import type { DialogInfo } from '@/shared/types/page';
 import type {
   ClickEffect,
   ClickResult,
@@ -11,6 +12,7 @@ import type {
 import { accessibleName, elementFor, hasHiddenMenu, isDisabled, isEditable, isVisible, OVERLAY_HOST_ID, roleOf } from './elements';
 import { isHovered, openHoverMenu, releaseHoverUnlessInside } from './hover';
 import { highlight } from './overlay';
+import { showingDialogs } from './snapshot';
 import { isButton, isHTML, isInput, isLabel, isSelect, isTextArea } from './dom';
 
 /**
@@ -486,22 +488,15 @@ export function settle(quietMs: number, timeoutMs: number): Promise<{ mutations:
   });
 }
 
-/** Pop-ups that cover the page: native dialogs, ARIA dialogs, Bootstrap and jQuery UI modals. */
-const DIALOGS = 'dialog[open],[role=dialog],[role=alertdialog],[aria-modal=true],.modal.show,.modal.in,.ui-dialog';
-
 /**
- * The text of the dialogs showing now — waiting up to `waitMs` for one to appear, since pages
- * often open them a moment after loading (“Add reason to view patient file”).
+ * The dialogs showing now — waiting up to `waitMs` for one to appear, since pages often open
+ * them a moment after loading (“Add reason to view patient file”).
  */
-export async function visibleDialogs(waitMs: number): Promise<{ texts: string[] }> {
+export async function visibleDialogs(waitMs: number): Promise<{ dialogs: DialogInfo[] }> {
   const deadline = Date.now() + waitMs;
   for (;;) {
-    const texts = Array.from(document.querySelectorAll(DIALOGS))
-      .filter((d) => isVisible(d) && !d.parentElement?.closest(DIALOGS))
-      .map((d) => ((d as HTMLElement).innerText ?? '').replace(/\s+/g, ' ').trim())
-      .filter(Boolean)
-      .map((t) => (t.length > 220 ? `${t.slice(0, 219)}…` : t));
-    if (texts.length || Date.now() >= deadline) return { texts: [...new Set(texts)].slice(0, 3) };
+    const dialogs = showingDialogs();
+    if (dialogs.length || Date.now() >= deadline) return { dialogs };
     await sleep(250);
   }
 }

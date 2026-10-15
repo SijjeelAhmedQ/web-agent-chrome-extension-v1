@@ -1,4 +1,4 @@
-import type { ElementInfo, PageSnapshot } from '@/shared/types/page';
+import type { DialogInfo, ElementInfo, PageSnapshot } from '@/shared/types/page';
 
 /**
  * Turns a page snapshot into compact text for the model. One line per element:
@@ -30,13 +30,23 @@ export function formatElement(e: ElementInfo): string {
   return parts.join(' ');
 }
 
+/** Pop-ups on top of the page, each with the control that closes it — or a note that it has none. */
+export function formatDialogs(dialogs: DialogInfo[]): string {
+  const lines = dialogs.map((d) => {
+    const how = d.close ? `can be closed: [${d.close.id}] ${d.close.role === 'clickable' ? d.close.tag : d.close.role} ${q(d.close.name || '×')}` : 'has no ×, Close or Cancel button';
+    return `- ${q(d.title || 'Pop-up')} — ${how}. Shows: ${q(d.text)}`;
+  });
+  return ['Pop-ups showing on top of the page (deal with them before anything else):', ...lines].join('\n');
+}
+
 export function formatSnapshot(s: PageSnapshot, mode: 'overview' | 'content'): string {
   const lines: string[] = [];
   lines.push(`Page: ${s.title || '(untitled)'}`);
   lines.push(`URL: ${s.url}`);
   const where = s.scroll.atTop && s.scroll.atBottom ? 'whole page visible' : `scrolled ${s.scroll.percent}% of ${s.scroll.screens} screens${s.scroll.atBottom ? ' (at bottom)' : ''}`;
   lines.push(`Scroll: ${where}`);
-  if (s.dialogOpen) lines.push('A dialog is open on top of the page.');
+  if (s.dialogs?.length) lines.push(formatDialogs(s.dialogs));
+  else if (s.dialogOpen) lines.push('A dialog is open on top of the page.');
   if (s.frames.length) lines.push(`Embedded frames that can't be read: ${s.frames.slice(0, 5).join(', ')}`);
   lines.push('');
 
