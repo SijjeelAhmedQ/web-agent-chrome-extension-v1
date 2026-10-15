@@ -5,7 +5,8 @@ import { matchesSite } from '@/shared/utils';
 import { classifyClick, classifySubmit, classifyTyping } from './execution/riskPolicy';
 import { extractTextToolCalls, parseArguments, stripThinking } from './llm/parse';
 import { buildSystemPrompt } from './planner/systemPrompt';
-import { budgetFor, compactMessages } from './runtime/context';
+import { budgetFor, compactMessages, estimateTokens } from './runtime/context';
+import { talksAboutPage } from './runtime/agentRun';
 import { formatElement } from './tools/format';
 import { buildToolset, toolSpecs } from './tools/registry';
 import type { ChatMessage } from './llm/types';
@@ -167,16 +168,42 @@ describe('prompt and context', () => {
   it('leaves the prompt untouched while it fits (prompt-cache friendly)', () => {
     const msgs: ChatMessage[] = [{ role: 'system', content: 's' }];
     for (let i = 0; i < 4; i++) msgs.push({ role: 'tool', toolName: 'read_page', toolCallId: `${i}`, content: `snapshot ${i}` });
-    compactMessages(msgs, 10_000);
+    compactMessages(msgs, 3_000);
     expect(msgs.map((m) => m.content)).toEqual(['s', 'snapshot 0', 'snapshot 1', 'snapshot 2', 'snapshot 3']);
   });
   it('drops all but the latest snapshot once over budget', () => {
     const msgs: ChatMessage[] = [{ role: 'system', content: 's' }];
     for (let i = 0; i < 4; i++) msgs.push({ role: 'tool', toolName: 'read_page', toolCallId: `${i}`, content: `snapshot ${i} `.repeat(100) });
-    compactMessages(msgs, 2_000);
+    compactMessages(msgs, 1_000);
     expect(msgs.slice(1, 4).every((m) => /removed/.test(m.content))).toBe(true);
     expect(msgs[4].content).toMatch(/^snapshot 3/);
-    expect(budgetFor(12288)).toBeGreaterThan(30_000);
+    expect(budgetFor(16384)).toBe(14_884);
+  });
+  it('always fits the budget: chat history is trimmed, then the latest page shrinks — text first, then off-screen elements', () => {
+    const els = Array.from({ length: 240 }, (_, i) => `[${7400 + i}] link "Patient ${i}" in row "03-12-2015 · ZAA3490"${i > 120 ? ' ↓' : ''}`);
+    const page = `Page: Patient Search\nURL: https://x.test/\n\nInteractive elements (↓ = outside the visible area):\n${els.join('\n')}\n\nVisible text (start):\n${'Arya STARK 03-12-2015 +642100000000 '.repeat(300)}`;
+    const msgs: ChatMessage[] = [
+      { role: 'system', content: 'rules '.repeat(3000) },
+      { role: 'user', content: 'earlier request' },
+      { role: 'assistant', content: 'a long earlier answer with a table '.repeat(200) },
+      { role: 'user', content: 'goto patients and select arya stark' },
+      { role: 'tool', toolName: 'read_page', toolCallId: '1', content: page },
+    ];
+    compactMessages(msgs, 9_000);
+    const total = msgs.reduce((n, m) => n + estimateTokens(m.content) + 4, 0);
+    expect(total).toBeLessThanOrEqual(9_000);
+    expect(msgs[3].content).toBe('goto patients and select arya stark');
+    expect(msgs[2].content.length).toBeLessThan(600);
+    expect(msgs[4].content).not.toContain('Visible text');
+    expect(msgs[4].content).toContain('[7400] link "Patient 0"');
+    expect(msgs[4].content).toMatch(/shortened to fit/);
+  });
+  it('estimates more tokens for digits', () => {
+    expect(estimateTokens('2026-10-15')).toBeGreaterThan(estimateTokens('abcdefghij'));
+  });
+  it('sends an answer about the page back when the page was never read', () => {
+    expect(talksAboutPage("You're already on Arya STARK's consult (DOB 03-12-2015).")).toBe(true);
+    expect(talksAboutPage('Hello! How can I help?')).toBe(false);
   });
   it('formats elements compactly', () => {
     expect(formatElement({ id: 3, role: 'searchbox', name: 'Search', tag: 'input', type: 'search', value: '', inViewport: true })).toBe('[3] searchbox "Search" (empty)');

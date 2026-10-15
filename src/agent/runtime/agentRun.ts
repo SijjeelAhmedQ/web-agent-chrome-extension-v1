@@ -16,7 +16,7 @@ import { buildSystemPrompt } from '../planner/systemPrompt';
 import { knowledgeBudget, knowledgeSection } from '../planner/siteKnowledge';
 import { buildToolset, sitesFor, toolSpecs } from '../tools/registry';
 import { ElementMemory, type AgentTool, type ApprovalRequest, type ToolContext } from '../tools/types';
-import { budgetFor, clipToolOutput, compactMessages } from './context';
+import { budgetFor, clipToolOutput, compactMessages, estimateTokens } from './context';
 import type { ApprovalPrompt, RunEvent } from './events';
 import { asksUser, followUpOf, historyForModel } from './followUp';
 import { Checklist, checklistTool } from './checklist';
@@ -72,6 +72,8 @@ export class AgentRun {
   private readonly notFound = new Map<string, number>();
   /** In a reply to the agent's question: page actions already done before it asked, not yet warned about. */
   private doneBefore = new Set<string>();
+  /** Whether this task has looked at (or acted on) the page yet. */
+  private sawPage = false;
   /** The items of a request with several things to do, ticked off as the agent goes. */
   private checklist = new Checklist();
   /** The site knowledge in the prompt — values written there count as the user's. */
@@ -184,7 +186,8 @@ export class AgentRun {
     toolset.tools.push(checklistTool(this.checklist, (done) => this.checklistChanged(done)));
     const specs = toolSpecs(toolset.tools);
     // Room for the conversation: the server's context window minus the tool definitions sent with every call.
-    let budget = budgetFor(contextWindowOf(provider)) - JSON.stringify(specs).length;
+    // Tokens for the conversation: the context window minus the reply and the tool definitions sent with every call.
+    let budget = budgetFor(contextWindowOf(provider)) - estimateTokens(JSON.stringify(specs));
     const byName = new Map(toolset.tools.map((t) => [t.name, t]));
     const ctx: ToolContext = {
       browser,
@@ -221,6 +224,7 @@ export class AgentRun {
     if (knownModel(model)?.tools === false) return this.answerWithoutTools(client, model, ctx);
 
     let listNudges = 0;
+    let pageNudged = false;
     let popupsChecked = false;
     for (let step = 0; step < this.stepLimit(agent.maxSteps); step++) {
       this.throwIfCancelled();
@@ -243,7 +247,7 @@ export class AgentRun {
         const cutOff = response.finishReason === 'length';
         if ((cutOff || soundsUnfinished(answer)) && nudges < 3 && !checkedAnswer) {
           nudges++;
-          if (cutOff) budget = Math.max(8_000, Math.floor(budget * 0.6)); // make room: drop old page snapshots sooner
+          if (cutOff) budget = Math.max(3_000, Math.floor(budget * 0.6)); // make room: drop old page snapshots sooner
           messages.push({ role: 'assistant', content: answer });
           messages.push({ role: 'user', content: cutOff ? CUT_OFF_PROMPT : CONTINUE_PROMPT });
           continue;
@@ -254,6 +258,13 @@ export class AgentRun {
           listNudges++;
           messages.push({ role: 'assistant', content: answer });
           messages.push({ role: 'user', content: `${NOT_FINISHED_PROMPT} Checklist item${left.length === 1 ? '' : 's'} ${left.join(', ')} ${left.length === 1 ? 'is' : 'are'} not ticked:\n${this.checklist.format()}\nIf you finished one, call task_list with done for it. Otherwise carry on with item ${left[0]}. If one can't be done, tell the user which one and why.` });
+          continue;
+        }
+        // An answer about the page from a task that never looked at it (earlier answers may be stale).
+        if (!this.sawPage && !pageNudged && !checkedAnswer && byName.has('read_page') && talksAboutPage(answer)) {
+          pageNudged = true;
+          messages.push({ role: 'assistant', content: answer });
+          messages.push({ role: 'user', content: `${NOT_FINISHED_PROMPT} you haven't looked at the page in this task — the tab may have changed since earlier answers. Call read_page now, check the page, and then do the task or answer from what it shows.` });
           continue;
         }
         // About to stop and ask while a pop-up that came with the page opening, and can be closed, is still there.
@@ -457,6 +468,7 @@ export class AgentRun {
 
       if (isAction) this.actionTrail.push(step.label);
       const outcome = await this.inFront(ctx, () => tool.execute(args, ctx));
+      if (tool.touchesPage) this.sawPage = true;
       if (textKey && outcome.note === 'Text not found') this.notFound.set(textKey, (this.notFound.get(textKey) ?? 0) + 1);
       if (outcome.noEffect) {
         if (key) this.repeats.set(key, (this.repeats.get(key) ?? 0) + 1);
@@ -585,6 +597,11 @@ export function repeatedCycle(trail: string[], next: string): string[] | null {
   }
   if (next.startsWith('Typing') && trail.filter((l) => l === next).length >= 2) return [next];
   return null;
+}
+
+/** An answer that says what the page or tab shows, or what is open (“You're already on … consult”). */
+export function talksAboutPage(answer: string): boolean {
+  return /\b(already (on|in|open)|currently (on|in|open|showing)|you'?re (on|in)|is (already )?open|(this|the|current) (page|tab|screen)|consult)\b/i.test(answer);
 }
 
 /** What the user sees when the task stops because they declined a step. */

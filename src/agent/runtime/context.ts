@@ -3,43 +3,96 @@ import type { ChatMessage } from '../llm/types';
 const SNAPSHOT_TOOLS = new Set(['read_page']);
 const MAX_TOOL_CHARS = 20_000;
 const PLACEHOLDER = '[Earlier page snapshot removed — its element ids are no longer valid.]';
-
-const size = (messages: ChatMessage[]) => messages.reduce((n, m) => n + m.content.length, 0);
+/** The least of the latest page the model keeps, in tokens, however tight the budget. */
+const MIN_PAGE_TOKENS = 1_200;
+const SHRUNK_NOTE = '[…page list shortened to fit the model’s memory — use find_element or click_text for something not listed]';
 
 /**
- * Keeps the conversation within `budgetChars`. Nothing changes while it fits, so the
- * prompt only ever grows at the end and model servers can reuse their prompt cache
- * (rewriting earlier turns forces a full re-read, which is slow on local models). Once the
- * budget is exceeded, every page snapshot except the latest is dropped in one go, then
- * long older tool results are trimmed if needed. Mutates and returns the array.
+ * Tokens a text takes, roughly and on the safe side. Page snapshots are full of ids, dates and
+ * phone numbers, and models like Qwen spend a token on every digit — so digits count one each,
+ * the rest about 3.2 characters a token.
  */
-export function compactMessages(messages: ChatMessage[], budgetChars: number): ChatMessage[] {
-  if (size(messages) <= budgetChars) return messages;
-  let latestSeen = false;
+export function estimateTokens(text: string): number {
+  const digits = text.match(/\d/g)?.length ?? 0;
+  return digits + Math.ceil((text.length - digits) / 3.2);
+}
+
+const tokensOf = (m: ChatMessage) => estimateTokens(m.content) + 4;
+const size = (messages: ChatMessage[]) => messages.reduce((n, m) => n + tokensOf(m), 0);
+
+/**
+ * Keeps the conversation within `budgetTokens`. Nothing changes while it fits, so the prompt
+ * only ever grows at the end and model servers can reuse their prompt cache (rewriting earlier
+ * turns forces a full re-read, which is slow on local models). Once over budget: every page
+ * snapshot except the latest is dropped, then long older tool results are trimmed, then long
+ * earlier chat turns, and last the latest page itself — so the prompt always fits. A prompt over
+ * the model's context is cut from the front by the server, losing the user's request.
+ * Mutates and returns the array.
+ */
+export function compactMessages(messages: ChatMessage[], budgetTokens: number): ChatMessage[] {
+  if (size(messages) <= budgetTokens) return messages;
+  let latest = -1;
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
     if (m.role === 'tool' && SNAPSHOT_TOOLS.has(m.toolName)) {
-      if (latestSeen && m.content !== PLACEHOLDER) messages[i] = { ...m, content: PLACEHOLDER };
-      latestSeen = true;
+      if (latest >= 0 && m.content !== PLACEHOLDER) messages[i] = { ...m, content: PLACEHOLDER };
+      else if (latest < 0) latest = i;
     }
   }
   let total = size(messages);
   const lastIndex = messages.length - 1;
-  for (let i = 0; i < lastIndex && total > budgetChars; i++) {
+  for (let i = 0; i < lastIndex && total > budgetTokens; i++) {
     const m = messages[i];
-    if (m.role === 'tool' && m.content.length > 600 && m.content !== PLACEHOLDER) {
-      total -= m.content.length - 600;
+    if (i !== latest && m.role === 'tool' && m.content.length > 600 && m.content !== PLACEHOLDER) {
+      total -= tokensOf(m);
       messages[i] = { ...m, content: `${m.content.slice(0, 600)}\n[…trimmed]` };
+      total += tokensOf(messages[i]);
     }
+  }
+  // Earlier turns of the chat (before this request): their gist is enough.
+  const request = messages.findLastIndex((m) => m.role === 'user');
+  for (let i = 1; i < request && total > budgetTokens; i++) {
+    const m = messages[i];
+    if ((m.role === 'user' || m.role === 'assistant') && m.content.length > 500) {
+      total -= tokensOf(m);
+      messages[i] = { ...m, content: `${m.content.slice(0, 500)} […]` };
+      total += tokensOf(messages[i]);
+    }
+  }
+  if (total > budgetTokens && latest >= 0) {
+    const m = messages[latest];
+    const room = Math.max(MIN_PAGE_TOKENS, budgetTokens - (total - tokensOf(m)));
+    messages[latest] = { ...m, content: shrinkSnapshot(m.content, room) };
   }
   return messages;
 }
 
-/** Room for the conversation, in characters, given a model's context window in tokens. */
+/**
+ * A page snapshot cut down to about `tokens`: first its page text (the element list says what
+ * can be done), then elements outside the visible area, then whatever is at the end.
+ */
+export function shrinkSnapshot(text: string, tokens: number): string {
+  if (estimateTokens(text) <= tokens) return text;
+  let out = text.replace(/\n\n(Visible text \(start\)|Page text|Headings):[\s\S]*$/, '');
+  if (estimateTokens(out) + 40 > tokens) out = out.split('\n').filter((l) => !(/^\[\d+\] /.test(l) && l.endsWith(' ↓'))).join('\n');
+  if (estimateTokens(out) + 40 > tokens) {
+    const lines = out.split('\n');
+    let used = 0;
+    const kept: string[] = [];
+    for (const l of lines) {
+      used += estimateTokens(l) + 1;
+      if (used + 40 > tokens) break;
+      kept.push(l);
+    }
+    out = kept.join('\n');
+  }
+  return `${out}\n${SHRUNK_NOTE}`;
+}
+
+/** Room for the conversation, in tokens, given a model's context window: all of it but the reply. */
 export function budgetFor(contextTokens: number | undefined): number {
-  if (!contextTokens) return 60_000;
-  // ~3.5 characters per token; keep ~3k tokens for the system prompt, tool definitions and the reply.
-  return Math.max(8_000, Math.round((contextTokens - 3_000) * 3.5));
+  if (!contextTokens) return 20_000;
+  return Math.max(4_000, contextTokens - 1_500);
 }
 
 export function clipToolOutput(text: string): string {
