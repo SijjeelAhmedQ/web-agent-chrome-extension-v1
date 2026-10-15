@@ -33,6 +33,7 @@ describe('a reply to the agent’s question', () => {
     expect(f?.request).toContain('My reply to your question: “routine follow-up”');
     expect(f?.request).toContain('don\'t start the task over');
     expect(f?.doneSteps).toEqual(['Opening “Patients” › “Search & List”', 'Typing “Arya Stark” into “Patient Name:”', 'Clicking “Arya STARK” (with “03-12-2015”)']);
+    expect(followUpOf(history, 'goto patients and select Arya Stark')).toBeNull();
     const shown = historyForModel(history, f);
     expect(shown[1].content.startsWith('(Your last answer — you stopped here to ask the user)')).toBe(true);
   });

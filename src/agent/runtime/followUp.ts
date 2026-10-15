@@ -44,6 +44,8 @@ export function followUpOf(history: ChatMessage[], reply: string): FollowUp | nu
   const at = last.content.lastIndexOf(STOPPED);
   if (at < 0 || !last.content.trimEnd().endsWith(']')) return null;
   const task = asked.content.trim();
+  // The same request again (Run again) is a fresh start, not a reply.
+  if (reply.trim().toLowerCase() === task.toLowerCase()) return null;
   const doneSteps = last.content
     .slice(at + STOPPED.length)
     .split('\n')

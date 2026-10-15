@@ -178,6 +178,7 @@ export function SidePanel() {
                   developer={settings.developerMode}
                   expandActivity={settings.expandActivity}
                   isLast={i === turns.length - 1}
+                  busy={running}
                   onRespond={respond}
                   onRetry={onSend}
                 />

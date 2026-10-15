@@ -19,18 +19,20 @@ interface Props {
   developer: boolean;
   expandActivity: boolean;
   isLast: boolean;
+  /** The agent is working: a request can't be run again until it's done. */
+  busy: boolean;
   onRespond: (approvalId: string, approved: boolean) => void;
   onRetry: (request: string) => void;
 }
 
-function CopyButton({ text }: { text: string }) {
+function CopyButton({ text, label = 'Copy answer' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <Tooltip title={copied ? 'Copied' : 'Copy'} mouseEnterDelay={0.3}>
       <button
         type="button"
         className="icon-btn small"
-        aria-label="Copy answer"
+        aria-label={label}
         onClick={() => {
           void navigator.clipboard.writeText(text).then(() => {
             setCopied(true);
@@ -44,7 +46,7 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-export const TurnView = memo(function TurnView({ turn, agent, agents, showAgent, developer, expandActivity, isLast, onRespond, onRetry }: Props) {
+export const TurnView = memo(function TurnView({ turn, agent, agents, showAgent, developer, expandActivity, isLast, busy, onRespond, onRetry }: Props) {
   const task = turn.task;
   const status = task?.status ?? 'running';
   const code = (task?.errorCode ?? 'unknown') as ErrorCode;
@@ -53,6 +55,14 @@ export const TurnView = memo(function TurnView({ turn, agent, agents, showAgent,
     <article className="turn" aria-label="Conversation turn">
       <div className="user-msg">
         <div className="bubble">{turn.request}</div>
+        <div className="request-actions">
+          <CopyButton text={turn.request} label="Copy request" />
+          <Tooltip title={busy ? 'Wait until the agent is done' : 'Run again'} mouseEnterDelay={0.3}>
+            <button type="button" className="icon-btn small" aria-label="Run this request again" disabled={busy} onClick={() => onRetry(turn.request)}>
+              <RotateCcw size={14} />
+            </button>
+          </Tooltip>
+        </div>
       </div>
 
       <div className="agent-msg">

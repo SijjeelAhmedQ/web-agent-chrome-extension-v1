@@ -145,7 +145,32 @@ body {
 
 .user-msg {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+/* Copy / run again under the request — quiet until hovered, like the answer's actions. */
+.request-actions {
+  display: flex;
+  gap: 2px;
+  margin-top: 4px;
+  margin-right: -6px;
+  opacity: 0.6;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.user-msg:hover .request-actions,
+.request-actions:focus-within {
+  opacity: 1;
+}
+
+.request-actions .icon-btn {
+  color: var(--text-muted);
+}
+
+.request-actions .icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .user-msg .bubble {
