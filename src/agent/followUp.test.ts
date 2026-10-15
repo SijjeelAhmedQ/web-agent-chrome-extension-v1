@@ -20,6 +20,7 @@ describe('a reply to the agent’s question', () => {
     expect(rememberedAnswer('Arya STARK is open.', steps)).toBe('Arya STARK is open.');
     expect(rememberedAnswer('Arya STARK is open. Is there anything else I can help you with?', steps)).not.toContain('Where I stopped');
     expect(rememberedAnswer('Done. Would you like me to add a medication?', steps)).not.toContain('Where I stopped');
+    expect(rememberedAnswer("Arya STARK's consult is open. Is there anything you'd like me to do with this patient's record?", steps)).not.toContain('Where I stopped');
     expect(rememberedAnswer('Which one should I open — Arya STARK (03-12-2015) or Arya STARK (01-01-1990)?', steps)).toContain('Where I stopped');
   });
 

@@ -10,7 +10,7 @@ import type { ChatMessage } from '../llm/types';
 const STOPPED = '[Where I stopped — steps already done in this task:';
 
 /** Polite offers at the end of an answer are not questions the task is waiting on. */
-const OFFER = /\b(anything else|something else|let me know|else (can|could|should) i|help (you )?with|would you like me to|shall i|want me to|need (any|more|further))\b[^?]*\?/gi;
+const OFFER = /\b(is there anything|anything else|something else|let me know|else (can|could|should) i|help (you )?with|(would|do) you (like|want) me to|you'?d like me to|shall i|want me to|need (any|more|further))\b[^?]*\?/gi;
 
 /** True when an answer ends by asking the user something the task needs. */
 export function asksUser(answer: string): boolean {

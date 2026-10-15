@@ -271,10 +271,11 @@ export class AgentRun {
           messages.push({ role: 'user', content: `${NOT_FINISHED_PROMPT} you haven't looked at the page in this task — the tab may have changed since earlier answers. Call read_page now, check the page, and then do the task or answer from what it shows.` });
           continue;
         }
-        // About to stop and ask while a pop-up that came with the page opening, and can be closed, is still there.
-        if (asksUser(answer) && !popupsChecked && !checkedAnswer && byName.has('read_page')) {
+        // Finishing while pop-ups that came with the page opening are still there: one that can be
+        // closed (before asking the user anything), or one that can't, left without a word to the user.
+        if (!popupsChecked && !checkedAnswer && byName.has('read_page') && ctx.arrivalPopups?.size) {
           popupsChecked = true;
-          const note = await this.closablePopups(ctx);
+          const note = await this.popupsLeft(ctx, asksUser(answer));
           if (note) {
             messages.push({ role: 'assistant', content: answer });
             messages.push({ role: 'user', content: `${NOT_FINISHED_PROMPT} ${note}` });
@@ -510,17 +511,23 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
   }
 
   /**
-   * Pop-ups that came up when the last page or tab opened and can still be closed — said to the
-   * model before it stops to ask the user. Pop-ups from its own actions later (a search, a
-   * warning while adding something) are not this: they are part of the task.
+   * Pop-ups that came up when the last page or tab opened and are still showing, said to the model
+   * before it finishes: ones that can be closed (close them before asking the user anything), or —
+   * when the answer asks nothing — ones that can't be closed, which wait for something only the
+   * user can give. Pop-ups from its own actions later (a search, a warning while adding
+   * something) are not this: they are part of the task.
    */
-  private async closablePopups(ctx: ToolContext): Promise<string> {
-    if (!ctx.arrivalPopups?.size) return '';
+  private async popupsLeft(ctx: ToolContext, asking: boolean): Promise<string> {
     const res = await this.inFront(ctx, () => ctx.browser.send({ kind: 'dialogs', waitMs: 0 })).catch(() => null);
-    const closable = (res?.dialogs ?? []).filter((d) => d.close && ctx.arrivalPopups!.has(d.title));
-    if (!closable.length) return '';
-    ctx.elements.remember(closable.map((d) => d.close!));
-    return `Before you ask the user — these pop-ups came up when the page opened and can be closed:\n${formatDialogs(closable)}\nIf your instructions say to close pop-ups that come up when this page opens, close every one of them now — in front or behind — read the page again, and only then ask about what is left. Otherwise give your answer again.`;
+    const left = (res?.dialogs ?? []).filter((d) => ctx.arrivalPopups!.has(d.title));
+    const closable = left.filter((d) => d.close);
+    if (closable.length) {
+      ctx.elements.remember(closable.map((d) => d.close!));
+      return `Before you ${asking ? 'ask the user' : 'finish'} — these pop-ups came up when the page opened and can be closed:\n${formatDialogs(closable)}\nIf your instructions say to close pop-ups that come up when this page opens, close every one of them now — in front or behind — read the page again, and only then ${asking ? 'ask about what is left' : 'finish'}. Otherwise give your answer again.`;
+    }
+    const blocking = left.filter((d) => !d.close);
+    if (asking || !blocking.length) return '';
+    return `the pop-up${blocking.length > 1 ? 's' : ''} ${blocking.map((d) => `“${d.title}”`).join(', ')} ${blocking.length > 1 ? 'are' : 'is'} still open on top of the page and can't be closed — the page can't be used until ${blocking.length > 1 ? 'they are' : 'it is'} filled in. Don't fill ${blocking.length > 1 ? 'them' : 'it'} yourself. Follow your instructions for ${blocking.length > 1 ? 'them' : 'it'}: if they say to ask the user what to enter, give your answer again and end it with that question, quoting the pop-up's title (e.g. "What reason should I add to view the patient file?").`;
   }
 
   /**
