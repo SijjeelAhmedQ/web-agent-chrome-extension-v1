@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { AgentRun } from '@/agent/runtime/agentRun';
 import type { RunEvent } from '@/agent/runtime/events';
+import { rememberedAnswer } from '@/agent/runtime/followUp';
 import { TeamRun, type TeamEvent } from '@/agent/runtime/teamRun';
 import { getItem, setItem } from '@/shared/storage/kv';
 import type { TaskRecord } from '@/shared/types/history';
@@ -98,7 +99,7 @@ export function useAgentRunner(tab: ActiveTab) {
         dispatch(
           chatActions.endTurn({
             turnId,
-            remember: task.status === 'done' && task.result ? [{ role: 'user', content: text }, { role: 'assistant', content: task.result }] : undefined,
+            remember: task.status === 'done' && task.result ? [{ role: 'user', content: text }, { role: 'assistant', content: rememberedAnswer(task.result, task.steps) }] : undefined,
           }),
         );
       } catch (err) {

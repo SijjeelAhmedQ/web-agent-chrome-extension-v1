@@ -17,6 +17,7 @@ import { buildToolset, sitesFor, toolSpecs } from '../tools/registry';
 import { ElementMemory, type AgentTool, type ApprovalRequest, type ToolContext } from '../tools/types';
 import { budgetFor, clipToolOutput, compactMessages } from './context';
 import type { ApprovalPrompt, RunEvent } from './events';
+import { followUpOf, historyForModel } from './followUp';
 
 export interface RunOptions {
   request: string;
@@ -67,6 +68,8 @@ export class AgentRun {
   private readonly actionTrail: string[] = [];
   /** click_text targets that were not found, by text — to stop retrying with other wording. */
   private readonly notFound = new Map<string, number>();
+  /** In a reply to the agent's question: page actions already done before it asked, not yet warned about. */
+  private doneBefore = new Set<string>();
   /** Set when the task must end now, with this answer. */
   private endWith: string | null = null;
   private task!: TaskRecord;
@@ -181,6 +184,9 @@ export class AgentRun {
       neverClick: toolset.sites.flatMap((s) => s.neverClick ?? []),
     };
 
+    // A reply to the question the last answer asked: carry on from there, don't start over.
+    const followUp = followUpOf(this.options.history, request);
+    this.doneBefore = new Set(followUp?.doneSteps ?? []);
     const pageNote = scriptableReason(url) ?? undefined;
     const system = buildSystemPrompt({
       agent,
@@ -189,11 +195,11 @@ export class AgentRun {
       onDemandSkills: toolset.onDemandSkills,
       page: { title: tab?.title ?? '', url, note: pageNote ? `${pageNote} Navigate to a website if the task needs one.` : undefined },
       readOnly: matchesSite(url, config.settings.readOnlySites),
-      siteKnowledge: knowledgeSection(toolset.sites, request, knowledgeBudget(contextWindowOf(provider))).text,
+      siteKnowledge: knowledgeSection(toolset.sites, followUp ? `${followUp.task}\n${request}` : request, knowledgeBudget(contextWindowOf(provider))).text,
     });
     // Earlier answers are context, not facts about the page now.
-    const history = this.options.history.slice(-12).map((m): ChatMessage => (m.role === 'assistant' ? { ...m, content: `(Earlier answer — may be out of date)\n${m.content}` } : m));
-    const messages: ChatMessage[] = [{ role: 'system', content: system }, ...history, { role: 'user', content: request }];
+    const history = historyForModel(this.options.history.slice(-12), followUp);
+    const messages: ChatMessage[] = [{ role: 'system', content: system }, ...history, { role: 'user', content: followUp?.request ?? request }];
     let verified = false;
     let checkedAnswer: string | null = null;
     let nudges = 0;
@@ -352,6 +358,11 @@ export class AgentRun {
         finish({ status: 'skipped', note: 'Loop stopped' });
         return `Not done: this would start the same steps a third time — ${cycle.join(' → ')}. It is a loop; repeating it won’t change the result. Read the page and continue with the next step of the task using what is already on the screen (for example a form that has opened), or tell the user where you are stuck.`;
       }
+    }
+    // Answering the user's reply by starting the task over (open the menu, search again…).
+    if (isAction && this.doneBefore.delete(step.label)) {
+      finish({ status: 'skipped', note: 'Already done before asking you' });
+      return `Not done: you already did this before you asked the user — “${step.label}”. Don't start the task over. Read the page: it is where you stopped. Use the user's reply where it was needed and do only the steps that are left. (Only if the user's reply really asks for this again, call it again.)`;
     }
     const textKey = tool.name === 'click_text' ? String((args as { text?: unknown }).text ?? '').trim().toLowerCase() : '';
     if (textKey && (this.notFound.get(textKey) ?? 0) >= 2) {
