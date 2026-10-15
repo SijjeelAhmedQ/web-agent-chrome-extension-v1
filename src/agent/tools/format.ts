@@ -33,11 +33,12 @@ export function formatElement(e: ElementInfo): string {
 
 /** Pop-ups on top of the page, each with the control that closes it — or a note that it has none. */
 export function formatDialogs(dialogs: DialogInfo[]): string {
+  const stacked = dialogs.some((d) => d.onTop) && dialogs.some((d) => !d.onTop);
   const lines = dialogs.map((d) => {
     const how = d.close ? `can be closed: [${d.close.id}] ${d.close.role === 'clickable' ? d.close.tag : d.close.role} ${q(d.close.name || '×')}` : 'has no ×, Close or Cancel button';
-    return `- ${q(d.title || 'Pop-up')} — ${how}. Shows: ${q(d.text)}`;
+    return `- ${q(d.title || 'Pop-up')}${d.onTop && stacked ? ' (in front)' : ''} — ${how}. Shows: ${q(d.text)}`;
   });
-  return ['Pop-ups showing on top of the page (deal with them before anything else):', ...lines].join('\n');
+  return [stacked ? 'Pop-ups showing on top of the page (the one in front first — it covers the others):' : 'Pop-ups showing on top of the page:', ...lines].join('\n');
 }
 
 export function formatSnapshot(s: PageSnapshot, mode: 'overview' | 'content'): string {

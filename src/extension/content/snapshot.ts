@@ -141,7 +141,8 @@ function closeControl(dialog: Element): Element | null {
     'button,a,[role=button],input[type=button],input[type=submit],input[type=reset],.close,.btn-close,.ui-dialog-titlebar-close,[data-dismiss],[data-bs-dismiss],[aria-label],[title]',
   );
   for (const el of Array.from(candidates)) {
-    if (!isVisible(el)) continue;
+    // A control of a pop-up inside this one closes that pop-up, not this one.
+    if (!isVisible(el) || el.closest(DIALOGS) !== dialog) continue;
     const name = accessibleName(el).trim();
     const cls = typeof el.className === 'string' ? el.className : '';
     if (CLOSE_NAME.test(name) || CLOSE_CLASS.test(cls) || el.hasAttribute('data-dismiss') || el.hasAttribute('data-bs-dismiss')) return el;
@@ -157,15 +158,30 @@ function dialogTitle(dialog: Element): string {
   return clip((byId || dialog.getAttribute('aria-label') || heading || first).replace(/\s+/g, ' ').trim(), 90);
 }
 
-/** The pop-ups showing now, outermost first, each with its close control. */
+/** The pop-ups showing now — the one in front first — each with its close control. */
 export function showingDialogs(): DialogInfo[] {
-  return Array.from(document.querySelectorAll(DIALOGS))
+  const dialogs = Array.from(document.querySelectorAll(DIALOGS))
     .filter((d) => isVisible(d) && !d.parentElement?.closest(DIALOGS))
-    .slice(0, 4)
-    .map((d) => {
+    .slice(0, 6)
+    .map((d): DialogInfo => {
       const close = closeControl(d);
-      return { title: dialogTitle(d), text: clip(((d as HTMLElement).innerText ?? '').replace(/\s+/g, ' ').trim(), 220), close: close ? describeElement(close) : null };
+      const info: DialogInfo = { title: dialogTitle(d), text: clip(((d as HTMLElement).innerText ?? '').replace(/\s+/g, ' ').trim(), 220), close: close ? describeElement(close) : null };
+      if (inFront(d)) info.onTop = true;
+      return info;
     });
+  // Stacked pop-ups: the one in front is the one to deal with first.
+  if (dialogs.length > 1) dialogs.sort((a, b) => Number(!!b.onTop) - Number(!!a.onTop));
+  return dialogs.slice(0, 4);
+}
+
+/** Whether a pop-up is in front: what's at the middle of its title area belongs to it. */
+function inFront(d: Element): boolean {
+  const box = (d.querySelector('.modal-content,.modal-dialog,.ui-dialog-content') ?? d).getBoundingClientRect();
+  if (!box.width || !box.height) return false;
+  const x = Math.min(window.innerWidth - 1, Math.max(0, box.left + box.width / 2));
+  const y = Math.min(window.innerHeight - 1, Math.max(0, box.top + Math.min(24, box.height / 2)));
+  const hit = document.elementFromPoint(x, y);
+  return !!hit && (d === hit || d.contains(hit));
 }
 
 export function snapshot(mode: ReadMode, maxElements: number, maxTextChars: number): PageSnapshot {

@@ -34,6 +34,8 @@ export interface ToolContext {
   skills: SkillConfig[];
   /** Names of buttons the agent may never click on this site (from its site setup). */
   neverClick?: string[];
+  /** Titles of the pop-ups that came up with the page or tab that opened last. */
+  arrivalPopups?: Set<string>;
 }
 
 export interface ToolOutcome {

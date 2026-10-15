@@ -496,9 +496,30 @@ export async function visibleDialogs(waitMs: number): Promise<{ dialogs: DialogI
   const deadline = Date.now() + waitMs;
   for (;;) {
     const dialogs = showingDialogs();
-    if (dialogs.length || Date.now() >= deadline) return { dialogs };
+    if (dialogs.length) return { dialogs: await settledDialogs(dialogs) };
+    if (Date.now() >= deadline) return { dialogs };
     await sleep(250);
   }
+}
+
+/**
+ * Pop-ups often come one after another (a reason to view the file, then the patient's alerts on
+ * top of it): keep looking until the set has stayed the same for a moment.
+ */
+async function settledDialogs(first: DialogInfo[]): Promise<DialogInfo[]> {
+  const sig = (ds: DialogInfo[]) => ds.map((d) => `${d.title}|${d.onTop ? 1 : 0}`).join('\n');
+  const stop = Date.now() + 4000;
+  let current = first;
+  let stableSince = Date.now();
+  while (Date.now() < stop && Date.now() - stableSince < 1500) {
+    await sleep(250);
+    const next = showingDialogs();
+    if (sig(next) !== sig(current)) {
+      current = next;
+      stableSince = Date.now();
+    }
+  }
+  return current;
 }
 
 export async function waitForText(text: string, timeoutMs: number): Promise<{ found: boolean }> {

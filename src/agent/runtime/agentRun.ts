@@ -9,6 +9,7 @@ import { AgentError, isAbort, toAgentError } from '@/shared/utils/errors';
 import { createClient, type LlmClient } from '../llm';
 import { KAGGLE_CONTEXT_WINDOW, knownModel } from '@/shared/constants/providers';
 import { BROWSER_TOOLS } from '../tools/browserTools';
+import { formatDialogs } from '../tools/format';
 import { DEFAULT_CONTEXT_WINDOW } from '../llm/ollama';
 import type { ChatMessage, ToolCall } from '../llm/types';
 import { buildSystemPrompt } from '../planner/systemPrompt';
@@ -220,6 +221,7 @@ export class AgentRun {
     if (knownModel(model)?.tools === false) return this.answerWithoutTools(client, model, ctx);
 
     let listNudges = 0;
+    let popupsChecked = false;
     for (let step = 0; step < this.stepLimit(agent.maxSteps); step++) {
       this.throwIfCancelled();
       this.emit({ type: 'thinking', taskId: this.id, active: true });
@@ -253,6 +255,16 @@ export class AgentRun {
           messages.push({ role: 'assistant', content: answer });
           messages.push({ role: 'user', content: `${NOT_FINISHED_PROMPT} Checklist item${left.length === 1 ? '' : 's'} ${left.join(', ')} ${left.length === 1 ? 'is' : 'are'} not ticked:\n${this.checklist.format()}\nIf you finished one, call task_list with done for it. Otherwise carry on with item ${left[0]}. If one can't be done, tell the user which one and why.` });
           continue;
+        }
+        // About to stop and ask while a pop-up that came with the page opening, and can be closed, is still there.
+        if (asksUser(answer) && !popupsChecked && !checkedAnswer && byName.has('read_page')) {
+          popupsChecked = true;
+          const note = await this.closablePopups(ctx);
+          if (note) {
+            messages.push({ role: 'assistant', content: answer });
+            messages.push({ role: 'user', content: `${NOT_FINISHED_PROMPT} ${note}` });
+            continue;
+          }
         }
         // The double-check came back clean: the user gets the answer that was checked.
         if (checkedAnswer && /^\W*confirmed\b/i.test(answer)) return checkedAnswer;
@@ -469,6 +481,20 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
       finish({ status: 'failed', note: 'Didn’t work — trying another way', ...(dev ? { error: e.detail ?? e.message } : {}) });
       return `Error: ${e.detail ?? e.userMessage}`;
     }
+  }
+
+  /**
+   * Pop-ups that came up when the last page or tab opened and can still be closed — said to the
+   * model before it stops to ask the user. Pop-ups from its own actions later (a search, a
+   * warning while adding something) are not this: they are part of the task.
+   */
+  private async closablePopups(ctx: ToolContext): Promise<string> {
+    if (!ctx.arrivalPopups?.size) return '';
+    const res = await this.inFront(ctx, () => ctx.browser.send({ kind: 'dialogs', waitMs: 0 })).catch(() => null);
+    const closable = (res?.dialogs ?? []).filter((d) => d.close && ctx.arrivalPopups!.has(d.title));
+    if (!closable.length) return '';
+    ctx.elements.remember(closable.map((d) => d.close!));
+    return `Before you ask the user — these pop-ups came up when the page opened and can be closed:\n${formatDialogs(closable)}\nIf your instructions say to close pop-ups that come up when this page opens, close every one of them now — in front or behind — read the page again, and only then ask about what is left. Otherwise give your answer again.`;
   }
 
   /** A checklist item was ticked (or the list made): the next item starts with fresh loop guards. */

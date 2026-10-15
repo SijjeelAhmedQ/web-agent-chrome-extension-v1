@@ -32,6 +32,8 @@ export interface DialogInfo {
   title: string;
   text: string;
   close: ElementInfo | null;
+  /** Nothing covers it: it is the one the user sees in front. */
+  onTop?: boolean;
 }
 
 export interface PageSnapshot {
