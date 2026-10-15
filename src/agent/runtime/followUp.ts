@@ -9,9 +9,12 @@ import type { ChatMessage } from '../llm/types';
 
 const STOPPED = '[Where I stopped — steps already done in this task:';
 
-/** True when an answer ends by asking the user something. */
+/** Polite offers at the end of an answer are not questions the task is waiting on. */
+const OFFER = /\b(anything else|something else|let me know|else (can|could|should) i|help (you )?with|would you like me to|shall i|want me to|need (any|more|further))\b[^?]*\?/gi;
+
+/** True when an answer ends by asking the user something the task needs. */
 export function asksUser(answer: string): boolean {
-  return /\?/.test(answer.trim().slice(-500));
+  return /\?/.test(answer.trim().slice(-500).replace(OFFER, ''));
 }
 
 /** The answer as remembered for the next turn: when it asks the user something, with the steps done so far. */
@@ -36,17 +39,20 @@ export interface FollowUp {
 export function followUpOf(history: ChatMessage[], reply: string): FollowUp | null {
   const last = history.at(-1);
   const asked = history.at(-2);
-  if (!last || last.role !== 'assistant' || !last.content.includes(STOPPED) || asked?.role !== 'user') return null;
+  if (!last || last.role !== 'assistant' || asked?.role !== 'user') return null;
+  // The list of steps is what closes the answer — not the same words quoted inside it.
+  const at = last.content.lastIndexOf(STOPPED);
+  if (at < 0 || !last.content.trimEnd().endsWith(']')) return null;
   const task = asked.content.trim();
   const doneSteps = last.content
-    .slice(last.content.indexOf(STOPPED) + STOPPED.length)
+    .slice(at + STOPPED.length)
     .split('\n')
     .map((l) => l.match(/^\d+\. (.*?)(?: → .*)?\]?$/)?.[1]?.trim() ?? '')
     .filter(Boolean);
   const request = [
     `My reply to your question: “${reply.trim()}”`,
     '',
-    `Carry on with the task I gave you before (“${task}”) from where you stopped. The browser is as you left it, and the steps listed at the end of your last answer are already done — don't do them again and don't start the task over. Read the page, use my reply where it was needed, do only the steps that are left, then answer.`,
+    `Carry on with the task I gave you before (“${task}”) from where you stopped. The browser is as you left it, and the steps listed at the end of your last answer are already done — don't do them again and don't start the task over. Read the page, use my reply where it was needed, do only the steps that are left, then answer. (If my message is a new request rather than a reply, do it as a new task.)`,
   ].join('\n');
   return { request, task, doneSteps };
 }

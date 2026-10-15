@@ -23,6 +23,7 @@ export function formatElement(e: ElementInfo): string {
   if (e.disabled) parts.push('(disabled)');
   if (e.required) parts.push('(required)');
   if (e.readonly) parts.push('(read-only)');
+  if (e.inBlockingPopup) parts.push('(in a pop-up that can’t be closed — type only what the user tells you now)');
   if (e.options?.length) parts.push(`options: ${e.options.join(' | ')}`);
   if (e.href) parts.push(`→ ${e.href}`);
   if (e.context) parts.push(`in ${e.context}`);

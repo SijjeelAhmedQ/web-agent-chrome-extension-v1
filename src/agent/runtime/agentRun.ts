@@ -70,6 +70,8 @@ export class AgentRun {
   private readonly notFound = new Map<string, number>();
   /** In a reply to the agent's question: page actions already done before it asked, not yet warned about. */
   private doneBefore = new Set<string>();
+  /** The site knowledge in the prompt — values written there count as the user's. */
+  private knowledgeText = '';
   /** Set when the task must end now, with this answer. */
   private endWith: string | null = null;
   private task!: TaskRecord;
@@ -195,7 +197,7 @@ export class AgentRun {
       onDemandSkills: toolset.onDemandSkills,
       page: { title: tab?.title ?? '', url, note: pageNote ? `${pageNote} Navigate to a website if the task needs one.` : undefined },
       readOnly: matchesSite(url, config.settings.readOnlySites),
-      siteKnowledge: knowledgeSection(toolset.sites, followUp ? `${followUp.task}\n${request}` : request, knowledgeBudget(contextWindowOf(provider))).text,
+      siteKnowledge: (this.knowledgeText = knowledgeSection(toolset.sites, followUp ? `${followUp.task}\n${request}` : request, knowledgeBudget(contextWindowOf(provider))).text),
     });
     // Earlier answers are context, not facts about the page now.
     const history = historyForModel(this.options.history.slice(-12), followUp);
@@ -363,6 +365,16 @@ export class AgentRun {
     if (isAction && this.doneBefore.delete(step.label)) {
       finish({ status: 'skipped', note: 'Already done before asking you' });
       return `Not done: you already did this before you asked the user — “${step.label}”. Don't start the task over. Read the page: it is where you stopped. Use the user's reply where it was needed and do only the steps that are left. (Only if the user's reply really asks for this again, call it again.)`;
+    }
+    // A pop-up that can't be closed (“Add reason to view patient file”) gets only what the user
+    // says now — not a guess, and not an answer from earlier in the chat.
+    if (tool.name === 'type') {
+      const { id, text } = args as { id: number; text: string };
+      const popup = ctx.elements.get(id)?.inBlockingPopup;
+      if (popup && !saidNow(text, [this.options.request, this.knowledgeText])) {
+        finish({ status: 'skipped', note: 'Asking you what to enter' });
+        return `Not typed: “${popup}” is a pop-up that can’t be closed, and the user hasn’t told you in this message what to enter. Don’t make it up and don’t reuse an answer from earlier in the chat. Stop now and ask the user what to enter in “${popup}”. When they reply, type exactly their reply.`;
+      }
     }
     const textKey = tool.name === 'click_text' ? String((args as { text?: unknown }).text ?? '').trim().toLowerCase() : '';
     if (textKey && (this.notFound.get(textKey) ?? 0) >= 2) {
@@ -557,6 +569,14 @@ function verifyPrompt(page: string): string {
 function lacksToolSupport(err: unknown): boolean {
   if (!(err instanceof AgentError) || err.code !== 'model_error') return false;
   return /does not support tools|tools? (are |is )?not supported|doesn.t seem to support tool calling|not support function calling/i.test(`${err.userMessage} ${err.detail ?? ''}`);
+}
+
+/** True when `text` was given by the user in one of these (ignoring case, spaces and end punctuation). */
+export function saidNow(text: string, sources: string[]): boolean {
+  const norm = (s: string) => s.toLowerCase().replace(/[“”"'‘’]/g, '').replace(/\s+/g, ' ').trim();
+  const t = norm(text).replace(/[.!,;:]+$/, '');
+  if (!t) return true;
+  return sources.some((s) => norm(s).includes(t));
 }
 
 function safeLabel(fn: () => string, fallback: string): string {

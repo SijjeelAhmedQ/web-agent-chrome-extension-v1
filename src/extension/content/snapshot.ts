@@ -66,7 +66,19 @@ export function describeElement(el: Element): ElementInfo {
   }
   const context = contextOf(el);
   if (context) info.context = context;
+  const popup = blockingPopupOf(el);
+  if (popup) info.inBlockingPopup = popup;
   return info;
+}
+
+/** For a text field inside a pop-up with no way to close it: the pop-up's title. */
+function blockingPopupOf(el: Element): string | null {
+  const texty = (isInput(el) && !['button', 'submit', 'reset', 'image', 'checkbox', 'radio', 'hidden', 'file', 'range', 'color'].includes(el.type)) || isTextArea(el) || (isHTML(el) && el.isContentEditable);
+  if (!texty) return null;
+  let dialog = el.closest(DIALOGS);
+  if (!dialog) return null;
+  for (let outer = dialog.parentElement?.closest(DIALOGS); outer; outer = outer.parentElement?.closest(DIALOGS)) dialog = outer;
+  return closeControl(dialog) ? null : dialogTitle(dialog) || 'Pop-up';
 }
 
 function shortHref(href: string): string {

@@ -18,6 +18,9 @@ describe('a reply to the agent’s question', () => {
     expect(asked).toContain('3. Clicking “Arya STARK” (with “03-12-2015”) → Opened in a new tab');
     expect(asked).not.toContain('Clear');
     expect(rememberedAnswer('Arya STARK is open.', steps)).toBe('Arya STARK is open.');
+    expect(rememberedAnswer('Arya STARK is open. Is there anything else I can help you with?', steps)).not.toContain('Where I stopped');
+    expect(rememberedAnswer('Done. Would you like me to add a medication?', steps)).not.toContain('Where I stopped');
+    expect(rememberedAnswer('Which one should I open — Arya STARK (03-12-2015) or Arya STARK (01-01-1990)?', steps)).toContain('Where I stopped');
   });
 
   it('frames the next message as the reply, with the earlier task and the steps not to repeat', () => {
@@ -42,5 +45,15 @@ describe('a reply to the agent’s question', () => {
     expect(followUpOf(history, 'add medication Metformin')).toBeNull();
     expect(followUpOf([], 'hello')).toBeNull();
     expect(historyForModel(history, null)[1].content.startsWith('(Earlier answer — may be out of date)')).toBe(true);
+  });
+});
+
+describe('what the user said now', () => {
+  it('accepts only text the user gave in this message or the site knowledge', async () => {
+    const { saidNow } = await import('./runtime/agentRun');
+    expect(saidNow('Routine follow-up.', ['routine   follow-up'])).toBe(true);
+    expect(saidNow('checking labs', ['reason: “Checking labs” please'])).toBe(true);
+    expect(saidNow('routine follow-up', ['goto patients and select Arya Stark', ''])).toBe(false);
+    expect(saidNow('i am testing', ['select Arya', 'Rule: type “i am testing” as the reason'])).toBe(true);
   });
 });

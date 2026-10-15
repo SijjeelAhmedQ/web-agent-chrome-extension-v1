@@ -6,11 +6,11 @@ import type { ElementInfo } from '@/shared/types/page';
 
 /** What the agent remembers about element ids it has seen, for readable activity labels. */
 export class ElementMemory {
-  private map = new Map<number, Pick<ElementInfo, 'id' | 'name' | 'role' | 'type' | 'context'> & { batch: number }>();
+  private map = new Map<number, Pick<ElementInfo, 'id' | 'name' | 'role' | 'type' | 'context' | 'inBlockingPopup'> & { batch: number }>();
   private batch = 0;
   remember(elements: ElementInfo[]) {
     this.batch++;
-    for (const e of elements) this.map.set(e.id, { id: e.id, name: e.name, role: e.role, type: e.type, context: e.context, batch: this.batch });
+    for (const e of elements) this.map.set(e.id, { id: e.id, name: e.name, role: e.role, type: e.type, context: e.context, inBlockingPopup: e.inBlockingPopup, batch: this.batch });
   }
   get(id: number) {
     return this.map.get(id);

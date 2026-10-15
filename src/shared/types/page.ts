@@ -18,6 +18,8 @@ export interface ElementInfo {
   required?: boolean;
   /** A field that shows a value but can’t be typed into. */
   readonly?: boolean;
+  /** A text field inside a pop-up that has no ×, Close or Cancel: that pop-up's title. */
+  inBlockingPopup?: string;
   href?: string;
   options?: string[];
   /** Dialog, form or table-row the element belongs to. */
