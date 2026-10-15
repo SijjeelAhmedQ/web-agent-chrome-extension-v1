@@ -17,7 +17,8 @@ import { buildToolset, sitesFor, toolSpecs } from '../tools/registry';
 import { ElementMemory, type AgentTool, type ApprovalRequest, type ToolContext } from '../tools/types';
 import { budgetFor, clipToolOutput, compactMessages } from './context';
 import type { ApprovalPrompt, RunEvent } from './events';
-import { followUpOf, historyForModel } from './followUp';
+import { asksUser, followUpOf, historyForModel } from './followUp';
+import { Checklist, checklistTool } from './checklist';
 
 export interface RunOptions {
   request: string;
@@ -70,6 +71,8 @@ export class AgentRun {
   private readonly notFound = new Map<string, number>();
   /** In a reply to the agent's question: page actions already done before it asked, not yet warned about. */
   private doneBefore = new Set<string>();
+  /** The items of a request with several things to do, ticked off as the agent goes. */
+  private checklist = new Checklist();
   /** The site knowledge in the prompt — values written there count as the user's. */
   private knowledgeText = '';
   /** Set when the task must end now, with this answer. */
@@ -173,6 +176,11 @@ export class AgentRun {
     const { provider, model } = resolveProvider(agent, config, url);
     const client = createClient(provider);
     const toolset = buildToolset(agent, config, url);
+    // A reply to the question the last answer asked: carry on from there, don't start over.
+    const followUp = followUpOf(this.options.history, request);
+    this.checklist = new Checklist(followUp?.checklist);
+    if (this.checklist.size) this.updateTask({ checklist: this.checklist.items.map((i) => ({ ...i })) });
+    toolset.tools.push(checklistTool(this.checklist, (done) => this.checklistChanged(done)));
     const specs = toolSpecs(toolset.tools);
     // Room for the conversation: the server's context window minus the tool definitions sent with every call.
     let budget = budgetFor(contextWindowOf(provider)) - JSON.stringify(specs).length;
@@ -186,9 +194,8 @@ export class AgentRun {
       neverClick: toolset.sites.flatMap((s) => s.neverClick ?? []),
     };
 
-    // A reply to the question the last answer asked: carry on from there, don't start over.
-    const followUp = followUpOf(this.options.history, request);
-    this.doneBefore = new Set(followUp?.doneSteps ?? []);
+    // With a checklist, the ticked items already say what is done.
+    this.doneBefore = new Set(this.checklist.size ? [] : (followUp?.doneSteps ?? []));
     const pageNote = scriptableReason(url) ?? undefined;
     const system = buildSystemPrompt({
       agent,
@@ -212,11 +219,14 @@ export class AgentRun {
     // Models known to lack tool calling (MedGemma on Ollama…) go straight to read-and-answer.
     if (knownModel(model)?.tools === false) return this.answerWithoutTools(client, model, ctx);
 
-    for (let step = 0; step < agent.maxSteps; step++) {
+    let listNudges = 0;
+    for (let step = 0; step < this.stepLimit(agent.maxSteps); step++) {
       this.throwIfCancelled();
       this.emit({ type: 'thinking', taskId: this.id, active: true });
       let response;
       try {
+        // The checklist is shown again before every step: early steps may have been dropped to fit.
+        messages[0] = { role: 'system', content: this.checklist.size ? `${system}\n\n${this.checklist.section()}` : system };
         response = await client.chat({ model, messages: compactMessages(messages, budget), tools: specs, temperature: agent.temperature, signal: this.abort.signal });
       } catch (err) {
         if (step === 0 && lacksToolSupport(err)) return this.answerWithoutTools(client, model, ctx);
@@ -234,6 +244,14 @@ export class AgentRun {
           if (cutOff) budget = Math.max(8_000, Math.floor(budget * 0.6)); // make room: drop old page snapshots sooner
           messages.push({ role: 'assistant', content: answer });
           messages.push({ role: 'user', content: cutOff ? CUT_OFF_PROMPT : CONTINUE_PROMPT });
+          continue;
+        }
+        // Answering with checklist items not ticked: they were skipped or forgotten.
+        const left = this.checklist.pending();
+        if (left.length && !asksUser(answer) && listNudges < 2 && !checkedAnswer) {
+          listNudges++;
+          messages.push({ role: 'assistant', content: answer });
+          messages.push({ role: 'user', content: `${NOT_FINISHED_PROMPT} Checklist item${left.length === 1 ? '' : 's'} ${left.join(', ')} ${left.length === 1 ? 'is' : 'are'} not ticked:\n${this.checklist.format()}\nIf you finished one, call task_list with done for it. Otherwise carry on with item ${left[0]}. If one can't be done, tell the user which one and why.` });
           continue;
         }
         // The double-check came back clean: the user gets the answer that was checked.
@@ -361,6 +379,16 @@ export class AgentRun {
         return `Not done: this would start the same steps a third time — ${cycle.join(' → ')}. It is a loop; repeating it won’t change the result. Read the page and continue with the next step of the task using what is already on the screen (for example a form that has opened), or tell the user where you are stuck.`;
       }
     }
+    // Something that belongs only to a ticked checklist item (typing “gabapentin 100 mg” again): never twice.
+    if (isAction && this.checklist.size) {
+      const said = tool.name === 'type' || tool.name === 'click_text' ? (args as { text?: unknown }).text : tool.name === 'click' ? (args as { name?: unknown }).name : undefined;
+      const item = typeof said === 'string' ? this.checklist.doneOnly(said) : null;
+      if (item) {
+        const next = this.checklist.pending()[0];
+        finish({ status: 'skipped', note: `Task ${item} is already done` });
+        return `Not done: “${said}” is for checklist item ${item}, which is already done (☑). Never do a finished item again. ${next ? `Carry on with item ${next} — ${this.checklist.items[next - 1].text}.` : 'Every item is done: check the page and answer the user.'}`;
+      }
+    }
     // Answering the user's reply by starting the task over (open the menu, search again…).
     if (isAction && this.doneBefore.delete(step.label)) {
       finish({ status: 'skipped', note: 'Already done before asking you' });
@@ -443,6 +471,22 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
     }
   }
 
+  /** A checklist item was ticked (or the list made): the next item starts with fresh loop guards. */
+  private checklistChanged(done: number | null) {
+    if (done !== null) {
+      this.actionTrail.length = 0;
+      this.repeats.clear();
+      this.notFound.clear();
+      this.noEffect = 0;
+    }
+    this.updateTask({ checklist: this.checklist.items.map((i) => ({ ...i })) });
+  }
+
+  /** More steps for a request with several things to do. */
+  private stepLimit(base: number): number {
+    return Math.max(base, Math.min(120, 15 * this.checklist.size + 5));
+  }
+
   /** Runs browser work with this run's tab in front when sharing the window with other agents. */
   private inFront<T>(ctx: ToolContext, fn: () => Promise<T>): Promise<T> {
     const lock = this.options.foreground;
@@ -497,7 +541,7 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
   }
 }
 
-const BUILT_IN_NAMES = new Set([...BUILT_IN_TOOL_IDS, 'load_skill', 'site_knowledge']);
+const BUILT_IN_NAMES = new Set([...BUILT_IN_TOOL_IDS, 'load_skill', 'site_knowledge', 'task_list']);
 const READ_PAGE = BROWSER_TOOLS.find((t) => t.name === 'read_page')!;
 
 /**
@@ -523,6 +567,7 @@ export function declinedAnswer(title: string): string {
   return `Stopped — you cancelled “${what}”, so it wasn’t done. Everything before that step is still on the page: check it and finish it yourself, or tell me what to change and I’ll try again.`;
 }
 
+const NOT_FINISHED_PROMPT = 'Not finished yet:';
 const CUT_OFF_PROMPT = 'Your last reply was cut off because the conversation got long. Continue the task: call the next tool now, and keep any text short.';
 const CONTINUE_PROMPT = 'You have not finished the task yet — you described a next step instead of doing it. Continue by calling the next tool. If the task is truly complete, reply with your final answer for the user.';
 

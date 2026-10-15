@@ -1,4 +1,4 @@
-import type { StepRecord } from '@/shared/types/history';
+import type { ChecklistItem, StepRecord } from '@/shared/types/history';
 import type { ChatMessage } from '../llm/types';
 
 /**
@@ -18,12 +18,14 @@ export function asksUser(answer: string): boolean {
 }
 
 /** The answer as remembered for the next turn: when it asks the user something, with the steps done so far. */
-export function rememberedAnswer(answer: string, steps: StepRecord[]): string {
+export function rememberedAnswer(answer: string, steps: StepRecord[], checklist: ChecklistItem[] = []): string {
   if (!asksUser(answer)) return answer;
-  const done = steps.filter((s) => s.status === 'done' && s.tool !== 'verify').slice(-15);
-  if (!done.length) return answer;
+  const done = steps.filter((s) => s.status === 'done' && s.tool !== 'verify' && s.tool !== 'task_list').slice(-15);
+  if (!done.length && !checklist.length) return answer;
   const lines = done.map((s, i) => `${i + 1}. ${s.label}${s.note ? ` → ${s.note}` : ''}`);
-  return `${answer}\n\n${STOPPED}\n${lines.join('\n')}]`;
+  // The checklist goes along, so the reply carries on with the same items ticked.
+  const list = checklist.map((c) => `${c.done ? '☑' : '☐'} ${c.text}${c.note ? ` ⟨${c.note}⟩` : ''}`);
+  return `${answer}\n\n${STOPPED}\n${[...lines, ...(list.length ? ['Checklist:', ...list] : [])].join('\n')}]`;
 }
 
 export interface FollowUp {
@@ -33,6 +35,8 @@ export interface FollowUp {
   task: string;
   /** Labels of the page actions already done before the question. */
   doneSteps: string[];
+  /** The checklist as it was when the question was asked. */
+  checklist: ChecklistItem[];
 }
 
 /** When the last answer asked the user something, the new message is their reply: frame it as one. */
@@ -46,17 +50,18 @@ export function followUpOf(history: ChatMessage[], reply: string): FollowUp | nu
   const task = asked.content.trim();
   // The same request again (Run again) is a fresh start, not a reply.
   if (reply.trim().toLowerCase() === task.toLowerCase()) return null;
-  const doneSteps = last.content
-    .slice(at + STOPPED.length)
-    .split('\n')
-    .map((l) => l.match(/^\d+\. (.*?)(?: → .*)?\]?$/)?.[1]?.trim() ?? '')
-    .filter(Boolean);
+  const block = last.content.slice(at + STOPPED.length).replace(/\]\s*$/, '').split('\n');
+  const doneSteps = block.map((l) => l.match(/^\d+\. (.*?)(?: → .*)?$/)?.[1]?.trim() ?? '').filter(Boolean);
+  const checklist = block.flatMap((l): ChecklistItem[] => {
+    const m = l.match(/^([☑☐]) (.*?)(?: ⟨(.*)⟩)?$/);
+    return m ? [{ text: m[2].trim(), done: m[1] === '☑', ...(m[3] ? { note: m[3] } : {}) }] : [];
+  });
   const request = [
     `My reply to your question: “${reply.trim()}”`,
     '',
     `Carry on with the task I gave you before (“${task}”) from where you stopped. The browser is as you left it, and the steps listed at the end of your last answer are already done — don't do them again and don't start the task over. Read the page, use my reply where it was needed, do only the steps that are left, then answer. (If my message is a new request rather than a reply, do it as a new task.)`,
   ].join('\n');
-  return { request, task, doneSteps };
+  return { request, task, doneSteps, checklist };
 }
 
 /** Earlier turns as the model sees them: old answers flagged as possibly out of date — except the question being answered now. */

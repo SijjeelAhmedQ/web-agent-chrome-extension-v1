@@ -17,6 +17,13 @@ export interface StepRecord {
   error?: string;
 }
 
+/** One item of the agent's checklist for a request with several things to do. */
+export interface ChecklistItem {
+  text: string;
+  done: boolean;
+  note?: string;
+}
+
 export interface TaskRecord {
   id: string;
   request: string;
@@ -35,6 +42,8 @@ export interface TaskRecord {
   /** Technical detail — shown only in the developer view. */
   errorDetail?: string;
   steps: StepRecord[];
+  /** The agent's checklist, when the request had several things to do. */
+  checklist?: ChecklistItem[];
   /** Set on a team member's task: the team task it belongs to. */
   parentId?: string;
 }

@@ -1,8 +1,9 @@
 import { Button, Tooltip } from 'antd';
-import { AlertCircle, Check, Copy, RotateCcw } from 'lucide-react';
+import { AlertCircle, Check, CheckSquare, Copy, RotateCcw, Square } from 'lucide-react';
 import { memo, useState } from 'react';
 import { errorTitle, recoveryFor, type ErrorCode } from '@/shared/utils/errors';
 import type { AgentConfig } from '@/shared/types/config';
+import type { ChecklistItem } from '@/shared/types/history';
 import type { Turn } from '@/store/chatSlice';
 import { ActivityCard } from '../../components/Activity';
 import { ApprovalCard } from '../../components/ApprovalCard';
@@ -46,6 +47,29 @@ function CopyButton({ text, label = 'Copy answer' }: { text: string; label?: str
   );
 }
 
+/** The agent's checklist for a request with several things to do. */
+function ChecklistView({ items }: { items: ChecklistItem[] }) {
+  const done = items.filter((i) => i.done).length;
+  return (
+    <section className="checklist" aria-label="Checklist">
+      <div className="checklist-head">
+        Checklist · {done} of {items.length} done
+      </div>
+      <ol>
+        {items.map((item, i) => (
+          <li key={i} className={item.done ? 'done' : undefined}>
+            {item.done ? <CheckSquare size={14} aria-label="Done" /> : <Square size={14} aria-label="To do" />}
+            <span>
+              {item.text}
+              {item.note && <em> — {item.note}</em>}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 export const TurnView = memo(function TurnView({ turn, agent, agents, showAgent, developer, expandActivity, isLast, busy, onRespond, onRetry }: Props) {
   const task = turn.task;
   const status = task?.status ?? 'running';
@@ -74,6 +98,8 @@ export const TurnView = memo(function TurnView({ turn, agent, agents, showAgent,
         )}
 
         <ActivityCard task={task} thinking={turn.thinking} developer={developer} defaultExpanded={expandActivity} />
+
+        {task?.checklist && task.checklist.length > 0 && <ChecklistView items={task.checklist} />}
 
         {turn.approval && <ApprovalCard prompt={turn.approval} onRespond={(ok) => onRespond(turn.approval!.id, ok)} />}
 

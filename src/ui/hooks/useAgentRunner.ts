@@ -99,7 +99,7 @@ export function useAgentRunner(tab: ActiveTab) {
         dispatch(
           chatActions.endTurn({
             turnId,
-            remember: task.status === 'done' && task.result ? [{ role: 'user', content: text }, { role: 'assistant', content: rememberedAnswer(task.result, task.steps) }] : undefined,
+            remember: task.status === 'done' && task.result ? [{ role: 'user', content: text }, { role: 'assistant', content: rememberedAnswer(task.result, task.steps, task.checklist) }] : undefined,
           }),
         );
       } catch (err) {
