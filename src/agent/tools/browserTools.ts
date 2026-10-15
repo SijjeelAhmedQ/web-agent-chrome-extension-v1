@@ -158,11 +158,22 @@ async function clickById(ctx: ToolContext, elementId: number, double = false): P
 }
 
 /** The page opened a new tab or pop-up window: work there. */
+/**
+ * After a new page or tab: a dialog that pops up over it (often a moment later) is named right
+ * away, so the model deals with it even if it skips reading the page.
+ */
+async function dialogReport(ctx: ToolContext): Promise<string> {
+  const res = await ctx.browser.send({ kind: 'dialogs', waitMs: 2500 }).catch(() => null);
+  if (!res?.texts.length) return '';
+  return ` A dialog is showing on top of the page: ${res.texts.map((t) => `“${t}”`).join('; ')}. Deal with it first — read_page shows its fields and buttons — before anything else, following any rule you were given for it.`;
+}
+
 async function followNewTab(ctx: ToolContext, tab: chrome.tabs.Tab, label: string, how = ''): Promise<ToolOutcome> {
   const now = await ctx.browser.adoptTab(tab, ctx.signal);
+  const dialog = await dialogReport(ctx);
   return {
-    output: `Clicked ${label}${how}. It opened “${now.title || 'a page'}” (${clip(now.url ?? '', 120)}) in a new tab or window — you are now working there. Call read_page.`,
-    note: 'Opened in a new tab',
+    output: `Clicked ${label}${how}. It opened “${now.title || 'a page'}” (${clip(now.url ?? '', 120)}) in a new tab or window — you are now working there. Call read_page.${dialog}`,
+    note: dialog ? 'Opened in a new tab · a dialog is showing' : 'Opened in a new tab',
   };
 }
 
@@ -188,7 +199,11 @@ async function clickAndReport(ctx: ToolContext, elementId: number, double: boole
   }
   if (res.opensNewTab) {
     const tab = await ctx.browser.openTab(res.opensNewTab, ctx.signal);
-    return { output: `${label} opens in a new tab, so I opened it: “${tab.title}” (${clip(tab.url ?? '', 120)}). You are now working in that tab. Call read_page.`, note: 'Opened in a new tab' };
+    const dialog = await dialogReport(ctx);
+    return {
+      output: `${label} opens in a new tab, so I opened it: “${tab.title}” (${clip(tab.url ?? '', 120)}). You are now working in that tab. Call read_page.${dialog}`,
+      note: dialog ? 'Opened in a new tab · a dialog is showing' : 'Opened in a new tab',
+    };
   }
   let after = await ctx.browser.settleAfterAction(before, ctx.signal);
   const covered = res.covered ? ' Note: something was covering it (a pop-up or banner?) — check the result.' : '';
@@ -233,7 +248,11 @@ async function clickAndReport(ctx: ToolContext, elementId: number, double: boole
       : { output: `${verb} ${label}${tried}, but nothing on the page changed within a few seconds.${advice}${covered}`, note: 'Nothing changed', noEffect: true };
   }
   const appeared = effect?.added.length ? ` New on the page: ${effect.added.map((l) => `“${clip(l, 80)}”`).join(', ')}.` : '';
-  return { output: `${verb} ${label}.${appeared}${changeReport(after)}${covered}`, note: after.navigated ? 'Opened a new page' : effect?.added.length ? 'The page changed' : undefined };
+  const dialog = after.navigated ? await dialogReport(ctx) : '';
+  return {
+    output: `${verb} ${label}.${appeared}${changeReport(after)}${dialog}${covered}`,
+    note: after.navigated ? (dialog ? 'Opened a new page · a dialog is showing' : 'Opened a new page') : effect?.added.length ? 'The page changed' : undefined,
+  };
 }
 
 const double = bool(false).describe('Double-click instead (default false). Only when the user says this app opens items on double-click.');

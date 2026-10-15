@@ -1,5 +1,5 @@
 import { CHANNEL, CONTENT_VERSION, type ContentRequest, type ContentResponse, type Envelope } from '../messaging/protocol';
-import { ActionError, clear, click, currentEffect, pointAt, pressKey, resolve, scroll, select, settle, type, waitForText } from './actions';
+import { ActionError, clear, click, currentEffect, pointAt, pressKey, resolve, scroll, select, settle, type, visibleDialogs, waitForText } from './actions';
 import { hover, openMenu } from './hover';
 import { setPresence } from './overlay';
 import { describeRisk, find, findText, snapshot } from './snapshot';
@@ -47,6 +47,8 @@ async function handle(request: ContentRequest): Promise<unknown> {
       return settle(request.quietMs, request.timeoutMs);
     case 'waitForText':
       return waitForText(request.text, request.timeoutMs);
+    case 'dialogs':
+      return visibleDialogs(request.waitMs);
     case 'hover':
       return hover(resolve(request.id), request.highlight);
     case 'menuPath':
