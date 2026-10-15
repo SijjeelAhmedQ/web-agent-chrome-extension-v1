@@ -38,10 +38,11 @@ export const OLLAMA_MODELS: ModelOption[] = [
   { id: 'qwen3.5:4b', label: 'Qwen 3.5 4B', note: 'Runs on a 4 GB GPU. Slower and less reliable on complex sites.', tools: true },
 ];
 
-/** The models the CareFlow Kaggle notebook (kaggle/careflow_kaggle.ipynb) serves. */
+/** The models the Kaggle notebooks serve: kaggle/careflow_kaggle.ipynb, and kaggle/web_agent_qwen38_kaggle.ipynb (Qwen3.8 27B). */
 export const KAGGLE_MODELS: ModelOption[] = [
   { id: 'qwen3.5:9b', label: 'Qwen 3.5 9B', note: 'Calls tools reliably — the best default for actions.', tools: true },
   { id: 'ternary-bonsai-2-27b', label: 'Ternary Bonsai 2 27B', note: 'The strongest model. Needs the notebook on GPU T4 x2.', tools: true },
+  { id: 'qwen3.8:27b-q4_K_M', label: 'Qwen3.8 27B', note: 'Follows long workflows best — the web_agent_qwen38 notebook (GPU T4 x2). Slower: a few minutes a task.', tools: true },
   { id: 'hf.co/unsloth/medgemma-4b-it-GGUF:Q4_K_M', label: 'MedGemma 4B', note: 'Medical knowledge. Can’t use tools — reads the page and answers, but can’t click or type.', tools: false },
 ];
 
@@ -171,7 +172,7 @@ export const knownModel = (id: string): ModelOption | undefined => {
     const found = preset.models?.find((m) => m.id.toLowerCase() === name);
     if (found) return found;
   }
-  return /medgemma/.test(name) ? KAGGLE_MODELS[2] : undefined;
+  return /medgemma/.test(name) ? KAGGLE_MODELS.find((m) => /medgemma/i.test(m.id)) : undefined;
 };
 
 /** “Qwen 3.5 9B” for known models, the model id as it is otherwise. */
