@@ -4,6 +4,7 @@ import { toolMeta } from '@/shared/constants/tools';
 import { clip, siteOf, sleep } from '@/shared/utils';
 import { classifyClick, classifySubmit, classifyTyping } from '../execution/riskPolicy';
 import { formatDialogs, formatElement, formatSnapshot } from './format';
+import { memoOf, pageDiff } from './pageDiff';
 import type { TextResult } from '@/extension/messaging/protocol';
 import type { AgentTool, ApprovalRequest, ToolContext, ToolOutcome } from './types';
 
@@ -109,11 +110,14 @@ async function approvalFor(
   };
 }
 
-const readPage: AgentTool<{ mode: 'overview' | 'content' }> = {
+const readPage: AgentTool<{ mode: 'overview' | 'content'; full: boolean }> = {
   name: 'read_page',
   description:
     'Read the current page. Returns its URL, title, scroll position, a numbered list of interactive elements as `[id] role "name"` and the visible text. Use mode "content" to get the full text when you need to read, compare or summarize. Call again after the page changes — ids from an older page are invalid.',
-  schema: z.object({ mode: z.enum(['overview', 'content']).optional().default('overview').describe('"overview" (default) or "content" for the full text') }),
+  schema: z.object({
+    mode: z.enum(['overview', 'content']).optional().default('overview').describe('"overview" (default) or "content" for the full text'),
+    full: bool(false).describe('The whole page again, not only what changed since your last read of it'),
+  }),
   risk: 'read',
   touchesPage: true,
   label: (a) => (a.mode === 'content' ? 'Reading the page content' : 'Reading the page'),
@@ -128,7 +132,12 @@ const readPage: AgentTool<{ mode: 'overview' | 'content' }> = {
     }
     ctx.elements.remember([...snap.elements, ...(snap.dialogs ?? []).flatMap((d) => (d.close ? [d.close] : []))]);
     const n = snap.elements.length + snap.omitted;
-    return { output: formatSnapshot(snap, a.mode), note: `${n} controls · ${clip(snap.title || siteOf(snap.url), 40)}` };
+    // The same page read again: only what changed — when that is clearly shorter than the whole page.
+    const whole = formatSnapshot(snap, a.mode);
+    const changes = a.mode === 'overview' && !a.full && ctx.lastPage ? pageDiff(ctx.lastPage, snap) : null;
+    const diff = changes !== null && changes.length < whole.length * 0.6;
+    ctx.lastPage = memoOf(snap);
+    return { output: diff ? changes : whole, note: `${n} controls · ${clip(snap.title || siteOf(snap.url), 40)}${diff ? ' · only the changes' : ''}` };
   },
 };
 

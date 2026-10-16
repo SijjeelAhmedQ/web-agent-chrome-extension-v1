@@ -3,6 +3,7 @@ import type { BrowserController } from '@/extension/browser/controller';
 import type { ToolRisk } from '@/shared/constants/tools';
 import type { Settings, SkillConfig } from '@/shared/types/config';
 import type { ElementInfo } from '@/shared/types/page';
+import type { PageMemo } from './pageDiff';
 
 /** What the agent remembers about element ids it has seen, for readable activity labels. */
 export class ElementMemory {
@@ -39,6 +40,8 @@ export interface ToolContext {
   skills: SkillConfig[];
   /** Names of buttons the agent may never click on this site (from its site setup). */
   neverClick?: string[];
+  /** What the last read_page saw — the next read of the same page gives only the changes. */
+  lastPage?: PageMemo;
   /** Most page text in a read_page overview, for models with a small context (Kaggle's 16K). */
   overviewTextChars?: number;
   /** Titles of the pop-ups that came up with the page or tab that opened last. */

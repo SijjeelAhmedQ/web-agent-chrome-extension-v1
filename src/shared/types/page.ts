@@ -41,6 +41,8 @@ export interface DialogInfo {
 }
 
 export interface PageSnapshot {
+  /** This document (a new page, or the same address loaded again, is another one) — for “only what changed”. */
+  docId?: string;
   url: string;
   title: string;
   scroll: { percent: number; screens: number; atTop: boolean; atBottom: boolean };

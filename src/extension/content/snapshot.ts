@@ -1,6 +1,7 @@
 import type { DialogInfo, ElementInfo, ElementRisk, PageSnapshot, ReadMode } from '@/shared/types/page';
 import type { FindResult, TextResult } from '../messaging/protocol';
 import {
+  DOC_ID,
   accessibleName,
   collectInteractive,
   contextOf,
@@ -238,6 +239,7 @@ export function snapshot(mode: ReadMode, maxElements: number, maxTextChars: numb
     frames,
     dialogOpen: Array.from(document.querySelectorAll('dialog[open],[role=dialog]:not([aria-hidden=true]),[aria-modal=true]')).some((d) => isVisible(d)),
     dialogs: showingDialogs(),
+    docId: DOC_ID,
   };
 }
 

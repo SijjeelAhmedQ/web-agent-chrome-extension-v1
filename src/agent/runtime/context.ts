@@ -1,4 +1,5 @@
 import type { ChatMessage } from '../llm/types';
+import { DIFF_HEAD } from '../tools/pageDiff';
 
 const SNAPSHOT_TOOLS = new Set(['read_page']);
 const MAX_TOOL_CHARS = 20_000;
@@ -31,19 +32,23 @@ const size = (messages: ChatMessage[]) => messages.reduce((n, m) => n + tokensOf
  */
 export function compactMessages(messages: ChatMessage[], budgetTokens: number): ChatMessage[] {
   if (size(messages) <= budgetTokens) return messages;
+  // The latest full read of a page stays, with the reads of only its changes after it; earlier reads go.
+  const isRead = (m: ChatMessage) => m.role === 'tool' && SNAPSHOT_TOOLS.has(m.toolName) && m.content !== PLACEHOLDER;
   let latest = -1;
   for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (m.role === 'tool' && SNAPSHOT_TOOLS.has(m.toolName)) {
-      if (latest >= 0 && m.content !== PLACEHOLDER) messages[i] = { ...m, content: PLACEHOLDER };
-      else if (latest < 0) latest = i;
+    if (isRead(messages[i]) && !messages[i].content.startsWith(DIFF_HEAD)) {
+      latest = i;
+      break;
     }
+  }
+  for (let i = 0; i < messages.length; i++) {
+    if (isRead(messages[i]) && i < latest) messages[i] = { ...messages[i], content: PLACEHOLDER };
   }
   let total = size(messages);
   const lastIndex = messages.length - 1;
   for (let i = 0; i < lastIndex && total > budgetTokens; i++) {
     const m = messages[i];
-    if (i !== latest && m.role === 'tool' && m.content.length > 600 && m.content !== PLACEHOLDER) {
+    if (i !== latest && m.role === 'tool' && m.content.length > 600 && m.content !== PLACEHOLDER && !(i > latest && latest >= 0 && m.content.startsWith(DIFF_HEAD))) {
       total -= tokensOf(m);
       messages[i] = { ...m, content: `${m.content.slice(0, 600)}\n[…trimmed]` };
       total += tokensOf(messages[i]);

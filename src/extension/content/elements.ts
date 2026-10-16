@@ -14,6 +14,9 @@ let nextId = 1000 + Math.floor(Math.random() * 90) * 100;
 
 export const OVERLAY_HOST_ID = '__web-agent-overlay__';
 
+/** This document's identity: the content script runs once per document. */
+export const DOC_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
 export function idFor(el: Element): number {
   let id = ids.get(el);
   if (id === undefined) {
