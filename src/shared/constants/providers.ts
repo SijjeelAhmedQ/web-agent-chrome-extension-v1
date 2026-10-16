@@ -38,11 +38,12 @@ export const OLLAMA_MODELS: ModelOption[] = [
   { id: 'qwen3.5:4b', label: 'Qwen 3.5 4B', note: 'Runs on a 4 GB GPU. Slower and less reliable on complex sites.', tools: true },
 ];
 
-/** The models the Kaggle notebooks serve: kaggle/careflow_kaggle.ipynb, and kaggle/web_agent_qwen38_kaggle.ipynb (Qwen3.8 27B). */
+/** The models the Kaggle notebooks serve: kaggle/careflow_kaggle.ipynb, and the Web Agent's own (kaggle/make_web_agent_notebook.py). */
 export const KAGGLE_MODELS: ModelOption[] = [
   { id: 'qwen3.5:9b', label: 'Qwen 3.5 9B', note: 'Calls tools reliably — the best default for actions.', tools: true },
   { id: 'ternary-bonsai-2-27b', label: 'Ternary Bonsai 2 27B', note: 'The strongest model. Needs the notebook on GPU T4 x2.', tools: true },
   { id: 'qwen3.8:27b-q4_K_M', label: 'Qwen3.8 27B', note: 'Follows long workflows best — the web_agent_qwen38 notebook (GPU T4 x2). Slower: a few minutes a task.', tools: true },
+  { id: 'qwen3-vl:4b-instruct-q8_0', label: 'Qwen3-VL 4B Instruct', note: 'Small and fast, sees images too — the web_agent_qwen3vl4b notebook (one T4). Less reliable on long workflows.', tools: true },
   { id: 'hf.co/unsloth/medgemma-4b-it-GGUF:Q4_K_M', label: 'MedGemma 4B', note: 'Medical knowledge. Can’t use tools — reads the page and answers, but can’t click or type.', tools: false },
 ];
 
