@@ -118,7 +118,8 @@ const readPage: AgentTool<{ mode: 'overview' | 'content' }> = {
   touchesPage: true,
   label: (a) => (a.mode === 'content' ? 'Reading the page content' : 'Reading the page'),
   async execute(a, ctx) {
-    const snap = await ctx.browser.send({ kind: 'snapshot', mode: a.mode, maxElements: ctx.settings.maxElements, maxTextChars: ctx.settings.maxTextChars });
+    const maxTextChars = a.mode === 'overview' && ctx.overviewTextChars ? Math.min(ctx.settings.maxTextChars, ctx.overviewTextChars) : ctx.settings.maxTextChars;
+    const snap = await ctx.browser.send({ kind: 'snapshot', mode: a.mode, maxElements: ctx.settings.maxElements, maxTextChars });
     // A pop-up whose content comes from another site (a formulary in a frame): read that frame too.
     const front = snap.dialogs?.[0];
     if (front?.frames?.length) {

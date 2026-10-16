@@ -78,6 +78,8 @@ export class AgentRun {
   private readonly searchWarned = new Set<string>();
   /** Looks at the page (read, find, scroll, wait) since the last action — to stop endless searching. */
   private looksInARow = 0;
+  /** The latest thing done was reading the page: the model's answer is based on the page as it is. */
+  private justRead = false;
   /** Whether this task has looked at (or acted on) the page yet. */
   private sawPage = false;
   /** The items of a request with several things to do, ticked off as the agent goes. */
@@ -202,6 +204,8 @@ export class AgentRun {
       elements: new ElementMemory(),
       skills: toolset.onDemandSkills,
       neverClick: toolset.sites.flatMap((s) => s.neverClick ?? []),
+      // A small context is also a slow model's: every token of a page read is time.
+      ...((contextWindowOf(provider) ?? Infinity) <= 32_768 ? { overviewTextChars: 3_000 } : {}),
     };
 
     // With a checklist, the ticked items already say what is done.
@@ -288,7 +292,8 @@ export class AgentRun {
         if (checkedAnswer && (/^\W*confirmed\b/i.test(answer) || /\bCONFIRMED\W*$/.test(answer))) return checkedAnswer;
         // A claim that something was done gets checked against the page before the user sees it.
         // An answer that stops to ask the user something isn't the end of the task: no check (it would lose the question).
-        if (!verified && agent.verify !== false && byName.has('read_page') && claimsDone(answer) && !asksUser(answer)) {
+        // Nor when the model read the page last and did nothing since: it answered from the page as it is now.
+        if (!verified && agent.verify !== false && byName.has('read_page') && claimsDone(answer) && !asksUser(answer) && !this.justRead) {
           verified = true;
           const page = await this.checkPage(ctx);
           if (page) {
@@ -492,6 +497,8 @@ export class AgentRun {
       if (tool.touchesPage) this.sawPage = true;
       if (looking) this.looksInARow++;
       else if (isAction) this.looksInARow = 0;
+      if (tool.name === 'read_page') this.justRead = true;
+      else if (isAction) this.justRead = false;
       if (tool.name === 'type') this.typedOn.add(pageKey((await ctx.browser.currentTab().catch(() => null))?.url));
       if (textKey && outcome.note === 'Text not found') this.notFound.set(textKey, (this.notFound.get(textKey) ?? 0) + 1);
       if (outcome.noEffect) {

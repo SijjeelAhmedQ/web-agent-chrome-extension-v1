@@ -34,7 +34,9 @@ KEY = "CHANGE-ME"
 
 MODEL = "@MODEL@"   # @MODEL_NOTE@
 CTX = 16384                    # tokens per request — what the extension plans for on Kaggle
-PARALLEL = "@PARALLEL@"                 # requests answered together; each holds its own CTX-token cache on the GPU
+PARALLEL = "@PARALLEL@"                 # requests answered together; each holds its own CTX-token cache on the GPU.
+                               # One for a slow model: each step of a task then reuses the cache of the step
+                               # before (the instructions and the pages read so far are not read again).
 LOAD_STALL_S = @LOAD_STALL_S@             # no new GPU memory for this long while loading = stuck
 MIN_OLLAMA = (0, 12, 7)        # Qwen3-VL needs Ollama 0.12.7 or newer
 
@@ -193,7 +195,7 @@ PRESETS = {
     "qwen38": {
         "@TITLE@": "Qwen3.8 27B", "@ACCELERATOR@": "GPU T4 x2", "@MODEL@": "qwen3.8:27b-q4_K_M",
         "@MODEL_NOTE@": "~18 GB, across both T4s; tools + thinking (the server turns thinking off unless asked)",
-        "@PARALLEL@": "2", "@LOAD_STALL_S@": "300", "@MIN_GPUS@": "2", "@SIZE@": "~18 GB",
+        "@PARALLEL@": "1", "@LOAD_STALL_S@": "300", "@MIN_GPUS@": "2", "@SIZE@": "~18 GB",
     },
     "qwen3vl4b": {
         "@TITLE@": "Qwen3-VL 4B Instruct", "@ACCELERATOR@": "GPU T4 (or GPU T4 x2)", "@MODEL@": "qwen3-vl:4b-instruct-q8_0",

@@ -39,6 +39,8 @@ export interface ToolContext {
   skills: SkillConfig[];
   /** Names of buttons the agent may never click on this site (from its site setup). */
   neverClick?: string[];
+  /** Most page text in a read_page overview, for models with a small context (Kaggle's 16K). */
+  overviewTextChars?: number;
   /** Titles of the pop-ups that came up with the page or tab that opened last. */
   arrivalPopups?: Set<string>;
 }

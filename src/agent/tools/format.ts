@@ -11,6 +11,11 @@ const IMPLIED_TYPES = new Set(['text', 'submit', 'button', 'reset', 'image', 'se
 const q = (s: string) => `"${s.replace(/"/g, "'")}"`;
 
 export function formatElement(e: ElementInfo): string {
+  return elementLine(e, false);
+}
+
+/** An element as one line; in a list, one in the same table row as the line above says so instead of repeating the row. */
+function elementLine(e: ElementInfo, sameRowAsAbove: boolean): string {
   const parts = [`[${e.id}]`, e.role === 'clickable' ? e.tag : e.role, e.name ? q(e.name) : '(no label — unknown action)'];
   if (e.type && !IMPLIED_TYPES.has(e.type) && e.type !== e.role) parts.push(`type=${e.type}`);
   if (e.value !== undefined && e.value !== '' && e.role !== 'link') parts.push(`value=${q(e.value)}`);
@@ -26,7 +31,7 @@ export function formatElement(e: ElementInfo): string {
   if (e.inBlockingPopup) parts.push('(in a pop-up that can’t be closed — type only what the user tells you now)');
   if (e.options?.length) parts.push(`options: ${e.options.join(' | ')}`);
   if (e.href) parts.push(`→ ${e.href}`);
-  if (e.context) parts.push(`in ${e.context}`);
+  if (e.context) parts.push(sameRowAsAbove ? '(same row)' : `in ${e.context}`);
   if (!e.inViewport) parts.push('↓');
   return parts.join(' ');
 }
@@ -59,7 +64,8 @@ export function formatSnapshot(s: PageSnapshot, mode: 'overview' | 'content'): s
 
   lines.push('Interactive elements (↓ = outside the visible area):');
   if (!s.elements.length) lines.push('(none found — the page may still be loading)');
-  for (const e of s.elements) lines.push(formatElement(e));
+  // A table row's icons (details, edit, task, payment…) share its context: say it once per row.
+  s.elements.forEach((e, i) => lines.push(elementLine(e, !!e.context && /^row /.test(e.context) && s.elements[i - 1]?.context === e.context)));
   if (s.omitted > 0) lines.push(`(+${s.omitted} more not listed — use find_element or scroll)`);
 
   if (s.headings.length && mode === 'overview') {

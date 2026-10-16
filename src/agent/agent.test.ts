@@ -7,7 +7,7 @@ import { extractTextToolCalls, parseArguments, stripThinking } from './llm/parse
 import { buildSystemPrompt } from './planner/systemPrompt';
 import { budgetFor, compactMessages, estimateTokens, shrinkSnapshot } from './runtime/context';
 import { namedIn, talksAboutPage } from './runtime/agentRun';
-import { formatElement } from './tools/format';
+import { formatElement, formatSnapshot } from './tools/format';
 import { buildToolset, toolSpecs } from './tools/registry';
 import type { ChatMessage } from './llm/types';
 
@@ -216,6 +216,21 @@ describe('prompt and context', () => {
   it('sends an answer about the page back when the page was never read', () => {
     expect(talksAboutPage("You're already on Arya STARK's consult (DOB 03-12-2015).")).toBe(true);
     expect(talksAboutPage('Hello! How can I help?')).toBe(false);
+  });
+  it('names a table row once: the other elements of the row say “(same row)”', () => {
+    const row = 'row 2 “Arya STARK · 03-12-2015”';
+    const els = [
+      { id: 1, role: 'link', name: 'Arya STARK', tag: 'a', inViewport: true, context: row },
+      { id: 2, role: 'image', name: 'Edit', tag: 'img', inViewport: true, context: row },
+      { id: 3, role: 'image', name: 'Task', tag: 'img', inViewport: true, context: row },
+      { id: 4, role: 'link', name: 'Kook JUNG', tag: 'a', inViewport: true, context: 'row 3 “Kook JUNG · 01-09-2000”' },
+    ];
+    const out = formatSnapshot({ title: 'Patient Search', url: 'https://x.test/', scroll: { atTop: true, atBottom: true, percent: 0, screens: 1 }, elements: els, omitted: 0, frames: [], headings: [], text: '', textTruncated: false, dialogOpen: false } as never, 'overview');
+    expect(out).toContain('[1] link "Arya STARK" in row 2 “Arya STARK · 03-12-2015”');
+    expect(out).toContain('[2] image "Edit" (same row)');
+    expect(out).toContain('[3] image "Task" (same row)');
+    expect(out).toContain('[4] link "Kook JUNG" in row 3');
+    expect(formatElement(els[1] as never)).toBe('[2] image "Edit" in row 2 “Arya STARK · 03-12-2015”');
   });
   it('formats elements compactly', () => {
     expect(formatElement({ id: 3, role: 'searchbox', name: 'Search', tag: 'input', type: 'search', value: '', inViewport: true })).toBe('[3] searchbox "Search" (empty)');
