@@ -102,6 +102,27 @@ export class BrowserController {
     }
   }
 
+  /** The text of the frames in the agent's tab whose address is on one of these hosts (other sites' frames). */
+  async frameTexts(hosts: string[], maxChars = 3500): Promise<{ host: string; text: string }[]> {
+    const tab = await this.currentTab();
+    const results = await chrome.scripting
+      .executeScript({ target: { tabId: tab.id!, allFrames: true }, func: () => ({ url: location.href, text: document.body?.innerText ?? '' }) })
+      .catch(() => []);
+    const out: { host: string; text: string }[] = [];
+    for (const r of results) {
+      if (r.frameId === 0 || !r.result) continue;
+      const { url, text } = r.result as { url: string; text: string };
+      let host = '';
+      try {
+        host = new URL(url).host;
+      } catch {
+        continue;
+      }
+      if (hosts.includes(host) && text.trim()) out.push({ host, text: text.trim().replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').slice(0, maxChars) });
+    }
+    return out;
+  }
+
   /** Sends a request to the content script in the agent's current tab. */
   async send<K extends ContentRequest['kind']>(request: Extract<ContentRequest, { kind: K }>): Promise<ResponseMap[K]> {
     const tab = await this.currentTab();

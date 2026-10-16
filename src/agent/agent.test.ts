@@ -5,7 +5,7 @@ import { matchesSite } from '@/shared/utils';
 import { classifyClick, classifySubmit, classifyTyping } from './execution/riskPolicy';
 import { extractTextToolCalls, parseArguments, stripThinking } from './llm/parse';
 import { buildSystemPrompt } from './planner/systemPrompt';
-import { budgetFor, compactMessages, estimateTokens } from './runtime/context';
+import { budgetFor, compactMessages, estimateTokens, shrinkSnapshot } from './runtime/context';
 import { namedIn, talksAboutPage } from './runtime/agentRun';
 import { formatElement } from './tools/format';
 import { buildToolset, toolSpecs } from './tools/registry';
@@ -197,6 +197,13 @@ describe('prompt and context', () => {
     expect(msgs[4].content).not.toContain('Visible text');
     expect(msgs[4].content).toContain('[7400] link "Patient 0"');
     expect(msgs[4].content).toMatch(/shortened to fit/);
+  });
+  it('keeps the pop-up’s own text when a long page is shortened', () => {
+    const els = Array.from({ length: 400 }, (_, i) => `[${7400 + i}] link "Item ${i}" in row "03-12-2015 · ZAA3490"`);
+    const page = `Page: Consult Detail\nURL: https://x.test/\nPop-ups showing on top of the page:\n- "NZF" — can be closed: [1] button "×". Shows: "NZF"\nAll the text of the pop-up “NZF”:\ncodeine (systemic) and gabapentin (systemic) — Monitor for signs of CNS depression — Moderate\n\nInteractive elements (↓ = outside the visible area):\n${els.join('\n')}\n\nPage text:\n${'text '.repeat(3000)}`;
+    const out = shrinkSnapshot(page, 2_000);
+    expect(out).toContain('codeine (systemic) and gabapentin (systemic) — Monitor for signs of CNS depression — Moderate');
+    expect(estimateTokens(out)).toBeLessThanOrEqual(2_100);
   });
   it('estimates more tokens for digits', () => {
     expect(estimateTokens('2026-10-15')).toBeGreaterThan(estimateTokens('abcdefghij'));

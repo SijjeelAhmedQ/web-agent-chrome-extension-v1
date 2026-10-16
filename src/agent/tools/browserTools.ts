@@ -119,6 +119,12 @@ const readPage: AgentTool<{ mode: 'overview' | 'content' }> = {
   label: (a) => (a.mode === 'content' ? 'Reading the page content' : 'Reading the page'),
   async execute(a, ctx) {
     const snap = await ctx.browser.send({ kind: 'snapshot', mode: a.mode, maxElements: ctx.settings.maxElements, maxTextChars: ctx.settings.maxTextChars });
+    // A pop-up whose content comes from another site (a formulary in a frame): read that frame too.
+    const front = snap.dialogs?.[0];
+    if (front?.frames?.length) {
+      const inside = await ctx.browser.frameTexts(front.frames).catch(() => []);
+      if (inside.length) front.fullText = [front.fullText ?? '', ...inside.map((f) => f.text)].filter(Boolean).join('\n').slice(0, 5000);
+    }
     ctx.elements.remember([...snap.elements, ...(snap.dialogs ?? []).flatMap((d) => (d.close ? [d.close] : []))]);
     const n = snap.elements.length + snap.omitted;
     return { output: formatSnapshot(snap, a.mode), note: `${n} controls · ${clip(snap.title || siteOf(snap.url), 40)}` };

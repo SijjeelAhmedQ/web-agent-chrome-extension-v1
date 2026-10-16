@@ -119,7 +119,9 @@ function headings(): string[] {
 
 /** Rendered text of the page's main region (falls back to the body). */
 function pageText(maxChars: number): { text: string; truncated: boolean } {
-  const dialog = Array.from(document.querySelectorAll<HTMLElement>('dialog[open],[role=dialog],[aria-modal=true]')).find((d) => d.getClientRects().length > 0);
+  // With pop-ups showing, the text that matters is the one in front.
+  const shown = Array.from(document.querySelectorAll<HTMLElement>(DIALOGS)).filter((d) => d.getClientRects().length > 0 && !d.parentElement?.closest(DIALOGS));
+  const dialog = shown.find((d) => inFront(d)) ?? shown[0];
   const main = document.querySelector<HTMLElement>('main,[role=main]');
   const root = dialog ?? (main && (main.innerText?.length ?? 0) > 200 ? main : document.body);
   const raw = (root?.innerText ?? '')
@@ -163,15 +165,43 @@ export function showingDialogs(): DialogInfo[] {
   const dialogs = Array.from(document.querySelectorAll(DIALOGS))
     .filter((d) => isVisible(d) && !d.parentElement?.closest(DIALOGS))
     .slice(0, 6)
-    .map((d): DialogInfo => {
+    .map((d) => {
       const close = closeControl(d);
       const info: DialogInfo = { title: dialogTitle(d), text: clip(((d as HTMLElement).innerText ?? '').replace(/\s+/g, ' ').trim(), 220), close: close ? describeElement(close) : null };
       if (inFront(d)) info.onTop = true;
-      return info;
+      return { info, el: d };
     });
   // Stacked pop-ups: the one in front is the one to deal with first.
-  if (dialogs.length > 1) dialogs.sort((a, b) => Number(!!b.onTop) - Number(!!a.onTop));
-  return dialogs.slice(0, 4);
+  if (dialogs.length > 1) dialogs.sort((a, b) => Number(!!b.info.onTop) - Number(!!a.info.onTop));
+  // The pop-up in front gets all of its text: the agent must be able to read what it asks about.
+  const front = dialogs[0];
+  if (front) Object.assign(front.info, dialogBody(front.el));
+  return dialogs.slice(0, 4).map((d) => d.info);
+}
+
+/** All the text of a pop-up, the text of same-site frames inside it included; other sites' frames by host. */
+function dialogBody(d: Element): Pick<DialogInfo, 'fullText' | 'frames'> {
+  const parts = [((d as HTMLElement).innerText ?? '').trim()];
+  const frames: string[] = [];
+  for (const frame of Array.from(d.querySelectorAll('iframe'))) {
+    try {
+      const text = frame.contentDocument?.body?.innerText?.trim();
+      if (text) parts.push(text);
+      else if (!frame.contentDocument) frames.push(hostOf(frame.src));
+    } catch {
+      frames.push(hostOf(frame.src));
+    }
+  }
+  const fullText = clip(parts.filter(Boolean).join('\n').replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n'), 3500);
+  return { ...(fullText ? { fullText } : {}), ...(frames.filter(Boolean).length ? { frames: frames.filter(Boolean) } : {}) };
+}
+
+function hostOf(src: string): string {
+  try {
+    return new URL(src, location.href).host;
+  } catch {
+    return '';
+  }
 }
 
 /** Whether a pop-up is in front: what's at the middle of its title area belongs to it. */

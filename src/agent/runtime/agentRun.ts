@@ -76,6 +76,8 @@ export class AgentRun {
   private readonly typedOn = new Set<string>();
   /** Pages where picking from the list before searching was already pointed out once. */
   private readonly searchWarned = new Set<string>();
+  /** Looks at the page (read, find, scroll, wait) since the last action — to stop endless searching. */
+  private looksInARow = 0;
   /** Whether this task has looked at (or acted on) the page yet. */
   private sawPage = false;
   /** The items of a request with several things to do, ticked off as the agent goes. */
@@ -441,6 +443,11 @@ export class AgentRun {
         return early;
       }
     }
+    const looking = LOOK_TOOLS.has(tool.name);
+    if (looking && this.looksInARow >= MAX_LOOKS) {
+      finish({ status: 'skipped', note: 'Stopped searching' });
+      return `Not done: you have looked at the page ${this.looksInARow} times in a row without doing anything — what you are looking for is not on this page in a form you can read. Stop looking. Do the next step with what you already have, or tell the user what you could not find and ask them how to go on.`;
+    }
     const textKey = tool.name === 'click_text' ? String((args as { text?: unknown }).text ?? '').trim().toLowerCase() : '';
     if (textKey && (this.notFound.get(textKey) ?? 0) >= 2) {
       finish({ status: 'skipped', note: 'Not found twice — use the element list' });
@@ -483,6 +490,8 @@ export class AgentRun {
       if (isAction) this.actionTrail.push(step.label);
       const outcome = await this.inFront(ctx, () => tool.execute(args, ctx));
       if (tool.touchesPage) this.sawPage = true;
+      if (looking) this.looksInARow++;
+      else if (isAction) this.looksInARow = 0;
       if (tool.name === 'type') this.typedOn.add(pageKey((await ctx.browser.currentTab().catch(() => null))?.url));
       if (textKey && outcome.note === 'Text not found') this.notFound.set(textKey, (this.notFound.get(textKey) ?? 0) + 1);
       if (outcome.noEffect) {
@@ -676,6 +685,9 @@ export function declinedAnswer(title: string): string {
 }
 
 const NOT_FINISHED_PROMPT = 'Not finished yet:';
+/** Tools that only look at the page; this many in a row without an action is searching in circles. */
+const LOOK_TOOLS = new Set(['read_page', 'find_element', 'scroll', 'wait']);
+const MAX_LOOKS = 8;
 const CUT_OFF_PROMPT = 'Your last reply was cut off because the conversation got long. Continue the task: call the next tool now, and keep any text short.';
 const CONTINUE_PROMPT = 'You have not finished the task yet — you described a next step instead of doing it. Continue by calling the next tool. If the task is truly complete, reply with your final answer for the user.';
 

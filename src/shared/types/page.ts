@@ -34,6 +34,10 @@ export interface DialogInfo {
   close: ElementInfo | null;
   /** Nothing covers it: it is the one the user sees in front. */
   onTop?: boolean;
+  /** For the pop-up in front: all its text, frames inside it included (a formulary's table, a form's wording). */
+  fullText?: string;
+  /** Hosts of frames inside it from another site, whose text the page itself can't read. */
+  frames?: string[];
 }
 
 export interface PageSnapshot {
