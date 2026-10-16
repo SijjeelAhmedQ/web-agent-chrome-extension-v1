@@ -39,6 +39,19 @@ export interface FollowUp {
   checklist: ChecklistItem[];
 }
 
+/** Words a new task starts with (“goto patients and select…”, “add medication…”); a reply rarely does. */
+const TASK_START = /^(please\s+)?(go ?to|go|open|select|add|search|find|look ?up|create|make|book|schedule|navigate|show|click|remove|delete|update|change|edit|fill|check|send|start|close|log ?in|sign ?in)\b/i;
+
+/**
+ * Is this message a new task rather than an answer? It starts like a request and has a few words —
+ * “goto patients and select arya stark”. Answers are “OK”, “routine follow-up”, “Park SA Request”,
+ * “the second one”.
+ */
+export function looksLikeNewTask(message: string): boolean {
+  const text = message.trim();
+  return TASK_START.test(text) && text.split(/\s+/).length >= 3;
+}
+
 /** When the last answer asked the user something, the new message is their reply: frame it as one. */
 export function followUpOf(history: ChatMessage[], reply: string): FollowUp | null {
   const last = history.at(-1);
@@ -48,8 +61,8 @@ export function followUpOf(history: ChatMessage[], reply: string): FollowUp | nu
   const at = last.content.lastIndexOf(STOPPED);
   if (at < 0 || !last.content.trimEnd().endsWith(']')) return null;
   const task = asked.content.trim();
-  // The same request again (Run again) is a fresh start, not a reply.
-  if (reply.trim().toLowerCase() === task.toLowerCase()) return null;
+  // The same request again (Run again), or a new task, is a fresh start — not a reply (and no old checklist).
+  if (reply.trim().toLowerCase() === task.toLowerCase() || looksLikeNewTask(reply)) return null;
   const block = last.content.slice(at + STOPPED.length).replace(/\]\s*$/, '').split('\n');
   const doneSteps = block.map((l) => l.match(/^\d+\. (.*?)(?: → .*)?$/)?.[1]?.trim() ?? '').filter(Boolean);
   const checklist = block.flatMap((l): ChecklistItem[] => {
