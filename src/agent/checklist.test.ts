@@ -51,3 +51,18 @@ describe('the checklist for a request with several things to do', () => {
     expect(f?.doneSteps).toEqual([]);
   });
 });
+
+describe('a wrong click in the row of the record the user named', () => {
+  it('is an icon or unlabeled control there, unless the user asked for what it does', async () => {
+    const { wrongRowClick } = await import('./runtime/clickGuard');
+    const row = 'row 3 “Arya STARK · 03-12-2015 · ZAA3490”';
+    const ask = 'goto patients and select arya STARK';
+    expect(wrongRowClick(ask, { name: 'Book appointment (icon)', role: 'image', context: row })).toEqual({ item: 'Arya STARK', control: 'Book appointment (icon)' });
+    expect(wrongRowClick(ask, { name: '', role: 'clickable', context: row })?.control).toBe('a control with no label');
+    expect(wrongRowClick(ask, { name: 'Arya STARK', role: 'link', context: row })).toBeNull();
+    expect(wrongRowClick('book appointment for arya stark', { name: 'Book appointment (icon)', role: 'image', context: row })).toBeNull();
+    expect(wrongRowClick('goto patients and select kook jung', { name: 'Book appointment (icon)', role: 'image', context: row })).toBeNull();
+    expect(wrongRowClick(ask, { name: 'Select', role: 'checkbox', context: row })).toBeNull();
+    expect(wrongRowClick(ask, { name: 'Edit', role: 'image', context: 'form “Patient”' })).toBeNull();
+  });
+});

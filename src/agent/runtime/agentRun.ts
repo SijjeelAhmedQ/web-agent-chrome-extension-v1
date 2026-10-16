@@ -20,6 +20,9 @@ import { budgetFor, clipToolOutput, compactMessages, estimateTokens } from './co
 import type { ApprovalPrompt, RunEvent } from './events';
 import { asksUser, followUpOf, historyForModel } from './followUp';
 import { Checklist, checklistTool } from './checklist';
+import { changedSomething, namedIn, pageState, undoTool, wrongRowClick, type ClickRecord } from './clickGuard';
+
+export { namedIn } from './clickGuard';
 
 export interface RunOptions {
   request: string;
@@ -82,6 +85,12 @@ export class AgentRun {
   private justRead = false;
   /** Whether this task has looked at (or acted on) the page yet. */
   private sawPage = false;
+  /** What the user is told at the end about wrong clicks: stopped, or undone. */
+  private readonly corrections: string[] = [];
+  /** The last click that opened a tab, a page or a pop-up — what undo_click takes back. */
+  private lastClick: ClickRecord | null = null;
+  /** The request this run works on (and the earlier one, when it is the reply to a question). */
+  private taskText = '';
   /** The items of a request with several things to do, ticked off as the agent goes. */
   private checklist = new Checklist();
   /** The site knowledge in the prompt — values written there count as the user's. */
@@ -156,7 +165,7 @@ export class AgentRun {
     this.persist(true);
 
     try {
-      const answer = await this.loop(browser, tab);
+      const answer = this.withCorrections(await this.loop(browser, tab));
       this.updateTask({ status: 'done', endedAt: Date.now(), result: answer }, true);
     } catch (err) {
       const e = toAgentError(isAbort(err) || this.abort.signal.aborted ? new AgentError('cancelled', 'Stopped.') : err);
@@ -192,6 +201,19 @@ export class AgentRun {
     this.checklist = new Checklist(followUp?.checklist);
     if (this.checklist.size) this.updateTask({ checklist: this.checklist.items.map((i) => ({ ...i })) });
     toolset.tools.push(checklistTool(this.checklist, (done) => this.checklistChanged(done)));
+    this.taskText = followUp ? `${followUp.task}\n${request}` : request;
+    // Back from a wrong click — for agents that click.
+    if (toolset.tools.some((t) => t.name === 'click' || t.name === 'click_text')) {
+      toolset.tools.push(
+        undoTool(
+          () => this.lastClick,
+          (note) => {
+            this.correct(note);
+            this.lastClick = null;
+          },
+        ),
+      );
+    }
     const specs = toolSpecs(toolset.tools);
     // Room for the conversation: the server's context window minus the tool definitions sent with every call.
     // Tokens for the conversation: the context window minus the reply and the tool definitions sent with every call.
@@ -440,6 +462,19 @@ export class AgentRun {
         return `Not typed: “${popup}” is a pop-up that can’t be closed, and the user hasn’t told you in this message what to enter. Don’t make it up and don’t reuse an answer from earlier in the chat. Stop now and ask the user what to enter in “${popup}”. When they reply, type exactly their reply.`;
       }
     }
+    // An icon (book, edit, pay, print…) in the row of the record the user named, when they asked to open the record.
+    if (tool.name === 'click') {
+      const target = ctx.elements.get(Number((args as { id?: unknown }).id));
+      const wrong = wrongRowClick(this.taskText, target);
+      // The model means the record's name but sent an icon's id: the click tool's own check says which id is the name.
+      const meant = String((args as { name?: unknown }).name ?? '');
+      const mixedUp = !!wrong && !!meant && namedIn(meant, wrong.item) && !namedIn(meant, target?.name ?? '');
+      if (wrong && !mixedUp) {
+        finish({ status: 'skipped', note: 'Blocked a wrong click' });
+        this.correct(`I stopped a wrong click on “${wrong.control}” — a control in the row of ${wrong.item}, not ${wrong.item} itself.`);
+        return `Not clicked: “${wrong.control}” is a control in the row of “${wrong.item}” — it does something else (book, edit, pay, print…), and the user didn't ask for that. To open or select ${wrong.item}, click the name in that row (click_text with the name, near something else in the row). If the user really wants this control, ask them first.`;
+      }
+    }
     // Picking a row from a list on a page with a search form, without having searched there.
     if (tool.name === 'click_text' || tool.name === 'click') {
       const early = await this.pickBeforeSearch(tool.name, args, ctx);
@@ -493,7 +528,14 @@ export class AgentRun {
       }
 
       if (isAction) this.actionTrail.push(step.label);
+      // A click: what it opened (a tab, a page, a pop-up), so a wrong one can be undone.
+      const clicking = tool.name === 'click' || tool.name === 'click_text';
+      const before = clicking ? await this.inFront(ctx, () => pageState(ctx)) : null;
       const outcome = await this.inFront(ctx, () => tool.execute(args, ctx));
+      if (before) {
+        const record: ClickRecord = { label: step.label, before, after: await this.inFront(ctx, () => pageState(ctx)) };
+        if (changedSomething(record)) this.lastClick = record;
+      } else if (isAction && tool.name !== 'undo_click') this.lastClick = null;
       if (tool.touchesPage) this.sawPage = true;
       if (looking) this.looksInARow++;
       else if (isAction) this.looksInARow = 0;
@@ -572,6 +614,17 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
     return `Not done: this page has a search form (a “Search” button), and nobody has searched on it yet — the list showing now is not a search result. Type what the user gave into the right search field, click “Search”, read the results, and then pick from them. (Only if the user asked for an item from this list as it is, call this again.)`;
   }
 
+  /** Something the user must hear about a wrong click (once). */
+  private correct(note: string) {
+    if (!this.corrections.includes(note)) this.corrections.push(note);
+  }
+
+  /** The answer, with a note on every wrong click that was stopped or undone. */
+  private withCorrections(answer: string): string {
+    if (!this.corrections.length) return answer;
+    return `${answer}\n\n${this.corrections.map((c) => `**Note:** ${c}`).join('\n')}`;
+  }
+
   /** A checklist item was ticked (or the list made): the next item starts with fresh loop guards. */
   private checklistChanged(done: number | null) {
     if (done !== null) {
@@ -642,7 +695,7 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
   }
 }
 
-const BUILT_IN_NAMES = new Set([...BUILT_IN_TOOL_IDS, 'load_skill', 'site_knowledge', 'task_list']);
+const BUILT_IN_NAMES = new Set([...BUILT_IN_TOOL_IDS, 'load_skill', 'site_knowledge', 'task_list', 'undo_click']);
 const READ_PAGE = BROWSER_TOOLS.find((t) => t.name === 'read_page')!;
 
 /**
@@ -663,13 +716,6 @@ export function repeatedCycle(trail: string[], next: string): string[] | null {
 }
 
 /** Does the request name this item — every word of it (“Arya STARK” in “select arya stark”)? */
-export function namedIn(request: string, item: string): boolean {
-  const words = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter((w) => w.length > 1);
-  const asked = new Set(words(request));
-  const want = words(item);
-  return want.length > 0 && want.every((w) => asked.has(w));
-}
-
 /** A page's identity for “did the agent search here”: origin and path, without query or hash. */
 function pageKey(url: string | undefined): string {
   try {
