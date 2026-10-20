@@ -1,8 +1,9 @@
 import { App, Button, Checkbox, Input, Select, Slider, Switch } from 'antd';
 import { Ban, Download, Lock, Monitor, Moon, Sun, Upload, X } from 'lucide-react';
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { defaultConfig } from '@/shared/constants/defaults';
-import { normalizeConfig } from '@/shared/storage/configStore';
+import { BACKUP_AT_KEY, mergeConfig, normalizeConfig, stripKeys } from '@/shared/storage/configStore';
+import { getItem } from '@/shared/storage/kv';
 import { clearHistory } from '@/shared/storage/historyStore';
 import type { AppConfig, ConfirmationPolicy, ThemeMode } from '@/shared/types/config';
 import { isExtensionContext } from '@/shared/utils';
@@ -282,13 +283,6 @@ export function PrivacyPage() {
 
 /* ---------------- Advanced ---------------- */
 
-function stripKeys(config: AppConfig): AppConfig {
-  const copy = structuredClone(config);
-  copy.providers = copy.providers.map((p) => ({ ...p, apiKey: '' }));
-  copy.customTools = copy.customTools.map((t) => ({ ...t, headers: '' }));
-  return copy;
-}
-
 export function AdvancedPage() {
   const [settings, update] = useSettings();
   const config = useAppSelector((s) => s.config.config);
@@ -296,6 +290,31 @@ export function AdvancedPage() {
   const { modal, message } = App.useApp();
   const [includeSecrets, setIncludeSecrets] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const addInput = useRef<HTMLInputElement>(null);
+  const [backupAt, setBackupAt] = useState<number | null>(null);
+  useEffect(() => {
+    void getItem<number>(BACKUP_AT_KEY).then((t) => setBackupAt(t ?? null));
+  }, [config]);
+
+  const addFromFile = async (file: File) => {
+    try {
+      const parsed = JSON.parse(await file.text()) as Partial<AppConfig>;
+      if (!parsed || typeof parsed !== 'object' || (!parsed.agents && !parsed.sites && !parsed.skills)) throw new Error('not a config');
+      const { config: next, added } = mergeConfig(config, parsed);
+      const parts = [`${added.agents} agents`, `${added.sites} sites`, `${added.skills} skills`, `${added.customTools} custom tools`];
+      modal.confirm({
+        title: 'Add these to your setup?',
+        content: `This file has ${parts.join(', ')}. They are added to what you have (the file's version replaces one with the same id); your connections, keys and settings stay as they are.`,
+        okText: 'Add',
+        onOk: () => {
+          dispatch(configActions.replaceConfig(next));
+          message.success('Added to your setup');
+        },
+      });
+    } catch {
+      message.error("That file isn't a Web Agent configuration.");
+    }
+  };
 
   const exportConfig = () => {
     const data = includeSecrets ? config : stripKeys(config);
@@ -382,6 +401,30 @@ export function AdvancedPage() {
               Import
             </Button>
           </>
+        </SettingRow>
+        <SettingRow label="Add from file" description="Add the agents, sites (with their knowledge), skills and tools in a file to your setup — keeps your connections, keys and settings. For a backup, or a setup a colleague shared.">
+          <>
+            <input
+              ref={addInput}
+              type="file"
+              accept="application/json,.json"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void addFromFile(f);
+                e.target.value = '';
+              }}
+            />
+            <Button icon={<Upload size={14} />} onClick={() => addInput.current?.click()}>
+              Add from file
+            </Button>
+          </>
+        </SettingRow>
+        <SettingRow
+          label="Automatic backup"
+          description={`Keeps a copy of your setup, without API keys, in Downloads/WebAgent/web-agent-backup.json whenever it changes — it stays there even if the extension is removed. Bring it back with Add from file.${backupAt ? ` Last saved ${new Date(backupAt).toLocaleString()}.` : ''}`}
+        >
+          <Switch checked={settings.autoBackup !== false} onChange={(v) => update({ autoBackup: v })} aria-label="Automatic backup" />
         </SettingRow>
         <SettingRow label="Reset everything" description="Restore the default agents, skills and settings. Model connections are removed too.">
           <Button

@@ -3,6 +3,9 @@
  * agent itself runs in the side panel. The worker only wires up browser-level behaviour.
  */
 
+import { BACKUP_AT_KEY, CONFIG_KEY, loadConfig, stripKeys } from '@/shared/storage/configStore';
+import { setItem } from '@/shared/storage/kv';
+
 const LOCAL_ORIGIN_RULE_ID = 1;
 
 /** Toolbar icon opens the side panel. */
@@ -48,6 +51,44 @@ chrome.runtime.onInstalled.addListener((details) => {
 chrome.runtime.onStartup.addListener(() => {
   configurePanel();
   void configureLocalModelAccess();
+});
+
+/**
+ * Automatic backup: a copy of the setup without API keys in Downloads/WebAgent, overwritten a few
+ * seconds after each change. Removing the extension deletes everything it stored; this file stays.
+ */
+const BACKUP_FILE = 'WebAgent/web-agent-backup.json';
+let backupTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function backUp() {
+  backupTimer = null;
+  const config = await loadConfig();
+  if (config.settings.autoBackup === false) return;
+  const json = JSON.stringify({ ...stripKeys(config), backedUpAt: new Date().toISOString() }, null, 2);
+  const url = `data:application/json;base64,${btoa(unescape(encodeURIComponent(json)))}`;
+  const ui = chrome.downloads.setUiOptions;
+  try {
+    await ui?.({ enabled: false }).catch(() => undefined);
+    const id = await chrome.downloads.download({ url, filename: BACKUP_FILE, conflictAction: 'overwrite', saveAs: false });
+    // Keep the file, not a new line in the downloads list each time.
+    const done = (delta: chrome.downloads.DownloadDelta) => {
+      if (delta.id !== id || !delta.state || delta.state.current === 'in_progress') return;
+      chrome.downloads.onChanged.removeListener(done);
+      void chrome.downloads.erase({ id });
+      void ui?.({ enabled: true }).catch(() => undefined);
+    };
+    chrome.downloads.onChanged.addListener(done);
+    await setItem(BACKUP_AT_KEY, Date.now());
+  } catch (err) {
+    await ui?.({ enabled: true }).catch(() => undefined);
+    console.warn('[web-agent] backup failed', err);
+  }
+}
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes[CONFIG_KEY]) return;
+  if (backupTimer) clearTimeout(backupTimer);
+  backupTimer = setTimeout(() => void backUp(), 4_000);
 });
 
 chrome.commands.onCommand.addListener((command, tab) => {

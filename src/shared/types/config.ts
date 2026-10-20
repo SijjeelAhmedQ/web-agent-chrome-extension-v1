@@ -225,6 +225,8 @@ export interface Settings {
   expandActivity: boolean;
   blockedSites: string[];
   readOnlySites: string[];
+  /** Keep a copy of the setup (without API keys) in Downloads/WebAgent — it outlives removing the extension. */
+  autoBackup?: boolean;
   saveHistory: boolean;
   historyRetentionDays: number;
   developerMode: boolean;

@@ -149,3 +149,30 @@ describe('site-based setup', () => {
     expect(state.config.sites[0].skillIds).toEqual([]);
   });
 });
+
+describe('adding a backup file to the setup', () => {
+  it('adds agents and sites (with knowledge) and keeps connections, keys and settings', async () => {
+    const { mergeConfig, stripKeys } = await import('@/shared/storage/configStore');
+    const { defaultConfig } = await import('@/shared/constants/defaults');
+    const mine = defaultConfig();
+    mine.providers = [{ id: 'or', name: 'OpenRouter', kind: 'openai', preset: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', apiKey: 'sk-mine', defaultModel: 'deepseek/deepseek-v4-flash', createdAt: 1 } as never];
+    mine.settings.defaultProviderId = 'or';
+    mine.settings.theme = 'dark';
+    const backup = stripKeys({
+      ...defaultConfig(),
+      providers: [{ id: 'or-old', name: 'OpenRouter', kind: 'openai', preset: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1/', apiKey: 'sk-old', defaultModel: 'm', createdAt: 1 } as never],
+      agents: [{ ...defaultConfig().agents[0], id: 'agent-indici', name: 'indici agent' }],
+      sites: [{ id: 'site_indici', name: 'indici training', sites: ['pmstraining.vitonta.com'], providerId: 'or-old', knowledge: [{ id: 'k1', kind: 'rule', title: 'Pop-ups', content: 'close them', enabled: true, createdAt: 1, updatedAt: 1 }] } as never],
+    });
+    const { config, added } = mergeConfig(mine, backup);
+    expect(config.agents.map((a) => a.name)).toContain('indici agent');
+    expect(config.agents.length).toBe(mine.agents.length + 1);
+    expect(config.sites[0].knowledge[0].title).toBe('Pop-ups');
+    expect(config.providers).toHaveLength(1); // the file's OpenRouter is the one already here
+    expect(config.sites[0].providerId).toBe('or');
+    expect(config.providers[0].apiKey).toBe('sk-mine');
+    expect(config.settings.theme).toBe('dark');
+    expect(added).toEqual({ agents: 1, skills: backup.skills.length, customTools: backup.customTools.length, sites: 1 });
+    expect(backup.providers[0].apiKey).toBe('');
+  });
+});

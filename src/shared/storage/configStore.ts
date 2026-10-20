@@ -4,8 +4,55 @@ import type { AppConfig, SiteProfile } from '../types/config';
 import { getItem, setItem, watchItem } from './kv';
 
 export const CONFIG_KEY = 'wa.config';
+/** When the automatic backup file was last written. */
+export const BACKUP_AT_KEY = 'wa.backupAt';
 
 /** Fills in anything missing from an older or imported config. */
+/** The setup without secrets: API keys and custom tools' headers emptied — for files that leave the browser. */
+export function stripKeys(config: AppConfig): AppConfig {
+  const copy = structuredClone(config);
+  copy.providers = copy.providers.map((p) => ({ ...p, apiKey: '' }));
+  copy.customTools = copy.customTools.map((t) => ({ ...t, headers: '' }));
+  return copy;
+}
+
+/**
+ * Adds a file's agents, skills, custom tools and sites to the current setup — the file's version
+ * wins for the same id — and connections it has that are not here yet (their keys stay empty).
+ * Settings, existing connections and their keys are left as they are.
+ */
+export function mergeConfig(current: AppConfig, raw: Partial<AppConfig>): { config: AppConfig; added: Record<'agents' | 'skills' | 'customTools' | 'sites', number> } {
+  const incoming = normalizeConfig({ ...raw, agents: raw.agents ?? [] });
+  const byId = <T extends { id: string }>(mine: T[], theirs: T[]) => {
+    const out = [...mine];
+    for (const t of theirs) {
+      const i = out.findIndex((m) => m.id === t.id);
+      if (i >= 0) out[i] = t;
+      else out.push(t);
+    }
+    return out;
+  };
+  const fromFile = (list: unknown) => (Array.isArray(list) ? list.length : 0);
+  // A connection to an address already set up here is that one (with its key): the file's agents and
+  // sites use it. Only connections to new addresses are added (their keys are left empty).
+  const sameAs = new Map<string, string>();
+  const newProviders = (Array.isArray(raw.providers) ? incoming.providers : []).filter((p) => {
+    const here = current.providers.find((c) => c.id === p.id || (c.baseUrl.replace(/\/+$/, '') === p.baseUrl.replace(/\/+$/, '') && c.preset === p.preset));
+    if (here) sameAs.set(p.id, here.id);
+    return !here;
+  });
+  const provider = (id: string | null) => (id && sameAs.has(id) ? sameAs.get(id)! : id);
+  const config: AppConfig = {
+    ...current,
+    agents: byId(current.agents, Array.isArray(raw.agents) ? incoming.agents.map((a) => ({ ...a, providerId: provider(a.providerId) })) : []),
+    skills: byId(current.skills, Array.isArray(raw.skills) ? incoming.skills : []),
+    customTools: byId(current.customTools, Array.isArray(raw.customTools) ? incoming.customTools : []),
+    sites: byId(current.sites, incoming.sites.map((s) => ({ ...s, providerId: provider(s.providerId) }))),
+    providers: [...current.providers, ...newProviders],
+  };
+  return { config: normalizeConfig(config), added: { agents: fromFile(raw.agents), skills: fromFile(raw.skills), customTools: fromFile(raw.customTools), sites: fromFile(raw.sites) } };
+}
+
 export function normalizeConfig(raw: Partial<AppConfig> | undefined): AppConfig {
   const base = defaultConfig();
   if (!raw || typeof raw !== 'object') return base;

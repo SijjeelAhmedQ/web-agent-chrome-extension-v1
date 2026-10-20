@@ -37,7 +37,9 @@
     "scripting",
     "webNavigation",
     "declarativeNetRequestWithHostAccess",
-    "debugger"
+    "debugger",
+    "downloads",
+    "downloads.ui"
   ],
   "host_permissions": [
     "<all_urls>"
