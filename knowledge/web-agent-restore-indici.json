@@ -1,0 +1,278 @@
+{
+  "version": 1,
+  "agents": [
+    {
+      "id": "agent-indici",
+      "name": "indici agent",
+      "description": "Works in the Indici PMS training site: patients, consults, medications, diagnoses.",
+      "avatar": {
+        "icon": "Stethoscope",
+        "color": "#0e7490"
+      },
+      "instructions": "",
+      "providerId": null,
+      "model": "",
+      "temperature": 0.2,
+      "maxSteps": 40,
+      "confirmation": "smart",
+      "toolIds": [
+        "read_page",
+        "find_element",
+        "scroll",
+        "wait",
+        "click",
+        "type",
+        "clear",
+        "select_option",
+        "click_text",
+        "hover",
+        "open_menu",
+        "press_key",
+        "navigate",
+        "go_back",
+        "go_forward",
+        "list_tabs",
+        "open_tab",
+        "switch_tab",
+        "close_tab"
+      ],
+      "skillIds": [],
+      "createdAt": 1792493958545,
+      "updatedAt": 1792493958545
+    }
+  ],
+  "sites": [
+    {
+      "id": "site_indici",
+      "name": "indici training",
+      "description": "pmstraining.vitonta.com",
+      "color": "#0e7490",
+      "sites": [
+        "pmstraining.vitonta.com"
+      ],
+      "enabled": true,
+      "providerId": null,
+      "model": "",
+      "agentIds": [
+        "agent-indici"
+      ],
+      "skillIds": [],
+      "disabledSkillIds": [],
+      "customToolIds": [],
+      "disabledToolIds": [],
+      "neverClick": [],
+      "knowledge": [
+        {
+          "id": "kb_restored_0",
+          "kind": "rule",
+          "title": "Never guess medication details",
+          "content": "Use only the medicine, dose, frequency, duration and options (like long term) the user gave. If something the form needs is missing or unclear, ask the user instead of choosing a value.\nRead numbers from words: \"one\" = 1, \"two\" = 2, \"three\" = 3, \"half\" = 0.5. \"once daily\" = 1 a day, \"twice daily\" = 2 a day, \"three times daily\" = 3 a day.\nAfter filling the form, check every field you filled against the request, then click the form's Save — the user will be asked to approve it. If the user said not to save, stop and tell them the form is ready.",
+          "enabled": true,
+          "createdAt": 1792493958545,
+          "updatedAt": 1792493958545
+        },
+        {
+          "id": "kb_restored_1",
+          "kind": "rule",
+          "title": "Open a patient by clicking the name — never an icon",
+          "content": "A patient is opened only AFTER searching for them. Never click a patient in the list that shows before you search — that list is not the search result.\nOpen only a patient whose row matches what the user asked for — the name, the DOB or the NHI they gave. If no row matches, tell the user; never open a different patient. If several rows match, ask the user which one.\nOpen the patient by clicking their name in the Name column with click_text — one click — adding near with that row's DOB or NHI. The consult then opens (it may open in a new tab — continue there).\nNever double-click. Never click an icon in the Actions column to open a patient.",
+          "enabled": true,
+          "createdAt": 1792493958545,
+          "updatedAt": 1792493958545
+        },
+        {
+          "id": "kb_restored_2",
+          "kind": "rule",
+          "title": "Pop-ups when a consult opens",
+          "content": "This rule is ONLY for the pop-ups that come up when a patient's consult opens (alerts, recalls, the reason to view the file) — in front of each other or behind, wherever they are. Pop-ups that open later, while you add a medication, a diagnosis or anything else (\"Find Diagnosis\", \"Medication Advanced Search\", \"New Zealand Formulary\", \"already in the active medicines list\"), are part of that task: never close them yourself — follow the medication and diagnosis workflows for them.\nWhen the consult opens, read_page lists the pop-ups at the top under \"Pop-ups showing\" (the one in front first), with how each one closes:\n1. First close EVERY pop-up that \"can be closed\" (it has a ×, \"Close\" or \"Cancel\" button) — in front or behind — by clicking that button's id, the one in front first. Don't ask the user. Read the page again after each one — another may appear.\n2. Only when none of those is left: a pop-up that \"has no ×, Close or Cancel button\" (for example \"Add reason to view patient file\") — do not type anything yourself. Stop and ask the user what to enter, using the pop-up's title, e.g. \"What reason should I add to view the patient file?\". When the user answers, type exactly their answer into its field and click the pop-up's Save button (if click_text can't find Save, use find_element \"Save button\" and click it by its id). The user will be asked to confirm the save.\n3. When you finish, tell the user which pop-ups you closed.",
+          "enabled": true,
+          "createdAt": 1792493958545,
+          "updatedAt": 1792493958545
+        },
+        {
+          "id": "kb_restored_3",
+          "kind": "rule",
+          "title": "Already on the patient's consult — ask before opening it again",
+          "content": "This rule is only for requests to open or select a patient (\"goto patients and select …\"). A request to do something for a patient — add a task, a recall, a medication, a diagnosis, a comment — while that patient's consult is open is done right there: don't search for the patient again and don't ask.\nBefore you open the menu or search for a patient, read the current tab first (do not switch tabs). If it is a patient's consult (the page is \"Consult Detail\") and the patient shown there is the one the user asked for — same name (ignore upper/lower case and the order of first name and surname, e.g. \"Arya Stark\" = \"Arya STARK\" = \"STARK, Arya\"), and the same DOB or NHI if the user gave one — then do NOT navigate, search or click anything.\nJust answer, short and friendly, for example:\n\"You're already on **Arya STARK**'s consult (DOB 03-12-2015). Do you still want me to go to Patients and open her consult again?\"\nThen stop and wait.\n- If the user says yes (yes, haan, ji, ok, go ahead): do the \"Select a patient from Search & List\" workflow from step 1.\n- If the user says no (no, nahi, stay): don't do anything — just say you're staying on the current consult.\nIf the open consult is a different patient, or the current page is not a consult, ignore this rule and do the workflow as usual.",
+          "enabled": true,
+          "createdAt": 1792493958545,
+          "updatedAt": 1792493958545
+        },
+        {
+          "id": "kb_restored_4",
+          "kind": "navigation",
+          "title": "Top navigation menus open on hover",
+          "content": "The menus in the top navigation bar (Patients and the others) open when the mouse is over them — clicking \"Patients\" does not open the list. Use open_menu with the path [\"Patients\", \"Search & List\"], then click \"Search & List\" from the items it returns.\nDo not open a menu to reach a page you are already on: the Patient Search page is https://pmstraining.vitonta.com/Patient/Patients — if the current tab is already there, use it as it is.",
+          "enabled": true,
+          "createdAt": 1792493958545,
+          "updatedAt": 1792493958545
+        },
+        {
+          "id": "kb_restored_5",
+          "kind": "navigation",
+          "title": "Medications and diagnoses are in the consult's left sidebar",
+          "content": "Inside a patient's consult, the left sidebar has \"Medications\" (the medication screen with the \"Find Medicine:\" field) and \"Diagnosis/Coding\" (the diagnosis screen with the \"Find:\" field). Medications and diagnoses can only be added while a patient's consult is open.",
+          "enabled": true,
+          "createdAt": 1792493958545,
+          "updatedAt": 1792493958545
+        },
+        {
+          "id": "kb_restored_6",
+          "kind": "page",
+          "title": "Patient Search page (Patients › Search & List)",
+          "content": "- The search field is labelled \"Patient Name:\" — its placeholder is \"Surname First Name\".\n- Other fields: DOB, NHI, Street. Leave them empty unless the user gives them.\n- To search, click the \"Search\" button — not \"Search Vault\", not \"Show Adv. Search\".\n- Results are a table. The first column \"Name\" has the patient's name as plain text.\n- The Actions column icons (details, edit, $, calendar, family, print…) do NOT open the patient. Never click them to select a patient.",
+          "enabled": true,
+          "createdAt": 1792493958545,
+          "updatedAt": 1792493958545
+        },
+        {
+          "id": "kb_restored_7",
+          "kind": "workflow",
+          "title": "Select a patient from Search & List (by name, DOB or NHI)",
+          "content": "First work out what the user gave to find the patient:\n- a name (\"select luke king\", \"select Patient 1\") — names can look like numbers; \"Patient 1\" is a name, not \"the first patient\";\n- a date of birth (\"DOB is 01-01-1900\");\n- an NHI (\"NHI ZAA0652\").\n0. First apply the rule \"Already on the patient's consult — ask before opening it again\". Continue below only if that rule says so.\n1. Look at the current tab's address. If it already contains \"/Patient/Patients\", or the page already shows the \"Patient Name:\" field and the \"Search\" button, you are on the Patient Search page: do NOT open the menu again — go straight to step 2.\n   Only if you are on another page: hover \"Patients\" in the top navigation bar with open_menu [\"Patients\", \"Search & List\"], then click \"Search & List\".\n2. Read the page. Click \"Clear\" first if the search fields already have old values.\n3. Type what the user gave into the matching field — this step is required:\n   - name → \"Patient Name:\"\n   - date of birth → \"DOB:\" written as DD/MM/YYYY (01-01-1900 → 01/01/1900)\n   - NHI → \"NHI:\"\n4. Click the \"Search\" button. Wait, then read the page again to see the results.\n5. Find the row that matches what the user gave (same name, or same DOB, or same NHI).\n   - Exactly one row matches → click that patient's name with click_text, with near = the DOB or NHI from that row.\n   - Several rows match → do not choose: list them for the user (name, DOB, NHI) and ask which one.\n   - None match → tell the user nobody was found.\n6. The patient's consult opens (maybe in a new tab — continue there). Read the page.\n7. Handle the pop-ups as the \"Pop-ups when a consult opens\" rule says.\n8. Read the page again to confirm it is the right patient, then tell the user which patient is open: name, DOB and NHI.",
+          "enabled": true,
+          "createdAt": 1792493958545,
+          "updatedAt": 1792493958545,
+          "trigger": "goto patients and select patient who's DOB is 01-01-1900"
+        },
+        {
+          "id": "kb_restored_8",
+          "kind": "workflow",
+          "title": "Add a medication in the consult",
+          "content": "From the request: medicine = gabapentin 100 mg capsule; Take = 2; Frequency = twice daily; Duration = 5 days; Long Term = yes (only if the user said long term).\n1. A patient's consult must be open. If not, tell the user to open a patient first.\n2. Click \"Medications\" in the left sidebar, then read the page.\n3. Look at \"Today's Medication Activity\" and \"Long Term Medications\". If the same medicine, strength and form was already added today, don't add it again — tell the user.\n4. Type only the medicine's name (e.g. \"gabapentin\") into \"Find Medicine:\" and click the magnifier icon next to it.\n5. The \"Medication Advanced Search\" pop-up opens — it is part of the task, don't close it. Wait until \"Processing...\" is gone and the results show.\n6. Find the row with the same medicine, strength and form (e.g. \"… gabapentin 100 mg capsule\"); use the page numbers at the bottom if needed.\n   - Exactly one row → click its name once with click_text. The medicine form opens straight away — never click the pop-up's Save button.\n   - Several rows (different brands) → don't choose: list them and ask the user which one.\n   - None → tell the user.\n7. Pop-ups that can appear now — never decide them yourself and never close them with ×. Stop, tell the user what the pop-up says, ask which button to press, and wait. When the user answers, click exactly the button they named, read the page, and carry on with the next step (or tell the user what happened if the medicine form did not open):\n   - \"This medicine is already in the active medicines list … add it again?\" → ask: Yes or No?\n   - \"NZF\" (New Zealand Formulary, interactions) → tell the user each interaction (the medicines, the Action and the Severity), then ask: OK or Cancel?\n   - \"Special Authority Request Form\" (opens for a medicine with an SA flag) → tell the user the SA number and its title (e.g. \"SA2622 — Initial application — Arthritis - Rheumatoid\"), then ask which to press: Close, Check for Existing SA (MoH lookup), Send SA Request, or Park SA Request? Never tick its checkboxes yourself.\n8. The medicine form opens with the medicine's name as its title. The \"Find Medicine\" box empties itself — that is normal. Never search again.\n9. Fill only these:\n   - Take/Insert: the first box on that row (left of \"capsule(s)\", \"tablet(s)\" or \"supp(s)\") → the number (2).\n   - Frequency: read its options, choose the matching one (\"twice daily\").\n   - Duration: the number (5); leave \"Day/s\" unless the user said weeks or months.\n   - Quantity: don't type it — the app fills it in after Take, Frequency and Duration. Read the page and check it is filled; if it stays empty, tell the user instead of calculating it.\n   - Long Term: tick it only if the user said long term.\n   Leave everything else as it is (Current Diagnosis, Route, Repeats, Directions, Pres. Date, Prescriber, other checkboxes).\n10. Click the form's \"Save\" — top right of the form, next to \"Cancel\" — not the Save of \"Update Height\", never \"Pharmac\".\n11. Read the page: the medicine must be in \"Today's Medication Activity\" (and \"Long Term Medications\" if ticked). Then tell the user what was added.",
+          "enabled": true,
+          "createdAt": 1792493958545,
+          "updatedAt": 1792493958545,
+          "trigger": "add medication gabapentin 100 mg capsule take 2 tablets twice daily for 5 days, long term"
+        },
+        {
+          "id": "kb_restored_9",
+          "kind": "workflow",
+          "title": "Add a diagnosis in the consult",
+          "content": "From the request: diagnosis = Hypertension; Onset Date = 01-05-2026; anything else the user said (long term, confirmed, suspected, probable, interim, problem list).\n1. A patient's consult must be open. If not, tell the user to open a patient first.\n2. Click \"Diagnosis/Coding\" in the left sidebar, then read the page (tab \"Diagnosis\").\n3. Look at \"Long Term Diagnosis\" and \"Recent Diagnosis\". If the same diagnosis with the same onset date is already there, don't add it again — tell the user.\n4. Type the diagnosis name into the \"Find:\" field above the lists and click the magnifier icon next to it.\n5. The \"Find Diagnosis\" pop-up opens with Name, Type and Concept ID — it is part of the task, don't close it. Wait until the results show.\n6. Click the row whose Name is exactly the diagnosis, with Type \"disorder\" — e.g. \"Hypertension\", not \"FH: Hypertension\", \"H/O: hypertension\", \"Hypertension risk\" or \"Renal hypertension\". Click once with click_text. If there's no exact match, list the closest few and ask the user.\n7. The \"Add Diagnosis\" form opens. Check that \"Synonym\" shows the diagnosis.\n8. Onset Date: type the date the user gave, as DD-MM-YYYY (e.g. 01-05-2026), into the \"Onset Date:\" field — don't use the calendar icon.\n9. Tick only what the user asked for: \"long term\" → Long Term; \"problem list\" → Problem List; confirmed / interim / suspected / probable → that option. Leave the rest and Notes as they are.\n10. Click \"Save\" at the bottom of the form, next to \"Cancel\" — not \"Up-to Date\" or \"Health Pathways\", and not the Save of \"Update Height\" at the top.\n11. Read the page: the diagnosis must be in \"Recent Diagnosis\" (or \"Long Term Diagnosis\") with its onset date. Then tell the user.",
+          "enabled": true,
+          "createdAt": 1792493958545,
+          "updatedAt": 1792493958545,
+          "trigger": "add diagnosis Hypertension onset is 01-05-2026"
+        },
+        {
+          "id": "kb_inbox_0",
+          "kind": "navigation",
+          "title": "Inboxes, recalls and tasks",
+          "content": "- Patient Inbox: inside a patient's consult, the right panel has the tab \"Inbox\" (next to Timeline, Prompts, Outbox). It lists that patient's records. If the Inbox list is already showing (its records, or \"No new messages.\"), don't click \"Inbox\" again — work in it.\n- Provider Inbox: \"Home\" in the top bar opens the provider's dashboard; the left panel \"Mailbox › Inbox\" lists the records of all the provider's patients (sub-folders: Lab, Rad, Referrals, Discharge Summary, Patient Portal, Other Docs).\n- Recall and Task: in a patient's consult, the left sidebar items \"Recall\" and \"Task\" open their lists; the ⊕ icon at the top right of the list adds a new one.",
+          "enabled": true,
+          "createdAt": 1792506198652,
+          "updatedAt": 1792519647460
+        },
+        {
+          "id": "kb_inbox_1",
+          "kind": "page",
+          "title": "Inbox list and record viewer",
+          "content": "- The list's columns: Imported Date, (Provider Inbox only) Patient, Subject, Comments, Actions.\n- Click a record's Subject to open it in the record viewer. In Actions, the envelope icon marks the record as unread; the list icon opens \"View Audit Log\", whose \"Audit Log History\" button opens \"View Audit Log History\". Use those only when the user asks.\n- Filters: the ⌄ / ^ (chevron) icon at the right end of the bar above the list shows and hides them — see \"Search the inbox with filters\". The Provider Inbox starts at File Status: Not Filed; the Patient Inbox shows all records when it opens.\n- In the viewer: the comment box is at the top (\"Enter comments\"); a lab result lists each test with its Status (right-hand column); a scanned document shows its PDF. Buttons: \"File\" (or \"Un File\" when the record is already filed), \"Previous\", \"Next\" (saves the comment and opens the next record), \"OK\" (saves the comment and closes the viewer), \"Cancel\".",
+          "enabled": true,
+          "createdAt": 1792506198652,
+          "updatedAt": 1792522998760
+        },
+        {
+          "id": "kb_inbox_2",
+          "kind": "rule",
+          "title": "Inbox records — what the agent decides and what it doesn't",
+          "content": "- Normal or abnormal: decide from each test's Status — the right-hand column of the results list (each row: test name, the word \"Status\", then its status). Never from the Subject, the test name or its colour.\n  - A test is normal only when its Status is \"Normal\" or empty (nothing after \"Status\" — a saved record shows Normal as empty; that is the app's bug).\n  - A record is normal only when every test in it is normal. If even one test has any other status (\"Abnormal\", \"Abnormal alert\", \"High\", \"Low\", \"better\", \"decreased\", \"increased\", \"intermediate\"…), the whole record is abnormal.\n  - read_records works this out and counts it (status_label \"Status\", empty_is_normal true): report its counts as they are — don't recount by hand. In the summary, name each abnormal test with its status (e.g. \"HbA1c — Abnormal, Blood Test — High\").\n  - A PDF: read it and decide; say it was a PDF and give a one-line reason. An image you can't read: say \"this record is an image — I couldn't read it\" and name the record (date, patient, subject). Never guess.\n- Comments: always the user's words — ask the user for the comment. A record that already has a comment keeps it: type the new comment with clear: false, starting with a new line, so it goes on a new line after the old one. Never replace a comment.\n- Several records: first list them (date, patient, subject, normal/abnormal, reason) and ask the user once to confirm; after the user says yes, do them all with no more questions.\n- Never File or Un File a record unless the user asks for it. Commenting does not file.",
+          "enabled": true,
+          "createdAt": 1792506198652,
+          "updatedAt": 1792525152184
+        },
+        {
+          "id": "kb_inbox_3",
+          "kind": "workflow",
+          "title": "Review inbox results (normal and abnormal)",
+          "content": "Also for: \"show abnormal results\", \"review unfiled results in my inbox\", \"count the normal and abnormal lab records\".\n1. Patient Inbox if a patient's consult is open and the user means that patient; otherwise the Provider Inbox (Home).\n2. Which records: open the search filters with the ⌄ (chevron down) icon at the right end of the bar above the list (skip it if the filters already show), set them, then click \"Search\":\n   - File Status: All, unless the user asked for filed or not filed.\n   - A kind of record named (labs, rads, referrals, scans…): Patient Inbox — choose it in \"Folder\" (\"labs\" → Lab, \"scans\" → Scan Document). Provider Inbox — click that folder in the left panel \"Mailbox › Inbox\" first (expand \"Inbox\" with the small arrow if needed).\n   - A patient, dates or a subject named: as in \"Search the inbox with filters\".\n   Never use the buttons above the Patient Inbox list (Flagged, All, Lab, Rad…).\n3. Call read_records with first = the Subject of the first record in the list (and near = its date), status_label = \"Status\" and empty_is_normal = true. It opens every record with \"Next\", reads them all, closes the viewer, and gives each record's normal/abnormal tests and the totals — use those counts as they are. Don't open records one by one or again.\n   Don't click \"Click here to load the data from archive\" unless the user asked for older records. Call read_records once: its result has every record of the list.\n4. Decide each record normal/abnormal (see the rule). If the user asked only for abnormal (or only normal) results, report only those and say how many others there were. Otherwise a short summary: abnormal records first (date, patient, subject, the abnormal tests or the reason), then normal ones, then the ones you couldn't read.",
+          "enabled": true,
+          "createdAt": 1792506198652,
+          "updatedAt": 1792524234480,
+          "trigger": "review inbox results"
+        },
+        {
+          "id": "kb_inbox_4",
+          "kind": "workflow",
+          "title": "Add a comment to inbox records",
+          "content": "Also for: \"add a comment to the LFT result\", \"add a comment to all normal records\".\n1. Find the records the user means (one record, all abnormal, or all normal) — with read_records as in \"Review inbox results\" if you don't know them yet.\n2. Several records: list them and ask the user for the comment and to confirm, in one question. One record: ask for the comment.\n3. Make a checklist (task_list) of the records. For each: open it (click its Subject), type the comment into the comment box (clear: false, starting with a new line if a comment is already there), then \"Next\" for the next record — or \"OK\" for the last one. Tick it off.\n4. Don't File them. Tell the user which records got the comment.",
+          "enabled": true,
+          "createdAt": 1792506198652,
+          "updatedAt": 1792506198652,
+          "trigger": "comment on all abnormal results"
+        },
+        {
+          "id": "kb_inbox_5",
+          "kind": "workflow",
+          "title": "File, Un File, mark as unread, audit log",
+          "content": "Also for: \"un file this record\", \"mark it as unread\", \"show the audit log of the LFT result\".\n- File / Un File: open the record and click \"File\" (or \"Un File\"). Several records: list them and confirm once first.\n- Mark as unread: click the envelope icon in the record's Actions.\n- Audit log: click the list icon in the record's Actions; for the full history click \"Audit Log History\". Read and tell the user what it shows.",
+          "enabled": true,
+          "createdAt": 1792506198652,
+          "updatedAt": 1792506198652,
+          "trigger": "file the normal results"
+        },
+        {
+          "id": "kb_inbox_6",
+          "kind": "workflow",
+          "title": "Add a recall",
+          "content": "1. The consult of the patient it is for must be open. If it already is (the patient's name is at the top of the consult), work there — don't search for the patient again. If no consult or another patient's consult is open, tell the user to open the patient first.\n   Then click \"Recall\" in the left sidebar, and the ⊕ icon at the top right of the Recall list. The \"Recall\" form opens.\n2. Ask the user for what they didn't give: Recall Group, Description (its options depend on the Recall Group — choose the group first, then read the description options and offer them), and when: a period for \"Recall-in\" (e.g. 2 Day(s), 3 weeks, 3 months) or a date.\n3. Fill: Recall Group, then Description, Note (if given), Recall-in (choose the period) — Due Date fills itself; or type the date the user gave into Due Date. Priority, Cycle, Confidential, Do not show on Portal: only if the user said. Leave Provider and Active as they are.\n4. Click \"Save\" (not \"Complete\") — the user approves it. Check the recall is in the list, then tell the user.",
+          "enabled": true,
+          "createdAt": 1792506198652,
+          "updatedAt": 1792506198652,
+          "trigger": "add a recall for bowel screening in 3 months"
+        },
+        {
+          "id": "kb_inbox_7",
+          "kind": "workflow",
+          "title": "Add a task",
+          "content": "1. The consult of the patient it is for must be open. If it already is (the patient's name is at the top of the consult), work there — don't search for the patient again. If no consult or another patient's consult is open, tell the user to open the patient first.\n   Then click \"Task\" in the left sidebar, and the ⊕ icon at the top right of the task list. \"Add Task\" opens.\n2. Ask the user for what they didn't give: the subject, who it is \"To\" (a provider — read the options), the \"Type\" (read the options), the priority and the due date.\n3. Fill: Subject / Progress, To (remove the provider already there if the user named another), Priority, Due (DD/MM/YYYY), Type; Start stays today unless the user said. Leave Patient, From, Status and the checkboxes as they are unless the user said.\n4. Click \"Save\" (not \"Complete\" or \"Reset\") — the user approves it. Check it is in the task list, then tell the user.",
+          "enabled": true,
+          "createdAt": 1792506198652,
+          "updatedAt": 1792506198652,
+          "trigger": "add a task for Arya to review her bloods next week"
+        },
+        {
+          "id": "kb_inbox_8",
+          "kind": "workflow",
+          "title": "Patient summary (read only)",
+          "content": "1. A patient's consult must be open. Read the page: \"Long Term Medications\", \"Problem List\", \"Alerts\", \"Recent Measurements\".\n2. For results, do \"Review inbox results\" in the Patient Inbox.\n3. Answer with short sections: Medications, Diagnoses (Problem List), Abnormal results, Normal results. Change nothing.",
+          "enabled": true,
+          "createdAt": 1792506198652,
+          "updatedAt": 1792506198652,
+          "trigger": "summarise Arya's medications, diagnoses and abnormal results"
+        },
+        {
+          "id": "kb_filters_0",
+          "kind": "navigation",
+          "title": "Inbox folders (labs, rads, referrals…)",
+          "content": "- Which inbox: if a patient's consult is open and the user means that patient, the Patient Inbox; otherwise the Provider Inbox.\n- Patient Inbox: click the ⌄ (chevron down) icon at the right end of the bar above the list — the search filters open. Choose the kind in \"Folder\" (Inbox, Lab, Scan Document, Other Docs, BPAC, Photos, Allied Health Service — \"labs\" → Lab, \"scans\" → Scan Document), set \"File Status\" to All unless the user said filed or not filed, and click \"Search\". Never use the buttons above the list (Flagged, All, Disc., Lab, Rad, Ref, MyIndi, Scan).\n- Provider Inbox (Home → Provider Dashboard): the left panel \"Mailbox › Inbox\" has the folders \"Lab\", \"Rad\", \"Referrals\", \"Discharge Summary\", \"Patient Portal\", \"Other Docs\". If they are not showing under \"Inbox\", expand it first: click the small arrow icon left of \"Inbox\". Then click the folder. Don't use the coloured boxes at the top (\"Lab/Rad\", \"Urgent\", \"Overdue\"…).\n- Then read the list. To review its records, use read_records as in \"Review inbox results\".",
+          "enabled": true,
+          "createdAt": 1792515345673,
+          "updatedAt": 1792519647460
+        },
+        {
+          "id": "kb_filters_1",
+          "kind": "rule",
+          "title": "Empty inbox list — ask before loading the archive",
+          "content": "Only when your own read of the list shows \"No new messages.\" (never from this rule alone — right after opening the Inbox the list may still be loading: wait 2 seconds and read the page again first). Then, if it shows the button \"Click here to load the data from archive.\", don't click it yourself: tell the user there are no records here and ask \"Do you want me to load the archived records?\". Click it only if the user says yes, then read the list again. When the list has records, never load the archive unless the user asks for older records.",
+          "enabled": true,
+          "createdAt": 1792515345673,
+          "updatedAt": 1792520286911
+        },
+        {
+          "id": "kb_search_0",
+          "kind": "workflow",
+          "title": "Search the inbox with filters",
+          "trigger": "show lab results for arya stark from last month",
+          "content": "Also for: \"find unfiled records from 01/10/2026 to 20/10/2026\", \"show inactive records of Jake\", \"show filed scan documents\".\n1. Which inbox: a patient's consult is open and the user means that patient → Patient Inbox; otherwise the Provider Inbox (Home).\n2. Show the filters if they are hidden: the ⌄ (chevron down) icon at the right end of the bar above the list. Never use the buttons above the Patient Inbox list (Flagged, All, Lab…).\n3. Set only what the user asked for — leave the other filters as they are, except File Status: All unless the user said filed or not filed.\n   - From / To: type the date as DD/MM/YYYY (clear the field first). Work out \"today\", \"last week\", \"last month\", \"since 1 October\" from today's date.\n   - Subject (both) and Organisation (Provider Inbox): type the words the user gave.\n   - Patient (Provider Inbox only): type the patient's name, then click the magnifier next to the field. The \"Patient Search\" pop-up opens — it is part of the task, don't close it. Pick the patient as the rule \"Open a patient by clicking the name\" says: exactly one row matches → click the name (near = its DOB); several → list them and ask the user; none → tell the user. Clicking the name selects the patient: the pop-up closes and the Patient field shows the name.\n   - Folder (Patient Inbox only): Inbox, Lab, Scan Document, Other Docs, BPAC, Photos, Allied Health Service — \"labs\" → Lab, \"scans\" → Scan Document.\n   - Provider (both): the provider the user named, or All. Read the options and choose the matching one.\n   - File Status: Filed / Not Filed / All. Status: Active / Inactive / All.\n4. Click the inbox's \"Search\" (not one inside the Patient Search pop-up). Read the list.\n5. Empty list: follow the rule \"Empty inbox list — ask before loading the archive\". Otherwise tell the user what the list shows (date, patient, subject, comments) — and if the user asked to review them, use read_records as in \"Review inbox results\".",
+          "enabled": true,
+          "createdAt": 1792516705766,
+          "updatedAt": 1792519647460
+        }
+      ],
+      "createdAt": 1792493958545,
+      "updatedAt": 1792493958545
+    }
+  ]
+}
