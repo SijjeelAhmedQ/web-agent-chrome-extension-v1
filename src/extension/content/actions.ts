@@ -492,11 +492,11 @@ export function settle(quietMs: number, timeoutMs: number): Promise<{ mutations:
  * The dialogs showing now — waiting up to `waitMs` for one to appear, since pages often open
  * them a moment after loading (“Add reason to view patient file”).
  */
-export async function visibleDialogs(waitMs: number): Promise<{ dialogs: DialogInfo[] }> {
+export async function visibleDialogs(waitMs: number, settle = true): Promise<{ dialogs: DialogInfo[] }> {
   const deadline = Date.now() + waitMs;
   for (;;) {
     const dialogs = showingDialogs();
-    if (dialogs.length) return { dialogs: await settledDialogs(dialogs) };
+    if (dialogs.length) return { dialogs: settle ? await settledDialogs(dialogs) : dialogs };
     if (Date.now() >= deadline) return { dialogs };
     await sleep(250);
   }

@@ -1,4 +1,4 @@
-import { AlertCircle, Check, ChevronDown, CircleSlash, Pause, Square, X } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, CircleSlash, Copy, Pause, Square, X } from 'lucide-react';
 import { memo, useEffect, useId, useState } from 'react';
 import type { StepRecord, TaskRecord } from '@/shared/types/history';
 import { formatDuration } from '@/shared/utils';
@@ -99,6 +99,9 @@ export const ActivityCard = memo(function ActivityCard({ task, thinking, develop
     else setExpanded(defaultExpanded || status === 'failed');
   }, [running, status, defaultExpanded]);
 
+  // Every hook before the early return below (React needs the same hooks on every render).
+  const [copied, setCopied] = useState(false);
+
   if (!running && steps.length === 0) return null;
 
   const duration = task?.endedAt ? formatDuration(task.endedAt - task.startedAt) : null;
@@ -106,9 +109,18 @@ export const ActivityCard = memo(function ActivityCard({ task, thinking, develop
   const title = running ? 'Working on your request' : status === 'done' ? 'Completed' : status === 'cancelled' ? 'Stopped' : "Couldn't finish";
   const thinkingLabel = steps.length === 0 ? 'Understanding your request' : 'Deciding the next step';
   const waiting = steps.some((s) => s.status === 'waiting');
+  // The steps as text — each step, how it went, and what it found — to paste into a message or a report.
+  const copySteps = () => {
+    const text = steps.map((s) => [s.label, STATUS_TEXT[s.status], s.note].filter(Boolean).join('\n')).join('\n');
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    });
+  };
 
   return (
     <section className={`activity ${status}`} aria-label="Agent activity">
+      <div className="activity-top">
       <button type="button" className="activity-head" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded} aria-controls={listId}>
         <span className={`activity-status ${status}`}>
           {running ? <Sparkle size={13} className="spin-slow" /> : status === 'done' ? <Check size={13} strokeWidth={3} /> : status === 'cancelled' ? <Square size={10} strokeWidth={3} /> : <AlertCircle size={14} strokeWidth={2.5} />}
@@ -117,6 +129,12 @@ export const ActivityCard = memo(function ActivityCard({ task, thinking, develop
         {meta && <span className="activity-meta">{meta}</span>}
         <ChevronDown size={15} className={`chev ${expanded ? 'open' : ''}`} aria-hidden />
       </button>
+      {steps.length > 0 && !running && (
+        <button type="button" className="icon-btn small activity-copy" aria-label="Copy steps" title={copied ? 'Copied' : 'Copy steps'} onClick={copySteps}>
+          {copied ? <Check size={14} /> : <Copy size={14} />}
+        </button>
+      )}
+      </div>
       {expanded && (
         <ol className="steps" id={listId} aria-live="polite">
           {steps.map((s) => (

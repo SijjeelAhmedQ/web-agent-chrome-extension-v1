@@ -666,8 +666,75 @@ const closeTab: AgentTool<{ tab_id?: number }> = {
   },
 };
 
+/** The text of the pop-up in front — the frames of other sites inside it included. */
+async function popupText(ctx: ToolContext): Promise<string> {
+  // No waiting for other pop-ups to settle: read_records waits for the record itself to change.
+  const res = await ctx.browser.send({ kind: 'dialogs', waitMs: 1500, settle: false }).catch(() => null);
+  const front = res?.dialogs[0];
+  if (!front) return '';
+  let text = front.fullText ?? front.text;
+  if (front.frames?.length) {
+    const inside = await ctx.browser.frameTexts(front.frames).catch(() => []);
+    if (inside.length) text = [text, ...inside.map((f) => f.text)].join('\n');
+  }
+  return text.trim();
+}
+
+/**
+ * Reviewing a list of records (an inbox) one by one costs a model call per record and runs out of
+ * steps. This opens the first record and goes through the viewer with its "Next" button by itself,
+ * keeping each record's text, then closes the viewer — one step; the model reads them all at once.
+ */
+const readRecords: AgentTool<{ first: string; near: string; next: string; close: string; max: number }> = {
+  name: 'read_records',
+  description:
+    'Read a list of records in one go — an inbox, a list of results — instead of opening them one by one: it opens the first record (clicks its text), presses the record viewer\'s "Next" button until the last record, keeps every record\'s text (and its fields), then closes the viewer. It types nothing and saves nothing. Then answer from what it returns.',
+  schema: z.object({
+    first: str(z.string().min(1)).describe('The text to click to open the first record of the list, e.g. its Subject'),
+    near: z.coerce.string().optional().default('').describe('Other text from the same row, if the first text appears more than once'),
+    next: z.coerce.string().optional().default('Next').describe('The viewer button that opens the next record'),
+    close: z.coerce.string().optional().default('Cancel').describe('The viewer button that closes it without saving'),
+    max: z.coerce.number().int().min(1).max(50).optional().default(30).describe('At most this many records'),
+  }),
+  risk: 'action',
+  touchesPage: true,
+  label: (a) => `Reading the records one after another, from ${quote(a.first)}`,
+  async execute(a, ctx) {
+    const opened = await clickText.execute({ text: a.first, near: a.near, double: false }, ctx);
+    if (/Text not found|not clicked/.test(opened.note ?? '')) return opened;
+    const cap = ctx.overviewTextChars ? 900 : 2500;
+    const records: string[] = [];
+    let last = '';
+    for (let i = 0; i < a.max; i++) {
+      let text = await popupText(ctx);
+      // The next record may take a moment to load.
+      for (let tries = 0; tries < 12 && (!text || text === last); tries++) {
+        await sleep(300);
+        text = await popupText(ctx);
+      }
+      if (!text || text === last) break;
+      records.push(clip(text, cap));
+      last = text;
+      if (i === a.max - 1) break;
+      const next = await ctx.browser.send({ kind: 'popupControl', name: a.next }).catch(() => null);
+      if (!next?.id || next.disabled) break;
+      await ctx.browser.send({ kind: 'click', id: next.id, highlight: false }).catch(() => undefined);
+    }
+    const close = await ctx.browser.send({ kind: 'popupControl', name: a.close }).catch(() => null);
+    if (close?.id) await ctx.browser.send({ kind: 'click', id: close.id, highlight: false }).catch(() => undefined);
+    else await ctx.browser.send({ kind: 'key', key: 'Escape' }).catch(() => undefined);
+    if (!records.length) {
+      return { output: `Clicked “${a.first}”, but no record viewer (pop-up) opened. Read the page to see what it did.`, note: 'No record viewer opened' };
+    }
+    return {
+      output: `Read ${records.length} record${records.length === 1 ? '' : 's'} one after another with “${a.next}”, then closed the viewer with “${a.close}”. Nothing was typed or saved.\n\n${records.map((r, i) => `### Record ${i + 1}\n${r}`).join('\n\n')}`,
+      note: `${records.length} record${records.length === 1 ? '' : 's'} read`,
+    };
+  },
+};
+
 export const BROWSER_TOOLS: AgentTool<any>[] = [
-  readPage, findElement, scroll, wait, click, clickText, hover, openMenu, type, clear, selectOption, pressKey, navigate, goBack, goForward, listTabs, openTab, switchTab, closeTab,
+  readPage, findElement, scroll, wait, click, clickText, readRecords, hover, openMenu, type, clear, selectOption, pressKey, navigate, goBack, goForward, listTabs, openTab, switchTab, closeTab,
 ];
 
 // Keep the UI catalogue and the implementations in lock-step.

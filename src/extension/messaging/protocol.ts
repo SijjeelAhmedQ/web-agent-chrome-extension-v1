@@ -25,7 +25,8 @@ export type ContentRequest =
   | { kind: 'key'; key: string; id?: number }
   | { kind: 'settle'; quietMs: number; timeoutMs: number }
   | { kind: 'waitForText'; text: string; timeoutMs: number }
-  | { kind: 'dialogs'; waitMs: number }
+  | { kind: 'dialogs'; waitMs: number; settle?: boolean }
+  | { kind: 'popupControl'; name: string }
   | { kind: 'hover'; id: number; highlight: boolean }
   | { kind: 'menuPath'; path: string[]; highlight: boolean }
   | { kind: 'presence'; active: boolean };
@@ -140,6 +141,7 @@ export interface ResponseMap {
   settle: { mutations: number; url: string; title: string; alerts: string[]; effect?: ClickEffect };
   waitForText: { found: boolean };
   dialogs: { dialogs: DialogInfo[] };
+  popupControl: { id: number | null; disabled: boolean };
   presence: null;
 }
 

@@ -168,6 +168,27 @@ function dialogTitle(dialog: Element): string {
   return clip((byId || dialog.getAttribute('aria-label') || heading || first).replace(/\s+/g, ' ').trim(), 90);
 }
 
+/** The pop-up in front (or the only one), if any. */
+function frontDialog(): Element | null {
+  const shown = Array.from(document.querySelectorAll(DIALOGS)).filter((d) => {
+    if (!isVisible(d)) return false;
+    const outer = d.parentElement?.closest(DIALOGS);
+    return !outer || dialogTitle(outer) !== dialogTitle(d);
+  });
+  return shown.find((d) => inFront(d)) ?? shown[0] ?? null;
+}
+
+/** A button of the pop-up in front, by its name (“Next”, “Cancel”) — not one of the page behind it. */
+export function popupControl(name: string): { id: number | null; disabled: boolean } {
+  const d = frontDialog();
+  if (!d) return { id: null, disabled: false };
+  const want = name.trim().toLowerCase();
+  const el = Array.from(d.querySelectorAll('button,input[type=button],input[type=submit],a,[role=button]')).find(
+    (c) => isVisible(c) && c.closest(DIALOGS) === d && accessibleName(c).trim().toLowerCase() === want,
+  );
+  return el ? { id: idFor(el), disabled: isDisabled(el) } : { id: null, disabled: false };
+}
+
 /** The pop-ups showing now — the one in front first — each with its close control. */
 export function showingDialogs(): DialogInfo[] {
   // A pop-up opened inside another one (a site's alerts put in the open pop-up's markup) counts on
@@ -195,7 +216,17 @@ export function showingDialogs(): DialogInfo[] {
 
 /** All the text of a pop-up, the text of same-site frames inside it included; other sites' frames by host. */
 function dialogBody(d: Element): Pick<DialogInfo, 'fullText' | 'frames'> {
-  const parts = [((d as HTMLElement).innerText ?? '').trim()];
+  // Values in its fields (a record's Subject, Result Date, Folder…) are not in its text: list them first.
+  const fields = Array.from(d.querySelectorAll('input:not([type=button]):not([type=submit]):not([type=hidden]):not([type=checkbox]):not([type=radio]),select,textarea'))
+    .filter((f) => isVisible(f) && f.closest(DIALOGS) === d)
+    .map((f) => {
+      const value = isSelect(f) ? (f.selectedOptions[0]?.text ?? '').trim() : ((f as HTMLInputElement).value ?? '').trim();
+      const name = (visualLabel(f) || accessibleName(f)).replace(/[:*]\s*$/, '').trim();
+      return value && !/^--\s*select\s*--$/i.test(value) && name ? `${name}: ${value}` : '';
+    })
+    .filter(Boolean)
+    .slice(0, 20);
+  const parts = [fields.length ? `Fields — ${fields.join('; ')}` : '', ((d as HTMLElement).innerText ?? '').trim()];
   const frames: string[] = [];
   for (const frame of Array.from(d.querySelectorAll('iframe'))) {
     try {

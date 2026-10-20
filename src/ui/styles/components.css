@@ -767,3 +767,21 @@
   font-weight: 600;
   overflow-wrap: anywhere;
 }
+
+/* The activity header with its copy-steps button beside it. */
+.activity-top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.activity-copy {
+  flex: none;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.activity-top:hover .activity-copy,
+.activity-copy:focus-visible {
+  opacity: 1;
+}
