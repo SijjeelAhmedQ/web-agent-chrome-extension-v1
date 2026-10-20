@@ -258,6 +258,7 @@ export class AgentRun {
     let listNudges = 0;
     let pageNudged = false;
     let popupsChecked = false;
+    let quotesChecked = false;
     for (let step = 0; step < this.stepLimit(agent.maxSteps); step++) {
       this.throwIfCancelled();
       this.emit({ type: 'thinking', taskId: this.id, active: true });
@@ -307,6 +308,17 @@ export class AgentRun {
           if (note) {
             messages.push({ role: 'assistant', content: answer });
             messages.push({ role: 'user', content: `${NOT_FINISHED_PROMPT} ${note}` });
+            continue;
+          }
+        }
+        // Quoting the page (“the list shows "No new messages."”) with words no tool result and nothing
+        // on the page has: they came from the rules or a guess — a question to the user built on them misleads.
+        if (!quotesChecked && !checkedAnswer && byName.has('read_page')) {
+          quotesChecked = true;
+          const unseen = await this.unseenQuotes(ctx, answer, request, messages);
+          if (unseen.length) {
+            messages.push({ role: 'assistant', content: answer });
+            messages.push({ role: 'user', content: `${NOT_FINISHED_PROMPT} your answer quotes ${unseen.map((q) => `"${q}"`).join(', ')} as what the page shows, but no tool result in this task and nothing on the page now has ${unseen.length === 1 ? 'it' : 'them'}. Call read_page and answer only from what the page shows.` });
             continue;
           }
         }
@@ -578,6 +590,20 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
    * user can give. Pop-ups from its own actions later (a search, a warning while adding
    * something) are not this: they are part of the task.
    */
+  private async unseenQuotes(ctx: ToolContext, answer: string, request: string, messages: ChatMessage[]): Promise<string[]> {
+    // What the user said, what the tools gave and what the agent typed are not made up.
+    const said = messages.flatMap((m) => (m.role === 'tool' || m.role === 'user' ? [m.content] : m.role === 'assistant' ? (m.toolCalls ?? []).map((c) => JSON.stringify(c.arguments)) : []));
+    const seen = squash([request, ...said].join(' '));
+    const unseen: string[] = [];
+    for (const quote of quotesIn(answer)) {
+      if (seen.includes(squash(quote))) continue;
+      const found = await ctx.browser.send({ kind: 'find', query: quote, limit: 3 }).catch(() => null);
+      if (!found || found.textMatches.length || found.matches.some((m) => squash(m.name).includes(squash(quote)))) continue;
+      unseen.push(quote);
+    }
+    return unseen;
+  }
+
   private async popupsLeft(ctx: ToolContext, asking: boolean): Promise<string> {
     const res = await this.inFront(ctx, () => ctx.browser.send({ kind: 'dialogs', waitMs: 0 })).catch(() => null);
     const left = (res?.dialogs ?? []).filter((d) => ctx.arrivalOpen || ctx.arrivalPopups?.has(d.title));
@@ -742,6 +768,14 @@ function pageKey(url: string | undefined): string {
 /** An answer that says what the page or tab shows, or what is open (“You're already on … consult”). */
 export function talksAboutPage(answer: string): boolean {
   return /\b(already (on|in|open)|currently (on|in|open|showing)|you'?re (on|in)|is (already )?open|(this|the|current) (page|tab|screen)|consult)\b/i.test(answer);
+}
+
+const squash = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+
+/** Text an answer quotes, of a few words: “the list shows "No new messages."”. */
+export function quotesIn(answer: string): string[] {
+  const quotes = Array.from(answer.matchAll(/"([^"\n]{8,140})"|“([^”\n]{8,140})”/g), (m) => (m[1] ?? m[2]).trim());
+  return [...new Set(quotes)].filter((q) => /\p{L}{3}/u.test(q) && q.split(/\s+/).length >= 2).slice(0, 4);
 }
 
 /** What the user sees when the task stops because they declined a step. */

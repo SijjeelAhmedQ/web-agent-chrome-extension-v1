@@ -6,7 +6,7 @@ import { classifyClick, classifySubmit, classifyTyping } from './execution/riskP
 import { extractTextToolCalls, parseArguments, stripThinking } from './llm/parse';
 import { buildSystemPrompt } from './planner/systemPrompt';
 import { budgetFor, compactMessages, estimateTokens, shrinkSnapshot } from './runtime/context';
-import { namedIn, talksAboutPage } from './runtime/agentRun';
+import { namedIn, quotesIn, talksAboutPage } from './runtime/agentRun';
 import { formatElement, formatSnapshot } from './tools/format';
 import { buildToolset, toolSpecs } from './tools/registry';
 import type { ChatMessage } from './llm/types';
@@ -216,6 +216,10 @@ describe('prompt and context', () => {
   it('sends an answer about the page back when the page was never read', () => {
     expect(talksAboutPage("You're already on Arya STARK's consult (DOB 03-12-2015).")).toBe(true);
     expect(talksAboutPage('Hello! How can I help?')).toBe(false);
+  });
+  it('finds the page text an answer quotes — a few words, not a single name', () => {
+    expect(quotesIn('The list shows "No new messages." and the button “Click here to load the data from archive.”')).toEqual(['No new messages.', 'Click here to load the data from archive.']);
+    expect(quotesIn('Click "Lab" or "OK".')).toEqual([]);
   });
   it('names a table row once: the other elements of the row say “(same row)”', () => {
     const row = 'row 2 “Arya STARK · 03-12-2015”';
