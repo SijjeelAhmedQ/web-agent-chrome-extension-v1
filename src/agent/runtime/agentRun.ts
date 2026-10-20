@@ -609,10 +609,12 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
     if (!namedIn(this.options.request, picked)) return null;
     const key = pageKey((await ctx.browser.currentTab().catch(() => null))?.url);
     if (!key || this.typedOn.has(key) || this.searchWarned.has(key)) return null;
-    const here = ctx.elements.newest();
-    const fields = here.filter((e) => /^(textbox|searchbox|combobox)$/.test(e.role) && !/^dialog/.test(e.context ?? ''));
+    const here = ctx.elements.onPage();
+    // The fields one types a search into — not drop-downs (they always show a choice) — and a mask
+    // like __/__/____ is still empty.
+    const fields = here.filter((e) => /^(textbox|searchbox|combobox)$/.test(e.role) && !/^select/.test(e.type ?? '') && !/^dialog/.test(e.context ?? ''));
     const button = here.some((e) => e.role === 'button' && /^search$/i.test(e.name.trim()));
-    if (!button || !fields.length || fields.some((f) => (f.value ?? '').trim())) return null;
+    if (!button || !fields.length || fields.some((f) => /[^\s_\-/.:]/.test(f.value ?? ''))) return null;
     this.searchWarned.add(key);
     return `Not done: this page has a search form (a “Search” button), and nobody has searched on it yet — the list showing now is not a search result. Type what the user gave into the right search field, click “Search”, read the results, and then pick from them. (Only if the user asked for an item from this list as it is, call this again.)`;
   }

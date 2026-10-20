@@ -1,6 +1,7 @@
 import type { DialogInfo, ElementInfo, ElementRisk, PageSnapshot, ReadMode } from '@/shared/types/page';
 import type { FindResult, TextResult } from '../messaging/protocol';
 import {
+  visualLabel,
   DOC_ID,
   accessibleName,
   collectInteractive,
@@ -67,6 +68,11 @@ export function describeElement(el: Element): ElementInfo {
   }
   const context = contextOf(el);
   if (context) info.context = context;
+  // A field named by its placeholder (“Surname First Name”) also gets the label the page shows (“Patient Name”).
+  if ((isInput(el) && !['button', 'submit', 'reset', 'image', 'checkbox', 'radio', 'hidden'].includes(el.type)) || isTextArea(el) || isSelect(el)) {
+    const seen = visualLabel(el);
+    if (seen && seen.toLowerCase() !== info.name.toLowerCase().replace(/[:*]\s*$/, '')) info.label = seen;
+  }
   const popup = blockingPopupOf(el);
   if (popup) info.inBlockingPopup = popup;
   return info;
@@ -264,12 +270,13 @@ export function find(query: string, limit: number): FindResult {
   const scored = elements
     .map((el) => {
       const info = describeElement(el);
-      const hay = norm([info.name, info.role, info.placeholder, info.type, info.value, el.getAttribute('name'), el.id].filter(Boolean).join(' '));
+      const hay = norm([info.name, info.label, info.role, info.placeholder, info.type, info.value, el.getAttribute('name'), el.id].filter(Boolean).join(' '));
       const context = norm(info.context ?? '');
       const name = norm(info.name);
+      const label = norm(info.label ?? '');
       let score = 0;
-      if (name === q) score += 10;
-      else if (name.includes(q)) score += 6;
+      if (name === q || (label && label === q)) score += 10;
+      else if (name.includes(q) || (label && label.includes(q))) score += 6;
       for (const w of words) {
         if (ROLE_WORDS.test(w)) score += hay.includes(w) ? 0.5 : 0;
         else if (hay.includes(w)) score += 2;

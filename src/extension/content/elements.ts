@@ -192,6 +192,42 @@ function tableLabel(el: Element): string {
   return '';
 }
 
+/**
+ * The label a person sees for a field: the short text just left of it on the same line, or right
+ * above it — whatever the markup (labels in other columns, nested boxes, tables). Empty when none.
+ */
+export function visualLabel(field: Element): string {
+  const box = field.getBoundingClientRect();
+  if (!box.width || !box.height) return '';
+  let best: { text: string; gap: number } | null = null;
+  let scope: Element | null = field.parentElement;
+  for (let depth = 0; scope && depth < 5 && !best; depth++, scope = scope.parentElement) {
+    const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
+    let seen = 0;
+    for (let node = walker.nextNode(); node && seen < 80; node = walker.nextNode()) {
+      const text = asLabel((node.textContent ?? '').replace(/\s+/g, ' ').trim());
+      if (!text || text.length > 40 || node.parentElement?.closest('button,select,option,textarea,script,style,a')) continue;
+      seen++;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const r = range.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      const overlap = Math.min(r.bottom, box.bottom) - Math.max(r.top, box.top);
+      // Left of the field, on its line.
+      if (r.right <= box.left + 4 && box.left - r.right < 320 && overlap >= Math.min(r.height, box.height) * 0.5) {
+        const gap = box.left - r.right;
+        if (!best || gap < best.gap) best = { text, gap };
+      }
+      // Right above it.
+      else if (r.bottom <= box.top + 2 && box.top - r.bottom < 24 && r.left < box.right && r.right > box.left - 8) {
+        const gap = 400 + (box.top - r.bottom);
+        if (!best || gap < best.gap) best = { text, gap };
+      }
+    }
+  }
+  return best?.text ?? '';
+}
+
 /** Grid layouts: <div><span>Take</span></div><div><input></div> — a short text box right before the field's box. */
 function neighbourLabel(el: Element): string {
   let box = el.parentElement;

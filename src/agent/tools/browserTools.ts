@@ -130,7 +130,7 @@ const readPage: AgentTool<{ mode: 'overview' | 'content'; full: boolean }> = {
       const inside = await ctx.browser.frameTexts(front.frames).catch(() => []);
       if (inside.length) front.fullText = [front.fullText ?? '', ...inside.map((f) => f.text)].filter(Boolean).join('\n').slice(0, 5000);
     }
-    ctx.elements.remember([...snap.elements, ...(snap.dialogs ?? []).flatMap((d) => (d.close ? [d.close] : []))]);
+    ctx.elements.remember([...snap.elements, ...(snap.dialogs ?? []).flatMap((d) => (d.close ? [d.close] : []))], true);
     const n = snap.elements.length + snap.omitted;
     // The same page read again: only what changed — when that is clearly shorter than the whole page.
     const whole = formatSnapshot(snap, a.mode);

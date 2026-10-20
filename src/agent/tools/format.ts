@@ -20,6 +20,7 @@ function elementLine(e: ElementInfo, sameRowAsAbove: boolean): string {
   if (e.type && !IMPLIED_TYPES.has(e.type) && e.type !== e.role) parts.push(`type=${e.type}`);
   if (e.value !== undefined && e.value !== '' && e.role !== 'link') parts.push(`value=${q(e.value)}`);
   else if (e.value === '' && /textbox|searchbox|combobox|spinbutton/.test(e.role)) parts.push('(empty)');
+  if (e.label) parts.push(`label ${q(e.label)}`);
   if (e.placeholder) parts.push(`placeholder=${q(e.placeholder)}`);
   if (e.checked !== undefined) parts.push(e.checked ? '(checked)' : '(unchecked)');
   if (e.selected) parts.push('(selected)');

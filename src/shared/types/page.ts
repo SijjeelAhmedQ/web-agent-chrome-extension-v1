@@ -18,6 +18,8 @@ export interface ElementInfo {
   required?: boolean;
   /** A field that shows a value but can’t be typed into. */
   readonly?: boolean;
+  /** A form field's visible label, when its name came from elsewhere (its placeholder): “Patient Name”. */
+  label?: string;
   /** A text field inside a pop-up that has no ×, Close or Cancel: that pop-up's title. */
   inBlockingPopup?: string;
   href?: string;
