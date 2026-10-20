@@ -96,7 +96,8 @@ export function shrinkSnapshot(text: string, tokens: number): string {
 
 /** Room for the conversation, in tokens, given a model's context window: all of it but the reply. */
 export function budgetFor(contextTokens: number | undefined): number {
-  if (!contextTokens) return 20_000;
+  // No limit given: a cloud model with a large context — room for a site's knowledge and big pages.
+  if (!contextTokens) return 40_000;
   return Math.max(4_000, contextTokens - 1_500);
 }
 

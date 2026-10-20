@@ -45,7 +45,7 @@ describe('room for site knowledge', () => {
     expect(knowledgeBudget(16384)).toBe(13107);
     expect(knowledgeBudget(4096)).toBe(3277);
     expect(knowledgeBudget(128000)).toBe(24000);
-    expect(knowledgeBudget(undefined)).toBe(12000);
+    expect(knowledgeBudget(undefined)).toBe(24000);
   });
 });
 
