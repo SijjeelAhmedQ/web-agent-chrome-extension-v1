@@ -77,6 +77,9 @@ export class AgentRun {
   private doneBefore = new Set<string>();
   /** Pages (origin + path) the agent typed into in this task — searched or filled something there. */
   private readonly typedOn = new Set<string>();
+  /** Tools that ran in this task. */
+  private readonly usedTools = new Set<string>();
+  private nextNudged = false;
   /** Pages where picking from the list before searching was already pointed out once. */
   private readonly searchWarned = new Set<string>();
   /** Looks at the page (read, find, scroll, wait) since the last action — to stop endless searching. */
@@ -487,6 +490,21 @@ export class AgentRun {
         return `Not clicked: “${wrong.control}” is a control in the row of “${wrong.item}” — it does something else (book, edit, pay, print…), and the user didn't ask for that. To open or select ${wrong.item}, click the name in that row (click_text with the name, near something else in the row). If the user really wants this control, ask them first.`;
       }
     }
+    // Going through records one by one with a viewer's "Next" to read them: read_records does that in
+    // one step and counts them by code — by hand, records get skipped and miscounted. Not when
+    // something was typed (a comment goes with "Next"), and only once: a "Next" that isn't a record's is let through.
+    if ((tool.name === 'click' || tool.name === 'click_text') && byName.has('read_records') && !this.nextNudged && !this.typedOn.size && !this.usedTools.has('read_records')) {
+      const target = tool.name === 'click' ? ctx.elements.get(Number((args as { id?: unknown }).id)) : undefined;
+      const name = tool.name === 'click' ? target?.name ?? String((args as { name?: unknown }).name ?? '') : String((args as { text?: unknown }).text ?? '');
+      if (/^\s*next\s*[›>»→]?\s*$/i.test(name)) {
+        const inPopup = target?.context?.startsWith('dialog') || !!(await ctx.browser.send({ kind: 'dialogs', waitMs: 0, settle: false }).catch(() => null))?.dialogs.length;
+        if (inPopup) {
+          this.nextNudged = true;
+          finish({ status: 'skipped', note: 'Use read_records' });
+          return 'Not clicked: to go through the records of a list, don’t open them one by one — close this viewer (its "Cancel") and call read_records with first = the first record’s text in the list (and the arguments the site’s knowledge gives, e.g. status_label). It reads every record in one step and counts normal and abnormal results for you. (If this "Next" is not for going through records, click it again.)';
+        }
+      }
+    }
     // Picking a row from a list on a page with a search form, without having searched there.
     if (tool.name === 'click_text' || tool.name === 'click') {
       const early = await this.pickBeforeSearch(tool.name, args, ctx);
@@ -551,6 +569,7 @@ export class AgentRun {
         const record: ClickRecord = { label: step.label, before, after: await this.inFront(ctx, () => pageState(ctx)) };
         if (changedSomething(record)) this.lastClick = record;
       } else if (isAction && tool.name !== 'undo_click') this.lastClick = null;
+      this.usedTools.add(tool.name);
       if (tool.touchesPage) this.sawPage = true;
       if (looking) this.looksInARow++;
       else if (isAction) this.looksInARow = 0;
