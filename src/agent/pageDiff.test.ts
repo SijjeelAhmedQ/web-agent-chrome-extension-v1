@@ -66,3 +66,19 @@ describe('reading the same page again gives only what changed', () => {
     expect(msgs[5].content).toContain('Nothing else changed');
   });
 });
+
+describe('the records read in one go', () => {
+  it('says once what every record repeats, and fits all of them', async () => {
+    const { recordsOutput } = await import('./tools/browserTools');
+    const banner = 'Name: Arya STARK\nNHI Number: ZAA3490\nDOB: 03/12/2015\nLast RX: 21/10/2026';
+    const records = Array.from({ length: 16 }, (_, i) => `${banner}\nFields — Subject: Result ${i}; Result Date: 0${i % 9}/10/2026\n${'Lab line text\n'.repeat(120)}ALT ${i} ${i % 3 ? 'Normal' : 'Abnormal'}`);
+    const out = recordsOutput(records, 'Next', 'Cancel', 18_000);
+    expect(out.length).toBeLessThanOrEqual(20_000);
+    expect(out.match(/Name: Arya STARK/g)).toHaveLength(1);
+    expect(out).toContain('The same on every record:');
+    expect(out).toContain('### Record 16');
+    expect(out).toContain('These are all 16 records of the list');
+    // Every record's result flag survives the cut, even at its end.
+    expect(out.match(/Abnormal/g)?.length).toBe(6);
+  });
+});

@@ -666,6 +666,46 @@ const closeTab: AgentTool<{ tab_id?: number }> = {
   },
 };
 
+/**
+ * The records as the model reads them — all of them, within `budget` characters: what every record
+ * repeats (the patient's banner) is said once, and each record gets an equal share of the rest.
+ */
+export function recordsOutput(records: string[], next: string, close: string, budget: number): string {
+  const lines = records.map((r) => r.split('\n').map((l) => l.trim()).filter(Boolean));
+  const counts = new Map<string, number>();
+  for (const ls of lines) for (const l of new Set(ls)) counts.set(l, (counts.get(l) ?? 0) + 1);
+  const shared = records.length >= 3 ? new Set([...counts].filter(([, n]) => n >= Math.ceil(records.length * 0.6)).map(([l]) => l)) : new Set<string>();
+  const common = [...shared].join('\n');
+  const own = lines.map((ls) => ls.filter((l) => !shared.has(l)).join('\n'));
+  const head = `Read ${records.length} record${records.length === 1 ? '' : 's'} one after another with “${next}”, then closed the viewer with “${close}”. Nothing was typed or saved.`;
+  const tail = `These are all ${records.length} records of the list, first to last. Answer from them — don't read them again.`;
+  const per = Math.max(250, Math.floor((budget - head.length - tail.length - common.length - records.length * 20) / Math.max(1, records.length)));
+  return [
+    head,
+    ...(common ? ['', 'The same on every record:', common] : []),
+    '',
+    own.map((r, i) => `### Record ${i + 1}\n${fitRecord(r, per)}`).join('\n\n'),
+    '',
+    tail,
+  ].join('\n');
+}
+
+/** Lines that decide a record — its fields and its results' flags — are kept, whatever the room. */
+const KEY_LINE = /^Fields —|\b(abnormal|normal|high|low|critical|positive|negative|H|L|HH|LL)\b/i;
+
+/** A record within `room` characters: its key lines always, then its other lines in order while they fit. */
+function fitRecord(text: string, room: number): string {
+  const lines = text.split('\n');
+  let used = lines.filter((l) => KEY_LINE.test(l)).reduce((n, l) => n + l.length + 1, 0);
+  const kept = lines.filter((l) => {
+    if (KEY_LINE.test(l)) return true;
+    if (used + l.length + 1 > room) return false;
+    used += l.length + 1;
+    return true;
+  });
+  return clip(kept.join('\n'), Math.max(room * 2, 600));
+}
+
 /** The text of the pop-up in front — the frames of other sites inside it included. */
 async function popupText(ctx: ToolContext): Promise<string> {
   // No waiting for other pop-ups to settle: read_records waits for the record itself to change.
@@ -700,9 +740,14 @@ const readRecords: AgentTool<{ first: string; near: string; next: string; close:
   touchesPage: true,
   label: (a) => `Reading the records one after another, from ${quote(a.first)}`,
   async execute(a, ctx) {
+    // The same list read again in this task: its records are in the conversation already.
+    const key = `${(await ctx.browser.currentTab().catch(() => null))?.url ?? ''}|${a.first.trim().toLowerCase()}`;
+    const before = ctx.recordsRead?.get(key);
+    if (before) {
+      return { output: `You already read this list in this task — all ${before} records, in the read_records result above. Don't read it again: answer from that result.`, note: 'Already read — not again' };
+    }
     const opened = await clickText.execute({ text: a.first, near: a.near, double: false }, ctx);
     if (/Text not found|not clicked/.test(opened.note ?? '')) return opened;
-    const cap = ctx.overviewTextChars ? 900 : 2500;
     const records: string[] = [];
     let last = '';
     for (let i = 0; i < a.max; i++) {
@@ -713,7 +758,7 @@ const readRecords: AgentTool<{ first: string; near: string; next: string; close:
         text = await popupText(ctx);
       }
       if (!text || text === last) break;
-      records.push(clip(text, cap));
+      records.push(text);
       last = text;
       if (i === a.max - 1) break;
       const next = await ctx.browser.send({ kind: 'popupControl', name: a.next }).catch(() => null);
@@ -726,8 +771,9 @@ const readRecords: AgentTool<{ first: string; near: string; next: string; close:
     if (!records.length) {
       return { output: `Clicked “${a.first}”, but no record viewer (pop-up) opened. Read the page to see what it did.`, note: 'No record viewer opened' };
     }
+    (ctx.recordsRead ??= new Map()).set(key, records.length);
     return {
-      output: `Read ${records.length} record${records.length === 1 ? '' : 's'} one after another with “${a.next}”, then closed the viewer with “${a.close}”. Nothing was typed or saved.\n\n${records.map((r, i) => `### Record ${i + 1}\n${r}`).join('\n\n')}`,
+      output: recordsOutput(records, a.next, a.close, ctx.overviewTextChars ? 7_000 : 18_000),
       note: `${records.length} record${records.length === 1 ? '' : 's'} read`,
     };
   },

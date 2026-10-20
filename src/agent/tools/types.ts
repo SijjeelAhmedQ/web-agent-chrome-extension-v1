@@ -42,6 +42,8 @@ export interface ToolContext {
   skills: SkillConfig[];
   /** Names of buttons the agent may never click on this site (from its site setup). */
   neverClick?: string[];
+  /** Lists read with read_records in this task (page and first record → how many records). */
+  recordsRead?: Map<string, number>;
   /** What the last read_page saw — the next read of the same page gives only the changes. */
   lastPage?: PageMemo;
   /** Most page text in a read_page overview, for models with a small context (Kaggle's 16K). */
