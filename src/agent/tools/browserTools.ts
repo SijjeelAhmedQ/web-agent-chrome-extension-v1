@@ -5,6 +5,7 @@ import { clip, siteOf, sleep } from '@/shared/utils';
 import { classifyClick, classifySubmit, classifyTyping } from '../execution/riskPolicy';
 import { formatDialogs, formatElement, formatSnapshot } from './format';
 import { memoOf, pageDiff } from './pageDiff';
+import { statusSummary } from './recordStatus';
 import type { TextResult } from '@/extension/messaging/protocol';
 import type { AgentTool, ApprovalRequest, ToolContext, ToolOutcome } from './types';
 
@@ -756,7 +757,7 @@ async function popupText(ctx: ToolContext): Promise<string> {
  * steps. This opens the first record and goes through the viewer with its "Next" button by itself,
  * keeping each record's text, then closes the viewer — one step; the model reads them all at once.
  */
-const readRecords: AgentTool<{ first: string; near: string; next: string; close: string; max: number }> = {
+const readRecords: AgentTool<{ first: string; near: string; next: string; close: string; max: number; status_label: string; normal_values: string; empty_is_normal: boolean }> = {
   name: 'read_records',
   description:
     'Read a list of records in one go — an inbox, a list of results — instead of opening them one by one: it opens the first record (clicks its text), presses the record viewer\'s "Next" button until the last record, keeps every record\'s text (and its fields), then closes the viewer. It types nothing and saves nothing. Then answer from what it returns.',
@@ -766,6 +767,9 @@ const readRecords: AgentTool<{ first: string; near: string; next: string; close:
     next: z.coerce.string().optional().default('Next').describe('The viewer button that opens the next record'),
     close: z.coerce.string().optional().default('Cancel').describe('The viewer button that closes it without saving'),
     max: z.coerce.number().int().min(1).max(50).optional().default(30).describe('At most this many records'),
+    status_label: z.coerce.string().optional().default('').describe('The word before each result’s flag in a record (e.g. "Status"), when the site’s knowledge names one: the tool then works out each record’s normal and abnormal results and counts them'),
+    normal_values: z.coerce.string().optional().default('Normal').describe('Flags that mean normal, comma-separated'),
+    empty_is_normal: bool(false).describe('An empty flag counts as normal (when the site’s knowledge says so)'),
   }),
   risk: 'action',
   touchesPage: true,
@@ -803,8 +807,13 @@ const readRecords: AgentTool<{ first: string; near: string; next: string; close:
       return { output: `Clicked “${a.first}”, but no record viewer (pop-up) opened. Read the page to see what it did.`, note: 'No record viewer opened' };
     }
     (ctx.recordsRead ??= new Map()).set(key, records.length);
+    const rules = a.status_label.trim()
+      ? { label: a.status_label.trim(), normal: a.normal_values.split(',').map((v) => v.trim()).filter(Boolean), emptyIsNormal: a.empty_is_normal }
+      : null;
+    const summary = rules ? statusSummary(records, rules) : '';
+    const budget = (ctx.overviewTextChars ? 7_000 : 18_000) - summary.length;
     return {
-      output: recordsOutput(records, a.next, a.close, ctx.overviewTextChars ? 7_000 : 18_000),
+      output: [summary, recordsOutput(records, a.next, a.close, Math.max(3_000, budget))].filter(Boolean).join('\n\n'),
       note: `${records.length} record${records.length === 1 ? '' : 's'} read`,
     };
   },

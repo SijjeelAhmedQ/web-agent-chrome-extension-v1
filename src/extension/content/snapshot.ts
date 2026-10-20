@@ -226,7 +226,14 @@ function dialogBody(d: Element): Pick<DialogInfo, 'fullText' | 'frames'> {
     })
     .filter(Boolean)
     .slice(0, 20);
-  const parts = [fields.length ? `Fields — ${fields.join('; ')}` : '', ((d as HTMLElement).innerText ?? '').trim()];
+  // A dropdown's text is all its options (every provider, every ACC45 code…): its choice is in the
+  // fields above, and its options would push the record's own text out of the limit.
+  let text = ((d as HTMLElement).innerText ?? '').trim();
+  for (const select of Array.from(d.querySelectorAll('select'))) {
+    const options = (select as HTMLElement).innerText?.trim();
+    if (options) text = text.replace(options, '');
+  }
+  const parts = [fields.length ? `Fields — ${fields.join('; ')}` : '', text];
   const frames: string[] = [];
   for (const frame of Array.from(d.querySelectorAll('iframe'))) {
     try {
@@ -237,7 +244,7 @@ function dialogBody(d: Element): Pick<DialogInfo, 'fullText' | 'frames'> {
       frames.push(hostOf(frame.src));
     }
   }
-  const fullText = clip(parts.filter(Boolean).join('\n').replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n'), 3500);
+  const fullText = clip(parts.filter(Boolean).join('\n').replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n'), 5000);
   const pdfs = pdfsIn(d);
   return {
     ...(fullText ? { fullText } : {}),
