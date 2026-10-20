@@ -692,7 +692,7 @@ export function recordsOutput(records: string[], next: string, close: string, bu
 }
 
 /** Lines that decide a record — its fields and its results' flags — are kept, whatever the room. */
-const KEY_LINE = /^Fields —|\b(abnormal|normal|high|low|critical|positive|negative|H|L|HH|LL)\b/i;
+const KEY_LINE = /^Fields —|\b(status|flag|abnormal|normal|high|low|critical|positive|negative|increased|decreased|elevated|reduced|alert|H|L|HH|LL)\b/i;
 
 /** A record within `room` characters: its key lines always, then its other lines in order while they fit. */
 function fitRecord(text: string, room: number): string {
