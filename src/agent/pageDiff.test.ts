@@ -49,6 +49,14 @@ describe('reading the same page again gives only what changed', () => {
     expect(pageDiff(memoOf(before)!, after)).toBeNull();
   });
 
+  it('does not call a control gone that is only left out of the listing', () => {
+    const before = snap(page.slice(0, 50));
+    const after = snap([...page.slice(10, 50), el(3, 'Save')], { unlisted: page.slice(0, 10).map((e) => e.id) });
+    const diff = pageDiff(memoOf(before)!, after)!;
+    expect(diff).not.toContain('Gone from the page');
+    expect(diff).toContain('[3] button "Save"');
+  });
+
   it('gives the whole page for another document or address', () => {
     const memo = memoOf(snap(page))!;
     expect(pageDiff(memo, snap(page, { docId: 'doc2' }))).toBeNull();

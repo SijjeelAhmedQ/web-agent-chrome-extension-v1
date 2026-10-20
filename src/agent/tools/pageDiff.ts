@@ -53,6 +53,8 @@ export function pageDiff(prev: PageMemo, snap: PageSnapshot): string | null {
   }
   // Too much is new (a tab or panel opened): a list cut at MAX_LISTED would hide what the model needs — the whole page then.
   if (added.length + changed.length > MAX_LISTED) return null;
+  // Left out of this listing (more controls than are listed) is not gone: its id still works.
+  for (const id of snap.unlisted ?? []) seen.add(id);
   const gone = [...prev.lines.keys()].filter((id) => !seen.has(id));
   const newText = [...textLines(snap.text)].filter((l) => !prev.text.has(l)).join('\n');
 

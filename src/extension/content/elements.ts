@@ -256,7 +256,9 @@ function tooltipOf(el: Element | null): string {
 
 const ICON_CLASS = /^(?:fa[srldbtk]?|fa-solid|glyphicon|bi|icon|icons?|ti|la[srb]?|mdi|ion|ionicons?|ri|bx|bxs|feather|lni|zmdi|oi|typcn|si|material-icons|ki|flaticon)-([a-z][a-z0-9-]*)$/i;
 const ICON_MODIFIER = /^(lg|xs|sm|xl|[0-9]+x|fw|spin|pulse|border|inverse|solid|regular|light|thin|duotone|brands|sharp|li|ul|stack(-[0-9]x)?|pull-.*|flip-.*|rotate-.*|beat|fade|bounce|shake|outline|filled|round|rounded|line|fill)$/i;
-const IGNORED_CALLS = new Set(['return', 'javascript', 'void', 'function', 'if', 'event', 'this', 'window', 'document', 'location', 'false', 'true', 'setTimeout', 'preventDefault', 'stopPropagation']);
+const IGNORED_CALLS = new Set(['return', 'javascript', 'void', 'function', 'if', 'event', 'this', 'window', 'document', 'location', 'false', 'true', 'setTimeout', 'preventDefault', 'stopPropagation',
+  // DOM plumbing: getElementById('filters').style… names the code, not the control.
+  'getElementById', 'querySelector', 'querySelectorAll', 'getElementsByClassName', 'getElementsByTagName', 'getElementsByName', 'closest', 'toggle', 'contains', 'add', 'remove', 'setAttribute', 'getAttribute', 'removeAttribute', 'addEventListener', 'focus', 'click', 'blur']);
 
 /** "OpenBookAppointment" / "book_appt" / "user-edit" → "open book appointment" / "book appt" / "user edit". */
 const words = (s: string) =>

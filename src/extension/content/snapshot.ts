@@ -306,15 +306,27 @@ function inFront(d: Element): boolean {
   return !!hit && (d === hit || d.contains(hit)) && hit.closest(DIALOGS) === d;
 }
 
+/** Reads of this document so far, the read each control first showed up in, and those the last read listed. */
+let reads = 0;
+const firstSeen = new Map<number, number>();
+let listedBefore = new Set<number>();
+
 export function snapshot(mode: ReadMode, maxElements: number, maxTextChars: number): PageSnapshot {
   const { elements, frames } = collectInteractive();
   const described = elements.map(describeElement);
-  // Prefer what is on screen, then the rest in document order.
-  const visible = described.filter((e) => e.inViewport);
-  const rest = described.filter((e) => !e.inViewport);
-  const chosen = [...visible, ...rest].slice(0, maxElements);
+  // On a page of more controls than are listed: first what appeared since the last read and what was
+  // listed before (the model knows those) — the newest first, so a tab or panel just opened isn't cut —
+  // then what is on screen, then the rest in document order.
+  reads++;
+  for (const e of described) if (!firstSeen.has(e.id)) firstSeen.set(e.id, reads);
+  const known = (e: ElementInfo) => listedBefore.has(e.id) || firstSeen.get(e.id) === reads;
   const order = new Map(described.map((e, i) => [e.id, i]));
+  const chosen = [...described]
+    .sort((a, b) => +known(b) - +known(a) || (firstSeen.get(b.id) ?? 0) - (firstSeen.get(a.id) ?? 0) || +b.inViewport - +a.inViewport || (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+    .slice(0, maxElements);
   chosen.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+  const listed = new Set(chosen.map((e) => e.id));
+  listedBefore = listed;
 
   const textBudget = mode === 'content' ? maxTextChars : Math.min(2500, maxTextChars);
   const { text, truncated } = pageText(textBudget);
@@ -324,6 +336,7 @@ export function snapshot(mode: ReadMode, maxElements: number, maxTextChars: numb
     scroll: scrollState(),
     elements: chosen,
     omitted: described.length - chosen.length,
+    unlisted: described.filter((e) => !listed.has(e.id)).map((e) => e.id),
     headings: headings(),
     text,
     textTruncated: truncated,

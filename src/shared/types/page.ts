@@ -53,6 +53,8 @@ export interface PageSnapshot {
   elements: ElementInfo[];
   /** Elements that exist but were left out to stay within the limit. */
   omitted: number;
+  /** The ids of those left out — still on the page, not gone. */
+  unlisted?: number[];
   headings: string[];
   text: string;
   textTruncated: boolean;
