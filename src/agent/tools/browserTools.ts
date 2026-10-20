@@ -182,6 +182,7 @@ async function dialogReport(ctx: ToolContext): Promise<string> {
   const res = await ctx.browser.send({ kind: 'dialogs', waitMs: 2500 }).catch(() => null);
   // These — and only these — are the pop-ups that came with the page opening.
   ctx.arrivalPopups = new Set((res?.dialogs ?? []).map((d) => d.title));
+  ctx.arrivalOpen = true;
   if (!res?.dialogs.length) return '';
   ctx.elements.remember(res.dialogs.flatMap((d) => (d.close ? [d.close] : [])));
   return ` A dialog is showing on top of the page — it came up as the page opened.\n${formatDialogs(res.dialogs)}\nDeal with it first — read_page shows its fields and buttons — following any rule you were given for pop-ups that come up when this page opens.`;

@@ -156,15 +156,22 @@ function closeControl(dialog: Element): Element | null {
 function dialogTitle(dialog: Element): string {
   const labelled = dialog.getAttribute('aria-labelledby');
   const byId = labelled ? labelled.split(/\s+/).map((id) => dialog.ownerDocument.getElementById(id)?.textContent ?? '').join(' ') : '';
-  const heading = dialog.querySelector('.modal-title,.ui-dialog-title,[class*="title"],h1,h2,h3,h4,legend,b,strong')?.textContent ?? '';
+  // Its own heading — not one of a pop-up opened inside it.
+  const heading = Array.from(dialog.querySelectorAll('.modal-title,.ui-dialog-title,[class*="title"],h1,h2,h3,h4,legend,b,strong')).find((h) => h.closest(DIALOGS) === dialog)?.textContent ?? '';
   const first = ((dialog as HTMLElement).innerText ?? '').split('\n').find((l) => l.trim()) ?? '';
   return clip((byId || dialog.getAttribute('aria-label') || heading || first).replace(/\s+/g, ' ').trim(), 90);
 }
 
 /** The pop-ups showing now — the one in front first — each with its close control. */
 export function showingDialogs(): DialogInfo[] {
+  // A pop-up opened inside another one (a site's alerts put in the open pop-up's markup) counts on
+  // its own — unless it is the same pop-up's inner box (same title).
   const dialogs = Array.from(document.querySelectorAll(DIALOGS))
-    .filter((d) => isVisible(d) && !d.parentElement?.closest(DIALOGS))
+    .filter((d) => {
+      if (!isVisible(d)) return false;
+      const outer = d.parentElement?.closest(DIALOGS);
+      return !outer || dialogTitle(outer) !== dialogTitle(d);
+    })
     .slice(0, 6)
     .map((d) => {
       const close = closeControl(d);
@@ -212,7 +219,8 @@ function inFront(d: Element): boolean {
   const x = Math.min(window.innerWidth - 1, Math.max(0, box.left + box.width / 2));
   const y = Math.min(window.innerHeight - 1, Math.max(0, box.top + Math.min(24, box.height / 2)));
   const hit = document.elementFromPoint(x, y);
-  return !!hit && (d === hit || d.contains(hit));
+  // The point must be the pop-up's own — not a pop-up opened inside it.
+  return !!hit && (d === hit || d.contains(hit)) && hit.closest(DIALOGS) === d;
 }
 
 export function snapshot(mode: ReadMode, maxElements: number, maxTextChars: number): PageSnapshot {

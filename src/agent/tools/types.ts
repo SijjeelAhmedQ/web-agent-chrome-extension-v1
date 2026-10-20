@@ -46,6 +46,11 @@ export interface ToolContext {
   overviewTextChars?: number;
   /** Titles of the pop-ups that came up with the page or tab that opened last. */
   arrivalPopups?: Set<string>;
+  /**
+   * A page just opened and the agent has only read it or closed pop-ups since: a pop-up that comes
+   * up now (late, or inside another) is still one of the page's opening pop-ups.
+   */
+  arrivalOpen?: boolean;
 }
 
 export interface ToolOutcome {

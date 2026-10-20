@@ -301,7 +301,7 @@ export class AgentRun {
         }
         // Finishing while pop-ups that came with the page opening are still there: one that can be
         // closed (before asking the user anything), or one that can't, left without a word to the user.
-        if (!popupsChecked && !checkedAnswer && byName.has('read_page') && ctx.arrivalPopups?.size) {
+        if (!popupsChecked && !checkedAnswer && byName.has('read_page') && (ctx.arrivalPopups?.size || ctx.arrivalOpen)) {
           popupsChecked = true;
           const note = await this.popupsLeft(ctx, asksUser(answer));
           if (note) {
@@ -531,6 +531,9 @@ export class AgentRun {
       // A click: what it opened (a tab, a page, a pop-up), so a wrong one can be undone.
       const clicking = tool.name === 'click' || tool.name === 'click_text';
       const before = clicking ? await this.inFront(ctx, () => pageState(ctx)) : null;
+      // Doing something on the page (other than closing a pop-up) ends the time of its opening pop-ups —
+      // unless that very action opens a new page, which starts it again.
+      if (isAction && !closesPopup(tool.name, args, ctx)) ctx.arrivalOpen = false;
       const outcome = await this.inFront(ctx, () => tool.execute(args, ctx));
       if (before) {
         const record: ClickRecord = { label: step.label, before, after: await this.inFront(ctx, () => pageState(ctx)) };
@@ -577,7 +580,7 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
    */
   private async popupsLeft(ctx: ToolContext, asking: boolean): Promise<string> {
     const res = await this.inFront(ctx, () => ctx.browser.send({ kind: 'dialogs', waitMs: 0 })).catch(() => null);
-    const left = (res?.dialogs ?? []).filter((d) => ctx.arrivalPopups!.has(d.title));
+    const left = (res?.dialogs ?? []).filter((d) => ctx.arrivalOpen || ctx.arrivalPopups?.has(d.title));
     const closable = left.filter((d) => d.close);
     if (closable.length) {
       ctx.elements.remember(closable.map((d) => d.close!));
@@ -716,6 +719,14 @@ export function repeatedCycle(trail: string[], next: string): string[] | null {
 }
 
 /** Does the request name this item — every word of it (“Arya STARK” in “select arya stark”)? */
+/** A click on a pop-up's ×, Close or Cancel. */
+function closesPopup(tool: string, args: Record<string, unknown>, ctx: ToolContext): boolean {
+  const CLOSE = /^(×|✕|✖|x|close|cancel|dismiss|close dialog|close window)$/i;
+  if (tool === 'click_text') return CLOSE.test(String(args.text ?? '').trim());
+  if (tool !== 'click') return false;
+  return CLOSE.test(String(args.name ?? '').trim()) || CLOSE.test((ctx.elements.get(Number(args.id))?.name ?? '').trim());
+}
+
 /** A page's identity for “did the agent search here”: origin and path, without query or hash. */
 function pageKey(url: string | undefined): string {
   try {
