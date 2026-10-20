@@ -3,7 +3,7 @@
  * agent itself runs in the side panel. The worker only wires up browser-level behaviour.
  */
 
-import { BACKUP_AT_KEY, CONFIG_KEY, loadConfig, stripKeys } from '@/shared/storage/configStore';
+import { BACKUP_AT_KEY, CONFIG_KEY, FRESH_INSTALL_KEY, loadConfig, stripKeys } from '@/shared/storage/configStore';
 import { setItem } from '@/shared/storage/kv';
 
 const LOCAL_ORIGIN_RULE_ID = 1;
@@ -44,7 +44,8 @@ chrome.runtime.onInstalled.addListener((details) => {
   configurePanel();
   void configureLocalModelAccess();
   if (details.reason === chrome.runtime.OnInstalledReason.INSTALL) {
-    void chrome.runtime.openOptionsPage();
+    // Installed again after being removed? The options page offers to restore the backup file.
+    void setItem(FRESH_INSTALL_KEY, true).then(() => chrome.runtime.openOptionsPage());
   }
 });
 
@@ -64,7 +65,7 @@ async function backUp() {
   backupTimer = null;
   const config = await loadConfig();
   if (config.settings.autoBackup === false) return;
-  const json = JSON.stringify({ ...stripKeys(config), backedUpAt: new Date().toISOString() }, null, 2);
+  const json = JSON.stringify({ ...(config.settings.backupKeys ? config : stripKeys(config)), backedUpAt: new Date().toISOString() }, null, 2);
   const url = `data:application/json;base64,${btoa(unescape(encodeURIComponent(json)))}`;
   const ui = chrome.downloads.setUiOptions;
   try {

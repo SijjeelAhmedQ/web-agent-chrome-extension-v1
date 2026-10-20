@@ -227,6 +227,8 @@ export interface Settings {
   readOnlySites: string[];
   /** Keep a copy of the setup (without API keys) in Downloads/WebAgent — it outlives removing the extension. */
   autoBackup?: boolean;
+  /** Put API keys in the backup file too (they are in plain text there). */
+  backupKeys?: boolean;
   saveHistory: boolean;
   historyRetentionDays: number;
   developerMode: boolean;

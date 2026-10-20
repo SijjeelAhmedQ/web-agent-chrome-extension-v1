@@ -176,3 +176,16 @@ describe('adding a backup file to the setup', () => {
     expect(backup.providers[0].apiKey).toBe('');
   });
 });
+
+describe('restoring a backup made with keys', () => {
+  it('gives a connection here that has no key the key from the file', async () => {
+    const { mergeConfig } = await import('@/shared/storage/configStore');
+    const { defaultConfig } = await import('@/shared/constants/defaults');
+    const mine = defaultConfig();
+    mine.providers = [{ id: 'new', name: 'OpenRouter', kind: 'openai', preset: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', apiKey: '', defaultModel: 'm', createdAt: 2 } as never];
+    const file = { providers: [{ id: 'old', name: 'OpenRouter', kind: 'openai', preset: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', apiKey: 'sk-file', defaultModel: 'm', createdAt: 1 }], agents: [] } as never;
+    const { config } = mergeConfig(mine, file);
+    expect(config.providers).toHaveLength(1);
+    expect(config.providers[0]).toMatchObject({ id: 'new', apiKey: 'sk-file' });
+  });
+});

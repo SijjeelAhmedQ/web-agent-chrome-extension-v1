@@ -19,6 +19,7 @@ import { Globe,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { HashRouter, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { RestoreBanner } from './RestoreBanner';
 import type { ThemeMode } from '@/shared/types/config';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { configActions } from '@/store/configSlice';
@@ -170,6 +171,7 @@ function Shell() {
       <main className="content">
         {hydrated && (
           <div className="content-inner">
+            <RestoreBanner />
             <Routes>
               <Route path="/" element={<Navigate to={providers ? '/agents' : '/models'} replace />} />
               <Route path="/agents" element={<AgentsPage />} />

@@ -426,6 +426,9 @@ export function AdvancedPage() {
         >
           <Switch checked={settings.autoBackup !== false} onChange={(v) => update({ autoBackup: v })} aria-label="Automatic backup" />
         </SettingRow>
+        <SettingRow label="Include API keys in the backup" description="Then a restore brings your connections back working, keys and all — but anyone who can open the file can read your keys. Off by default.">
+          <Switch checked={!!settings.backupKeys} disabled={settings.autoBackup === false} onChange={(v) => update({ backupKeys: v })} aria-label="Include API keys in the backup" />
+        </SettingRow>
         <SettingRow label="Reset everything" description="Restore the default agents, skills and settings. Model connections are removed too.">
           <Button
             danger

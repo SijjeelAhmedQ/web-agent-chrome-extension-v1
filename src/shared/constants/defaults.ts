@@ -102,6 +102,7 @@ export const DEFAULT_SETTINGS: Settings = {
   blockedSites: [],
   readOnlySites: [],
   autoBackup: true,
+  backupKeys: false,
   saveHistory: true,
   historyRetentionDays: 30,
   developerMode: false,

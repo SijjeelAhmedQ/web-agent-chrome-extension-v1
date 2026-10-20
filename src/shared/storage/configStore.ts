@@ -6,6 +6,8 @@ import { getItem, setItem, watchItem } from './kv';
 export const CONFIG_KEY = 'wa.config';
 /** When the automatic backup file was last written. */
 export const BACKUP_AT_KEY = 'wa.backupAt';
+/** Set when the extension has just been installed: the options page offers to restore a backup. */
+export const FRESH_INSTALL_KEY = 'wa.freshInstall';
 
 /** Fills in anything missing from an older or imported config. */
 /** The setup without secrets: API keys and custom tools' headers emptied — for files that leave the browser. */
@@ -36,9 +38,13 @@ export function mergeConfig(current: AppConfig, raw: Partial<AppConfig>): { conf
   // A connection to an address already set up here is that one (with its key): the file's agents and
   // sites use it. Only connections to new addresses are added (their keys are left empty).
   const sameAs = new Map<string, string>();
+  const keys = new Map<string, string>();
   const newProviders = (Array.isArray(raw.providers) ? incoming.providers : []).filter((p) => {
     const here = current.providers.find((c) => c.id === p.id || (c.baseUrl.replace(/\/+$/, '') === p.baseUrl.replace(/\/+$/, '') && c.preset === p.preset));
-    if (here) sameAs.set(p.id, here.id);
+    if (here) {
+      sameAs.set(p.id, here.id);
+      if (!here.apiKey && p.apiKey) keys.set(here.id, p.apiKey);
+    }
     return !here;
   });
   const provider = (id: string | null) => (id && sameAs.has(id) ? sameAs.get(id)! : id);
@@ -48,7 +54,7 @@ export function mergeConfig(current: AppConfig, raw: Partial<AppConfig>): { conf
     skills: byId(current.skills, Array.isArray(raw.skills) ? incoming.skills : []),
     customTools: byId(current.customTools, Array.isArray(raw.customTools) ? incoming.customTools : []),
     sites: byId(current.sites, incoming.sites.map((s) => ({ ...s, providerId: provider(s.providerId) }))),
-    providers: [...current.providers, ...newProviders],
+    providers: [...current.providers.map((p) => (keys.has(p.id) ? { ...p, apiKey: keys.get(p.id)! } : p)), ...newProviders],
   };
   return { config: normalizeConfig(config), added: { agents: fromFile(raw.agents), skills: fromFile(raw.skills), customTools: fromFile(raw.customTools), sites: fromFile(raw.sites) } };
 }
