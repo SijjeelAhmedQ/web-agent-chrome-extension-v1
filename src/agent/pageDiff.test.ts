@@ -43,6 +43,12 @@ describe('reading the same page again gives only what changed', () => {
     expect(diff).toContain('Scroll: scrolled 40% of 3 screens');
   });
 
+  it('gives the whole page when more is new than it would list (a tab or panel opened)', () => {
+    const before = snap(page.slice(0, 50));
+    const after = snap([...page.slice(0, 50), ...Array.from({ length: 120 }, (_, i) => el(9000 + i, `Inbox control ${i}`))]);
+    expect(pageDiff(memoOf(before)!, after)).toBeNull();
+  });
+
   it('gives the whole page for another document or address', () => {
     const memo = memoOf(snap(page))!;
     expect(pageDiff(memo, snap(page, { docId: 'doc2' }))).toBeNull();

@@ -51,6 +51,8 @@ export function pageDiff(prev: PageMemo, snap: PageSnapshot): string | null {
     if (before === undefined) added.push(line);
     else if (before !== steady(line)) changed.push(line);
   }
+  // Too much is new (a tab or panel opened): a list cut at MAX_LISTED would hide what the model needs — the whole page then.
+  if (added.length + changed.length > MAX_LISTED) return null;
   const gone = [...prev.lines.keys()].filter((id) => !seen.has(id));
   const newText = [...textLines(snap.text)].filter((l) => !prev.text.has(l)).join('\n');
 
