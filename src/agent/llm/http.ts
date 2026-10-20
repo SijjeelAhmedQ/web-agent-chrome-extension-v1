@@ -1,7 +1,33 @@
 import { AgentError, isAbort } from '@/shared/utils/errors';
 
-/** fetch with friendly, typed errors for every way a model call can fail. */
+/** Waits before trying again after a dropped connection or a busy server (ms), one per retry. */
+export const RETRY_DELAYS_MS = [1_500, 4_000];
+
+const BUSY = new Set([429, 502, 503, 504]);
+const pause = (ms: number, signal?: AbortSignal | null) =>
+  new Promise<void>((resolve, reject) => {
+    const t = setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => (clearTimeout(t), reject(new AgentError('cancelled', 'Stopped.'))), { once: true });
+  });
+
+/**
+ * fetch with friendly, typed errors for every way a model call can fail. A connection that drops for
+ * a moment, or a server that is briefly busy (429, 502–504), is tried again a couple of times before
+ * the task stops — a long task shouldn't be lost to one network blip.
+ */
 export async function requestJson<T>(url: string, init: RequestInit & { timeoutMs?: number }): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await requestOnce<T>(url, init);
+    } catch (err) {
+      const retry = err instanceof AgentError && attempt < RETRY_DELAYS_MS.length && !init.signal?.aborted && (err.code === 'model_unreachable' ? !/took too long/.test(err.userMessage) : err.code === 'model_rate_limited' || (err.code === 'model_error' && BUSY.has(Number(err.detail?.slice(0, 3)))));
+      if (!retry) throw err;
+      await pause(RETRY_DELAYS_MS[attempt], init.signal);
+    }
+  }
+}
+
+async function requestOnce<T>(url: string, init: RequestInit & { timeoutMs?: number }): Promise<T> {
   const host = safeHost(url);
   const timeout = new AbortController();
   const timer = setTimeout(() => timeout.abort(new DOMException('timeout', 'TimeoutError')), init.timeoutMs ?? 180_000);

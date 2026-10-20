@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderConfig } from '@/shared/types/config';
 import { AgentError } from '@/shared/utils/errors';
 import { createClient } from '.';
+import { RETRY_DELAYS_MS } from './http';
 import type { ChatMessage } from './types';
 
 const provider = (over: Partial<ProviderConfig>): ProviderConfig => ({
@@ -64,9 +65,20 @@ describe('OpenAI-compatible adapter', () => {
     expect(res.toolCalls[0]).toMatchObject({ id: 'z', name: 'click', arguments: { id: '4' } });
   });
 
+  it('tries again when the connection drops for a moment or the server is busy', async () => {
+    RETRY_DELAYS_MS.splice(0, RETRY_DELAYS_MS.length, 0, 0);
+    const ok = new Response(JSON.stringify({ choices: [{ message: { content: 'hi' } }] }));
+    const fetchMock = vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch')).mockResolvedValueOnce(new Response('busy', { status: 503 })).mockResolvedValueOnce(ok);
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await createClient(provider({})).chat({ model: 'm', messages: conversation, tools, temperature: 0 });
+    expect(res.content).toBe('hi');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   it('turns HTTP failures into friendly errors', async () => {
     mockFetch({ error: 'nope' }, 401);
     await expect(createClient(provider({})).chat({ model: 'm', messages: conversation, tools, temperature: 0 })).rejects.toMatchObject({ code: 'model_auth' });
+    RETRY_DELAYS_MS.splice(0, RETRY_DELAYS_MS.length, 0, 0);
     vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('Failed to fetch'))));
     const err = await createClient(provider({})).chat({ model: 'm', messages: conversation, tools, temperature: 0 }).catch((e) => e);
     expect(err).toBeInstanceOf(AgentError);
