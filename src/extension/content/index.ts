@@ -2,7 +2,7 @@ import { CHANNEL, CONTENT_VERSION, type ContentRequest, type ContentResponse, ty
 import { ActionError, clear, click, currentEffect, pointAt, pressKey, resolve, scroll, select, settle, type, visibleDialogs, waitForText } from './actions';
 import { hover, openMenu } from './hover';
 import { setPresence } from './overlay';
-import { popupControl, describeRisk, find, findText, snapshot } from './snapshot';
+import { fetchPdf, popupControl, describeRisk, find, findText, snapshot } from './snapshot';
 
 /**
  * Content script entry. Injected on demand (never on every page by default) by the agent
@@ -51,6 +51,8 @@ async function handle(request: ContentRequest): Promise<unknown> {
       return visibleDialogs(request.waitMs, request.settle !== false);
     case 'popupControl':
       return popupControl(request.name);
+    case 'fetchPdf':
+      return fetchPdf(request.url);
     case 'hover':
       return hover(resolve(request.id), request.highlight);
     case 'menuPath':

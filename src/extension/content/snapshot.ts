@@ -238,7 +238,53 @@ function dialogBody(d: Element): Pick<DialogInfo, 'fullText' | 'frames'> {
     }
   }
   const fullText = clip(parts.filter(Boolean).join('\n').replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n'), 3500);
-  return { ...(fullText ? { fullText } : {}), ...(frames.filter(Boolean).length ? { frames: frames.filter(Boolean) } : {}) };
+  const pdfs = pdfsIn(d);
+  return {
+    ...(fullText ? { fullText } : {}),
+    ...(frames.filter(Boolean).length ? { frames: frames.filter(Boolean) } : {}),
+    ...(pdfs.length ? { pdfs } : {}),
+  };
+}
+
+const PDF_URL = /\.pdf(?:[?#]|$)|[?&/](?:pdf|document|file|download|attachment|viewdoc)/i;
+
+/** The PDFs a pop-up shows: <embed>/<object> of a PDF, or a frame whose document is one. */
+function pdfsIn(d: Element): string[] {
+  const urls = new Set<string>();
+  const abs = (u: string | null) => (u ? new URL(u, location.href).href : '');
+  for (const el of Array.from(d.querySelectorAll('embed,object,iframe'))) {
+    const src = abs(el.getAttribute('src') ?? el.getAttribute('data'));
+    if (!src || src.startsWith('about:') || src.startsWith('javascript:')) continue;
+    const type = (el.getAttribute('type') ?? '').toLowerCase();
+    let pdf = type.includes('pdf') || PDF_URL.test(src) || src.startsWith('blob:');
+    if (!pdf && el.tagName === 'IFRAME') {
+      try {
+        const doc = (el as HTMLIFrameElement).contentDocument;
+        pdf = !!doc && (doc.contentType === 'application/pdf' || !!doc.querySelector('embed[type="application/pdf"]'));
+      } catch {
+        // Another site's frame: tried as a PDF only if its address looks like one (above).
+      }
+    }
+    if (pdf) urls.add(src);
+  }
+  return [...urls].slice(0, 3);
+}
+
+/** A PDF's bytes, fetched as the page would (its cookies), as base64 — null when it isn't a PDF. */
+export async function fetchPdf(url: string): Promise<{ data: string | null; bytes: number; error?: string }> {
+  try {
+    const res = await fetch(url, { credentials: 'include' });
+    if (!res.ok) return { data: null, bytes: 0, error: `${res.status} ${res.statusText}` };
+    const buf = new Uint8Array(await res.arrayBuffer());
+    if (buf.length > 25 * 1024 * 1024) return { data: null, bytes: buf.length, error: 'larger than 25 MB' };
+    // %PDF at the start: what the file is, whatever the server calls it.
+    if (!(buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46)) return { data: null, bytes: buf.length, error: 'not a PDF' };
+    let bin = '';
+    for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+    return { data: btoa(bin), bytes: buf.length };
+  } catch (err) {
+    return { data: null, bytes: 0, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 function hostOf(src: string): string {

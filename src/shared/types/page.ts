@@ -40,6 +40,8 @@ export interface DialogInfo {
   fullText?: string;
   /** Hosts of frames inside it from another site, whose text the page itself can't read. */
   frames?: string[];
+  /** PDFs shown inside it (Chrome's PDF viewer has no text in the page): their addresses, to read the file. */
+  pdfs?: string[];
 }
 
 export interface PageSnapshot {

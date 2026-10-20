@@ -27,6 +27,7 @@ export type ContentRequest =
   | { kind: 'waitForText'; text: string; timeoutMs: number }
   | { kind: 'dialogs'; waitMs: number; settle?: boolean }
   | { kind: 'popupControl'; name: string }
+  | { kind: 'fetchPdf'; url: string }
   | { kind: 'hover'; id: number; highlight: boolean }
   | { kind: 'menuPath'; path: string[]; highlight: boolean }
   | { kind: 'presence'; active: boolean };
@@ -142,6 +143,7 @@ export interface ResponseMap {
   waitForText: { found: boolean };
   dialogs: { dialogs: DialogInfo[] };
   popupControl: { id: number | null; disabled: boolean };
+  fetchPdf: { data: string | null; bytes: number; error?: string };
   presence: null;
 }
 

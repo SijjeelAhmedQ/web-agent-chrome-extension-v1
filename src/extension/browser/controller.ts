@@ -126,7 +126,10 @@ export class BrowserController {
   /** Sends a request to the content script in the agent's current tab. */
   async send<K extends ContentRequest['kind']>(request: Extract<ContentRequest, { kind: K }>): Promise<ResponseMap[K]> {
     const tab = await this.currentTab();
-    if (tab.status === 'loading') await this.waitForLoad(tab.id!, 10_000);
+    // A frame inside the page loading (a PDF in a pop-up) shows the whole tab as loading: quick
+    // questions about what's on top of the page don't wait for it.
+    const quick = request.kind === 'dialogs' || request.kind === 'popupControl' || request.kind === 'fetchPdf';
+    if (tab.status === 'loading') await this.waitForLoad(tab.id!, quick ? 1_500 : 10_000);
     await this.ensureInjected(tab);
     let res: ContentResponse<ResponseMap[K]> | undefined;
     try {

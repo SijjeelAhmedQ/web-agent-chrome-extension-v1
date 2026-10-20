@@ -130,6 +130,7 @@ const readPage: AgentTool<{ mode: 'overview' | 'content'; full: boolean }> = {
       const inside = await ctx.browser.frameTexts(front.frames).catch(() => []);
       if (inside.length) front.fullText = [front.fullText ?? '', ...inside.map((f) => f.text)].filter(Boolean).join('\n').slice(0, 5000);
     }
+    if (front?.pdfs?.length) front.fullText = [front.fullText ?? '', await pdfsText(ctx, front.pdfs)].filter(Boolean).join('\n').slice(0, 14_000);
     ctx.elements.remember([...snap.elements, ...(snap.dialogs ?? []).flatMap((d) => (d.close ? [d.close] : []))], true);
     const n = snap.elements.length + snap.omitted;
     // The same page read again: only what changed — when that is clearly shorter than the whole page.
@@ -706,7 +707,36 @@ function fitRecord(text: string, room: number): string {
   return clip(kept.join('\n'), Math.max(room * 2, 600));
 }
 
-/** The text of the pop-up in front — the frames of other sites inside it included. */
+/** The text of the PDFs a pop-up shows — read from the files themselves (Chrome's viewer has no page text). */
+async function pdfsText(ctx: ToolContext, urls: string[]): Promise<string> {
+  const parts: string[] = [];
+  for (const url of urls) {
+    const cache = (ctx.pdfTexts ??= new Map());
+    let text = cache.get(url);
+    if (text === undefined) {
+      const name = decodeURIComponent(url.split(/[?#]/)[0].split('/').pop() || 'document');
+      const file = await ctx.browser.send({ kind: 'fetchPdf', url }).catch(() => null);
+      if (!file?.data) text = file?.error === 'not a PDF' ? '' : `PDF ${name}: couldn't open the file (${file?.error ?? 'no answer'}).`;
+      else {
+        try {
+          const bytes = Uint8Array.from(atob(file.data), (c) => c.charCodeAt(0));
+          const { pdfText } = await import('./pdfText');
+          const pdf = await pdfText(bytes, 15, ctx.overviewTextChars ? 4_000 : 12_000);
+          text = pdf.text.trim().length > 30
+            ? `PDF ${name} (${pdf.pages} page${pdf.pages === 1 ? '' : 's'}${pdf.read < pdf.pages ? `, first ${pdf.read} read` : ''}) — its text:\n${pdf.text}`
+            : `PDF ${name} (${pdf.pages} page${pdf.pages === 1 ? '' : 's'}): a scanned image — it has no text to read.`;
+        } catch (err) {
+          text = `PDF ${name}: couldn't read it (${err instanceof Error ? err.message : String(err)}).`;
+        }
+      }
+      cache.set(url, text);
+    }
+    if (text) parts.push(text);
+  }
+  return parts.join('\n');
+}
+
+/** The text of the pop-up in front — the frames of other sites and the PDFs inside it included. */
 async function popupText(ctx: ToolContext): Promise<string> {
   // No waiting for other pop-ups to settle: read_records waits for the record itself to change.
   const res = await ctx.browser.send({ kind: 'dialogs', waitMs: 1500, settle: false }).catch(() => null);
@@ -717,6 +747,7 @@ async function popupText(ctx: ToolContext): Promise<string> {
     const inside = await ctx.browser.frameTexts(front.frames).catch(() => []);
     if (inside.length) text = [text, ...inside.map((f) => f.text)].join('\n');
   }
+  if (front.pdfs?.length) text = [text, await pdfsText(ctx, front.pdfs)].filter(Boolean).join('\n');
   return text.trim();
 }
 
