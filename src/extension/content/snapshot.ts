@@ -397,8 +397,12 @@ export function find(query: string, limit: number): FindResult {
       for (const w of words) {
         if (ROLE_WORDS.test(w)) score += hay.includes(w) ? 0.5 : 0;
         else if (hay.includes(w)) score += 2;
-        else if (context.includes(w)) score += 0.25;
+        // “Inactive icon in the HBA1C recall row”: the row's words count — they say which one.
+        else if (context.includes(w)) score += 1;
       }
+      // The control's whole name is one of the words asked for (“Inactive”, “Edit”): that is the one meant,
+      // not a longer text that merely shares more of the other words.
+      if (name && !name.includes(' ') && words.includes(name)) score += 4;
       // Synonyms that come up constantly.
       if (/\bsearch\b/.test(q) && (info.role === 'searchbox' || info.type === 'search' || /search/.test(hay))) score += 4;
       if (info.inViewport) score += 0.5;
