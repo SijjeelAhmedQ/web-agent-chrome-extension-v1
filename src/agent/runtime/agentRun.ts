@@ -417,12 +417,18 @@ export class AgentRun {
   /** Runs one tool call and returns what the model should read. Only cancellation escapes. */
   private async runTool(call: ToolCall, byName: Map<string, AgentTool<any>>, ctx: ToolContext): Promise<string> {
     const tool = byName.get(call.name);
-    if (!tool) return `Error: there is no tool named "${call.name}". Available tools: ${[...byName.keys()].join(', ')}.`;
-    if (call.parseError) return `Error: ${call.parseError}. Send the arguments as a JSON object.`;
+    // A call that can't run still shows in the activity — otherwise the user (and whoever debugs it) never sees it.
+    const refused = (output: string) => {
+      const at = Date.now();
+      this.upsertStep({ id: uid('step_'), label: `Calling “${call.name}”`, status: 'failed', tool: call.name, startedAt: at, durationMs: 0, note: 'Not run — bad call', ...(this.options.config.settings.developerMode ? { args: call.arguments, result: output } : {}) });
+      return output;
+    };
+    if (!tool) return refused(`Error: there is no tool named "${call.name}". Available tools: ${[...byName.keys()].join(', ')}.`);
+    if (call.parseError) return refused(`Error: ${call.parseError}. Send the arguments as a JSON object.`);
     const parsed = tool.schema.safeParse(call.arguments ?? {});
     if (!parsed.success) {
       const issues = parsed.error.issues.map((i) => `${i.path.join('.') || 'arguments'}: ${i.message}`).join('; ');
-      return `Error: invalid arguments for ${call.name} — ${issues}.`;
+      return refused(`Error: invalid arguments for ${call.name} — ${issues}.`);
     }
     const args = parsed.data;
     const dev = this.options.config.settings.developerMode;
@@ -521,7 +527,7 @@ export class AgentRun {
     const textKey = tool.name === 'click_text' ? String((args as { text?: unknown }).text ?? '').trim().toLowerCase() : '';
     if (textKey && (this.notFound.get(textKey) ?? 0) >= 2) {
       finish({ status: 'skipped', note: 'Not found twice — use the element list' });
-      return `click_text found nothing named “${textKey}” twice already, so it is not plain text there (it may be a button whose name is in its value, or inside a frame). Do not try click_text for it again: call find_element (e.g. "${textKey} button") or read_page, and click the element by its id.`;
+      return `click_text found nothing named “${textKey}” twice already, so it is not plain text there (it may be a button whose name is in its value, or inside a frame). Do not try click_text for it again: call find_element (e.g. "${textKey} button") or read_page, and click the element by its id. If “${textKey}” is text to enter into a field, click_text can't do that — call type with the field's id.`;
     }
     if (key && (this.repeats.get(key) ?? 0) >= 2) {
       finish({ status: 'skipped', note: 'Did nothing twice — not repeating' });

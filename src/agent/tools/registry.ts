@@ -59,7 +59,9 @@ export function buildToolset(agent: AgentConfig, config: AppConfig, url: string)
 export function specOf(t: AgentTool<any>): ToolSpec {
   let parameters = t.jsonSchema;
   if (!parameters) {
-    const { $schema: _ignored, ...schema } = zodToJsonSchema(t.schema, { target: 'openApi3', $refStrategy: 'none' }) as Record<string, unknown>;
+    // JSON Schema 7, not OpenAPI 3: OpenAPI's `"exclusiveMinimum": true` (an id's “> 0”) made DeepSeek
+    // on OpenRouter unable to call click or type at all — it fell back to click_text for everything.
+    const { $schema: _ignored, ...schema } = zodToJsonSchema(t.schema, { target: 'jsonSchema7', $refStrategy: 'none' }) as Record<string, unknown>;
     parameters = schema;
   }
   return { name: t.name, description: t.description, parameters };

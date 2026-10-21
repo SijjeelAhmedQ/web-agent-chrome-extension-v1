@@ -439,7 +439,9 @@ function filledValues(scope: Element | null): { label: string; value: string }[]
     if (isInput(field) && (field.type === 'checkbox' || field.type === 'radio') && !field.checked) continue;
     if (!isVisibleField(field)) continue;
     const isRadio = isInput(field) && field.type === 'radio';
-    const label = isRadio ? groupLabel(field) || accessibleName(field) : accessibleName(field);
+    // The label the form shows (“Subject / Progress”, “Due”) — not a placeholder or a “__/__/____” mask.
+    const shownLabel = isRadio ? '' : visualLabel(field).replace(/[:*]\s*$/, '');
+    const label = isRadio ? groupLabel(field) || accessibleName(field) : shownLabel || accessibleName(field);
     let value = '';
     if (isInput(field) && field.type === 'password') value = field.value ? '••••' : '';
     else if (isRadio) value = accessibleName(field);
@@ -525,10 +527,24 @@ const hasWords = (hay: string, q: string) => ` ${norm(hay)} `.includes(` ${q} `)
  * first, then what is actually on top (not covered), in page order. `near` keeps only
  * matches whose row or item also shows that text (a date of birth, a chart number).
  */
+/** “×”, “✕”, “+”: a control shown as a sign. A close sign means the pop-up in front's own close button. */
+function symbolText(sign: string): TextResult {
+  if (!sign || sign.length > 3) return { matches: [], total: 0 };
+  const front = frontDialog();
+  if (/^[×✕✖xX]$/.test(sign) && front) {
+    const close = closeControl(front);
+    if (close) return { matches: [describeElement(close)], total: 1 };
+  }
+  const shown = (el: Element) => ((el as HTMLElement).innerText || (el as HTMLInputElement).value || '').trim();
+  const hits = collectInteractive().elements.filter((el) => shown(el) === sign);
+  const pool = front && hits.some((el) => front.contains(el)) ? hits.filter((el) => front.contains(el)) : hits;
+  return { matches: pool.slice(0, 6).map(describeElement), total: pool.length };
+}
+
 export function findText(text: string, near: string | undefined, limit: number): TextResult {
   const q = norm(text);
   const nearQ = near ? norm(near) : '';
-  if (!q) return { matches: [], total: 0 };
+  if (!q) return symbolText(text.trim());
   const hits: Element[] = [];
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
   const skip = () => {

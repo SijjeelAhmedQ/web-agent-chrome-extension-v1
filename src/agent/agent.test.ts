@@ -274,3 +274,13 @@ describe('declined steps', () => {
     expect(declinedAnswer('Submit this form?')).toMatch(/you cancelled “Submit this form”/);
   });
 });
+
+describe('tool schemas the providers accept', () => {
+  it('has no OpenAPI-style boolean bounds (DeepSeek could not call click or type with them)', async () => {
+    const { BROWSER_TOOLS } = await import('./tools/browserTools');
+    const { specOf } = await import('./tools/registry');
+    const specs = JSON.stringify(BROWSER_TOOLS.map(specOf));
+    expect(specs).not.toMatch(/"exclusive(Minimum|Maximum)":(true|false)/);
+    expect(specs).not.toMatch(/"nullable":/);
+  });
+});

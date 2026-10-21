@@ -125,7 +125,15 @@ export class BrowserController {
 
   /** Sends a request to the content script in the agent's current tab. */
   async send<K extends ContentRequest['kind']>(request: Extract<ContentRequest, { kind: K }>): Promise<ResponseMap[K]> {
-    const tab = await this.currentTab();
+    let tab = await this.currentTab();
+    // A tab just opened on a slow site is still about:blank, its real address pending — not a page
+    // that can't be worked on: wait for it (a consult can take half a minute to open).
+    const opening = (t: chrome.tabs.Tab) => t.status === 'loading' && /^https?:/.test(t.pendingUrl ?? '') && !/^https?:/.test(t.url ?? '');
+    if (opening(tab)) {
+      await this.waitForLoad(tab.id!, 45_000);
+      tab = (await chrome.tabs.get(tab.id!).catch(() => null)) ?? tab;
+      if (opening(tab)) throw new PageError('navigating', 'The page is still opening (the site is slow). Wait a few seconds and read it again.');
+    }
     // A frame inside the page loading (a PDF in a pop-up) shows the whole tab as loading: quick
     // questions about what's on top of the page don't wait for it.
     const quick = request.kind === 'dialogs' || request.kind === 'popupControl' || request.kind === 'fetchPdf';

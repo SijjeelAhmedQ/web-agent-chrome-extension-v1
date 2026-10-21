@@ -331,8 +331,23 @@ interface ClickTextArgs {
 /** The page is searched once per call (approval check and click share it). */
 const textTargets = new WeakMap<ClickTextArgs, TextResult>();
 
+/** click_text with words to enter (“follow up”): it only clicks — say which field to type them into. */
+function typeHint(ctx: ToolContext, text: string): string {
+  const fields = ctx.elements.onPage().filter((e) => ['textbox', 'searchbox', 'combobox'].includes(e.role) && !e.value);
+  const field = fields.find((e) => e.inBlockingPopup || /^dialog/.test(e.context ?? '')) ?? (fields.length === 1 ? fields[0] : undefined);
+  return `
+click_text only clicks — it never types. If “${text}” is text to enter, call type with the field's id${field ? `: [${field.id}] ${field.role} “${field.name}”` : ''}, then click the button that saves it.`;
+}
+
 async function textTarget(a: ClickTextArgs, ctx: ToolContext): Promise<TextResult> {
   let res = textTargets.get(a);
+  // An element's id sent as its text (“8400”, “[8400]”): the model means that element.
+  const asId = a.text.trim().match(/^\[?(\d{3,6})\]?$/);
+  const known = asId ? ctx.elements.get(Number(asId[1])) : undefined;
+  if (!res && known) {
+    res = { matches: [{ tag: '', inViewport: true, ...known }], total: 1 };
+    textTargets.set(a, res);
+  }
   if (!res) {
     res = await ctx.browser.send({ kind: 'findText', text: a.text, near: a.near || undefined, limit: 6 });
     ctx.elements.remember(res.matches);
@@ -344,7 +359,7 @@ async function textTarget(a: ClickTextArgs, ctx: ToolContext): Promise<TextResul
 const clickText: AgentTool<ClickTextArgs> = {
   name: 'click_text',
   description:
-    'Click visible text that is not listed as a button or link — e.g. a name in a table or a result in a search dropdown. Matches whole words, exact text first. If the text appears more than once, pass near: other text from the same row (a date of birth, an ID).',
+    'Click visible text that is not listed as a button or link — e.g. a name in a table or a result in a search dropdown. Matches whole words, exact text first. If the text appears more than once, pass near: other text from the same row (a date of birth, an ID). It only clicks — it never types: to enter text into a field, use type.',
   schema: z.object({
     text: str(z.string().min(1)).describe('The visible text to click, e.g. "Arya STARK"'),
     near: z.coerce.string().optional().default('').describe('Optional: other text in the same row or item, to pick the right one (e.g. "03-12-2015")'),
@@ -363,7 +378,7 @@ const clickText: AgentTool<ClickTextArgs> = {
     textTargets.delete(a);
     if (!res.total) {
       return {
-        output: `No visible text or control named “${a.text}”${a.near ? ` near “${a.near}”` : ''} on the page. Don’t retry click_text with other wording — call find_element (e.g. "${a.text} button") or read_page, then click the element by its id. If it is not there, scroll, search or go to the next page of results.`,
+        output: `No visible text or control named “${a.text}”${a.near ? ` near “${a.near}”` : ''} on the page. Don’t retry click_text with other wording — call find_element (e.g. "${a.text} button") or read_page, then click the element by its id. If it is not there, scroll, search or go to the next page of results.${typeHint(ctx, a.text)}`,
         note: 'Text not found',
       };
     }
