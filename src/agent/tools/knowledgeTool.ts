@@ -13,10 +13,17 @@ export function knowledgeTool(sites: SiteProfile[]): AgentTool<{ topic: string }
     risk: 'read',
     touchesPage: false,
     label: (a) => `Checking what I know about “${a.topic}”`,
-    async execute(a) {
+    async execute(a, ctx) {
       const found = searchKnowledge(sites, a.topic);
       if (!found.length) return { output: `Nothing in the ${names} knowledge base about “${a.topic}”. Work it out from the page.`, note: 'Nothing saved about this' };
-      return { output: found.map(formatEntry).join('\n\n'), note: `${found.length} ${found.length === 1 ? 'entry' : 'entries'} · ${names}` };
+      // A small context (a slow local model): the best entry in full, the others by name — a page of
+      // workflows would push out the steps the task is on.
+      const [best, ...rest] = found;
+      const output =
+        ctx.overviewTextChars && rest.length
+          ? `${formatEntry(best)}\n\nAlso saved: ${rest.map((e) => `“${e.title.trim()}”`).join(', ')} — look one up by its name if you need it.`
+          : found.map(formatEntry).join('\n\n');
+      return { output, note: `${found.length} ${found.length === 1 ? 'entry' : 'entries'} · ${names}` };
     },
   };
 }

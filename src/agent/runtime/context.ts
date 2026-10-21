@@ -49,11 +49,14 @@ export function compactMessages(messages: ChatMessage[], budgetTokens: number): 
   for (let i = 0; i < messages.length; i++) {
     if (isRead(messages[i]) && i < latest) messages[i] = { ...messages[i], content: PLACEHOLDER };
   }
+  // The latest look-up of the site's knowledge is how the step now is done (fill “Take”, not “Quantity”):
+  // it stays whole like the latest page, until a newer one.
+  const howTo = messages.findLastIndex((m) => m.role === 'tool' && m.toolName === 'site_knowledge');
   let total = size(messages);
   const lastIndex = messages.length - 1;
   for (let i = 0; i < lastIndex && total > budgetTokens; i++) {
     const m = messages[i];
-    if (i !== latest && m.role === 'tool' && m.content.length > 600 && m.content !== PLACEHOLDER && !(i > latest && latest >= 0 && m.content.startsWith(DIFF_HEAD))) {
+    if (i !== latest && i !== howTo && m.role === 'tool' && m.content.length > 600 && m.content !== PLACEHOLDER && !(i > latest && latest >= 0 && m.content.startsWith(DIFF_HEAD))) {
       total -= tokensOf(m);
       messages[i] = { ...m, content: `${m.content.slice(0, 600)}\n[…trimmed]` };
       total += tokensOf(messages[i]);
@@ -77,7 +80,7 @@ export function compactMessages(messages: ChatMessage[], budgetTokens: number): 
   const chain = (i: number) => i === latest || (latest >= 0 && i > latest && isRead(messages[i]) && messages[i].content.startsWith(DIFF_HEAD));
   for (let i = request + 1; i < keepFrom && total > budgetTokens; i++) {
     const m = messages[i];
-    if (chain(i)) continue;
+    if (chain(i) || i === howTo) continue;
     if (m.role === 'tool' && m.content !== PLACEHOLDER && m.content.length > 80) {
       total -= tokensOf(m);
       const first = m.content.split('\n')[0];

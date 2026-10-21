@@ -232,6 +232,15 @@ describe('prompt and context', () => {
     expect(msgs.reduce((n, m) => n + estimateTokens(m.content) + 4, 0)).toBeLessThanOrEqual(4_000);
     expect(msgs[1].content).toBe('add a medication, a task, a recall and a diagnosis');
   });
+  it('keeps the latest look-up of how the step is done', () => {
+    const msgs: ChatMessage[] = [{ role: 'system', content: 's' }, { role: 'user', content: 'add a medication, then a task' }];
+    msgs.push({ role: 'tool', toolName: 'site_knowledge', toolCallId: 'k', content: `Take: the first box. Quantity: don't type it. ${'step '.repeat(300)}` });
+    for (let i = 0; i < 10; i++) msgs.push({ role: 'tool', toolName: 'find_element', toolCallId: `${i}`, content: `found ${i} `.repeat(80) });
+    compactMessages(msgs, 1_200);
+    expect(msgs[2].content).toMatch(/^Take: the first box\. Quantity: don't type it\./);
+    expect(msgs[2].content).not.toMatch(/trimmed|removed/);
+    expect(msgs[3].content).toMatch(/removed to fit|trimmed/);
+  });
   it('estimates more tokens for digits', () => {
     expect(estimateTokens('2026-10-15')).toBeGreaterThan(estimateTokens('abcdefghij'));
   });
