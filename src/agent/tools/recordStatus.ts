@@ -1,3 +1,5 @@
+import type { VisualRow } from '@/shared/types/page';
+
 /**
  * A record's results by their flag column — “HbA1c  Status  Abnormal” — worked out by code, not by the
  * model: counting six records' tests by eye is where models slip. Which word heads the flag and which
@@ -52,6 +54,25 @@ export function statusRows(text: string, label: string): StatusRow[] {
   return rows;
 }
 
+const word = (s: string) => /^[\p{L}][\p{L} ()-]{0,24}$/u.test(s.trim());
+
+/**
+ * The result rows of a record as shown: test, the word in the middle column (“Status”, “Test”,
+ * “Normal”… — it varies), then the flag in the right-hand column, or nothing there. The flag is the
+ * right-hand cell, whatever the middle one says: “HbA1c | Normal | Abnormal” is abnormal.
+ */
+export function shownRows(rows: VisualRow[]): StatusRow[] {
+  const out: StatusRow[] = [];
+  for (const { cells } of rows) {
+    if (cells.length < 2 || cells.length > 4) continue;
+    const [test, middle] = cells;
+    // Fields (“Name: Arya STARK”), dates and numbers are not results.
+    if (cells.some((c) => /[:：]\s*$|^[^:]{1,30}:\s/.test(c)) || !/\p{L}{2}/u.test(test) || !word(middle)) continue;
+    out.push({ test: test.trim(), status: cells.length >= 3 ? cells[cells.length - 1].trim() : '' });
+  }
+  return out;
+}
+
 export type Verdict = 'abnormal' | 'normal' | 'unclear' | 'none';
 
 export function judge(rows: StatusRow[], rules: StatusRules): { verdict: Verdict; abnormal: StatusRow[]; normal: StatusRow[]; blank: StatusRow[] } {
@@ -75,29 +96,31 @@ function recordName(text: string): string {
 }
 
 /** Each record's verdict and the totals, for the top of read_records' result. */
-export function statusSummary(records: string[], rules: StatusRules): string {
+export function statusSummary(records: { text: string; rows?: VisualRow[] }[], rules: StatusRules): string {
   const counts: Record<Verdict, number> = { abnormal: 0, normal: 0, unclear: 0, none: 0 };
-  const lines = records.map((text, i) => {
-    const { verdict, abnormal, normal, blank } = judge(statusRows(text, rules.label), rules);
+  const lines = records.map(({ text, rows }, i) => {
+    // The rows as shown when there are any (the flag is the right-hand cell); else the label in the text.
+    const shown = rows?.length ? shownRows(rows) : [];
+    const { verdict, abnormal, normal, blank } = judge(shown.length ? shown : statusRows(text, rules.label), rules);
     counts[verdict]++;
     const name = recordName(text);
     const head = `Record ${i + 1}${name ? ` (${name})` : ''}:`;
-    if (verdict === 'none') return `${head} no “${rules.label}” rows — a PDF, scan or letter: decide it from its text below.`;
+    if (verdict === 'none') return `${head} no result rows — a PDF, scan or letter: decide it from its text below.`;
     const parts = [
       abnormal.length ? `ABNORMAL — ${abnormal.map((r) => `${r.test}: ${r.status}`).join('; ')}` : verdict === 'normal' ? 'NORMAL' : 'UNCLEAR',
       normal.length ? `${normal.length} normal (${normal.map((r) => r.test).join(', ')})` : '',
-      blank.length ? `${blank.length} with no ${rules.label} (${blank.map((r) => r.test).join(', ')})` : '',
+      blank.length ? `${blank.length} with an empty flag (${blank.map((r) => r.test).join(', ')})` : '',
     ];
     return `${head} ${parts.filter(Boolean).join(' · ')}`;
   });
   const totals = [
     `${counts.abnormal} abnormal`,
     `${counts.normal} normal`,
-    counts.unclear ? `${counts.unclear} unclear (a ${rules.label} left empty)` : '',
-    counts.none ? `${counts.none} to decide from the text (no ${rules.label} rows)` : '',
+    counts.unclear ? `${counts.unclear} unclear (a flag left empty)` : '',
+    counts.none ? `${counts.none} to decide from the text (no result rows)` : '',
   ].filter(Boolean);
   return [
-    `Results by their “${rules.label}” (worked out from every row — these counts are final: use them, don't open the records again):`,
+    `Results by each test's flag — the right-hand column (worked out from every row: a record is abnormal if any test's flag is not ${rules.normal.map((n) => `“${n}”`).join(' or ')}${rules.emptyIsNormal ? ' or empty' : ''}. These counts are final: use them, don't open the records again):`,
     ...lines,
     `Totals: ${records.length} record${records.length === 1 ? '' : 's'} — ${totals.join(', ')}.`,
   ].join('\n');

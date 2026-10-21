@@ -42,6 +42,22 @@ export interface DialogInfo {
   frames?: string[];
   /** PDFs shown inside it (Chrome's PDF viewer has no text in the page): their addresses, to read the file. */
   pdfs?: string[];
+  /** For the pop-up in front: its lines as shown — cells side by side, left to right (a result row: test, label, flag). */
+  rows?: VisualRow[];
+}
+
+export interface VisualRow {
+  cells: string[];
+  /** Per cell: shown in red. */
+  red: boolean[];
+}
+
+export interface TableResult {
+  found: boolean;
+  headers: string[];
+  /** colour: the row's text colour (“red”, “grey”…), '' for the usual. */
+  rows: { cells: string[]; colour: string }[];
+  total: number;
 }
 
 export interface PageSnapshot {

@@ -501,7 +501,7 @@ export class AgentRun {
         if (inPopup) {
           this.nextNudged = true;
           finish({ status: 'skipped', note: 'Use read_records' });
-          return 'Not clicked: to go through the records of a list, don’t open them one by one — close this viewer (its "Cancel") and call read_records with first = the first record’s text in the list (and the arguments the site’s knowledge gives, e.g. status_label). It reads every record in one step and counts normal and abnormal results for you. (If this "Next" is not for going through records, click it again.)';
+          return 'Not clicked: to go through the records of a list, don’t open them one by one — close this viewer (its "Cancel") and call read_records with first = the first record’s text in the list (and the arguments the site’s knowledge gives, e.g. status_label). It reads every record in one step and counts normal and abnormal results for you. (Only to count the records, read_table on the list may be enough — see the site’s knowledge. If this "Next" is not for going through records, click it again.)';
         }
       }
     }

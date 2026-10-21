@@ -1,4 +1,4 @@
-import type { DialogInfo, ElementInfo, ElementRisk, PageSnapshot, ReadMode } from '@/shared/types/page';
+import type { DialogInfo, ElementInfo, ElementRisk, PageSnapshot, ReadMode, TableResult } from '@/shared/types/page';
 
 /**
  * Typed request/response protocol between the agent (side panel) and the content script.
@@ -28,6 +28,7 @@ export type ContentRequest =
   | { kind: 'dialogs'; waitMs: number; settle?: boolean }
   | { kind: 'popupControl'; name: string }
   | { kind: 'fetchPdf'; url: string }
+  | { kind: 'table'; near: string; max: number }
   | { kind: 'hover'; id: number; highlight: boolean }
   | { kind: 'menuPath'; path: string[]; highlight: boolean }
   | { kind: 'presence'; active: boolean };
@@ -144,6 +145,7 @@ export interface ResponseMap {
   dialogs: { dialogs: DialogInfo[] };
   popupControl: { id: number | null; disabled: boolean };
   fetchPdf: { data: string | null; bytes: number; error?: string };
+  table: TableResult;
   presence: null;
 }
 

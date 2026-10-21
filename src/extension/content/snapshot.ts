@@ -14,6 +14,7 @@ import {
   isDisabled,
   roleOf,
 } from './elements';
+import { visualRows } from './rows';
 import { isAnchor, isButton, isHTML, isInput, isSelect, isTextArea } from './dom';
 
 const clip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
@@ -215,7 +216,7 @@ export function showingDialogs(): DialogInfo[] {
 }
 
 /** All the text of a pop-up, the text of same-site frames inside it included; other sites' frames by host. */
-function dialogBody(d: Element): Pick<DialogInfo, 'fullText' | 'frames'> {
+function dialogBody(d: Element): Pick<DialogInfo, 'fullText' | 'frames' | 'pdfs' | 'rows'> {
   // Values in its fields (a record's Subject, Result Date, Folder…) are not in its text: list them first.
   const fields = Array.from(d.querySelectorAll('input:not([type=button]):not([type=submit]):not([type=hidden]):not([type=checkbox]):not([type=radio]),select,textarea'))
     .filter((f) => isVisible(f) && f.closest(DIALOGS) === d)
@@ -250,6 +251,7 @@ function dialogBody(d: Element): Pick<DialogInfo, 'fullText' | 'frames'> {
     ...(fullText ? { fullText } : {}),
     ...(frames.filter(Boolean).length ? { frames: frames.filter(Boolean) } : {}),
     ...(pdfs.length ? { pdfs } : {}),
+    rows: visualRows(d),
   };
 }
 

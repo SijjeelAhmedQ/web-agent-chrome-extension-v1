@@ -2,6 +2,7 @@ import { CHANNEL, CONTENT_VERSION, type ContentRequest, type ContentResponse, ty
 import { ActionError, clear, click, currentEffect, pointAt, pressKey, resolve, scroll, select, settle, type, visibleDialogs, waitForText } from './actions';
 import { hover, openMenu } from './hover';
 import { setPresence } from './overlay';
+import { readTable } from './rows';
 import { fetchPdf, popupControl, describeRisk, find, findText, snapshot } from './snapshot';
 
 /**
@@ -53,6 +54,8 @@ async function handle(request: ContentRequest): Promise<unknown> {
       return popupControl(request.name);
     case 'fetchPdf':
       return fetchPdf(request.url);
+    case 'table':
+      return readTable(request.near, request.max);
     case 'hover':
       return hover(resolve(request.id), request.highlight);
     case 'menuPath':

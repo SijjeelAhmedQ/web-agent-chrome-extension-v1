@@ -7,6 +7,7 @@ import { formatDialogs, formatElement, formatSnapshot } from './format';
 import { memoOf, pageDiff } from './pageDiff';
 import { statusSummary } from './recordStatus';
 import type { TextResult } from '@/extension/messaging/protocol';
+import type { TableResult, VisualRow } from '@/shared/types/page';
 import type { AgentTool, ApprovalRequest, ToolContext, ToolOutcome } from './types';
 
 /**
@@ -738,11 +739,12 @@ async function pdfsText(ctx: ToolContext, urls: string[]): Promise<string> {
 }
 
 /** The text of the pop-up in front — the frames of other sites and the PDFs inside it included. */
-async function popupText(ctx: ToolContext): Promise<string> {
+async function popupText(ctx: ToolContext, shown?: { rows?: VisualRow[] }): Promise<string> {
   // No waiting for other pop-ups to settle: read_records waits for the record itself to change.
   const res = await ctx.browser.send({ kind: 'dialogs', waitMs: 1500, settle: false }).catch(() => null);
   const front = res?.dialogs[0];
   if (!front) return '';
+  if (shown) shown.rows = front.rows;
   let text = front.fullText ?? front.text;
   if (front.frames?.length) {
     const inside = await ctx.browser.frameTexts(front.frames).catch(() => []);
@@ -784,16 +786,19 @@ const readRecords: AgentTool<{ first: string; near: string; next: string; close:
     const opened = await clickText.execute({ text: a.first, near: a.near, double: false }, ctx);
     if (/Text not found|not clicked/.test(opened.note ?? '')) return opened;
     const records: string[] = [];
+    const rowsOf: VisualRow[][] = [];
     let last = '';
     for (let i = 0; i < a.max; i++) {
-      let text = await popupText(ctx);
+      const shown: { rows?: VisualRow[] } = {};
+      let text = await popupText(ctx, shown);
       // The next record may take a moment to load.
       for (let tries = 0; tries < 12 && (!text || text === last); tries++) {
         await sleep(300);
-        text = await popupText(ctx);
+        text = await popupText(ctx, shown);
       }
       if (!text || text === last) break;
       records.push(text);
+      rowsOf.push(shown.rows ?? []);
       last = text;
       if (i === a.max - 1) break;
       const next = await ctx.browser.send({ kind: 'popupControl', name: a.next }).catch(() => null);
@@ -810,7 +815,7 @@ const readRecords: AgentTool<{ first: string; near: string; next: string; close:
     const rules = a.status_label.trim()
       ? { label: a.status_label.trim(), normal: a.normal_values.split(',').map((v) => v.trim()).filter(Boolean), emptyIsNormal: a.empty_is_normal }
       : null;
-    const summary = rules ? statusSummary(records, rules) : '';
+    const summary = rules ? statusSummary(records.map((text, i) => ({ text, rows: rowsOf[i] })), rules) : '';
     const budget = (ctx.overviewTextChars ? 7_000 : 18_000) - summary.length;
     return {
       output: [summary, recordsOutput(records, a.next, a.close, Math.max(3_000, budget))].filter(Boolean).join('\n\n'),
@@ -819,8 +824,41 @@ const readRecords: AgentTool<{ first: string; near: string; next: string; close:
   },
 };
 
+/** “red” rows of a list say something (abnormal results, overdue tasks) the page's text doesn't. */
+export function tableOutput(t: TableResult): string {
+  if (!t.found || !t.rows.length) return 'No list (table) with rows found here. Read the page to see what it shows.';
+  const colours = new Map<string, number>();
+  for (const r of t.rows) colours.set(r.colour, (colours.get(r.colour) ?? 0) + 1);
+  const differ = colours.size > 1;
+  const lines = t.rows.map((r, i) => `${i + 1}. ${r.cells.map((c) => c || '—').join(' | ')}${differ ? ` — ${r.colour ? `in ${r.colour}` : 'usual colour'}` : ''}`);
+  const tally = [...colours].sort((a, b) => b[1] - a[1]).map(([c, n]) => `${n} in ${c || 'the usual colour'}`).join(', ');
+  return [
+    `${t.total} row${t.total === 1 ? '' : 's'}${t.rows.length < t.total ? ` (first ${t.rows.length} listed)` : ''}.`,
+    ...(t.headers.some(Boolean) ? [`Columns: ${t.headers.map((h) => h || '—').join(' | ')}`] : []),
+    ...lines,
+    differ ? `By colour: ${tally}. (What a colour means is in the site's knowledge.)` : 'All rows are in the same colour.',
+  ].join('\n');
+}
+
+const readTable: AgentTool<{ near: string; max: number }> = {
+  name: 'read_table',
+  description:
+    'Read a list or table on the page — each row\'s cells, and the colour each row is shown in when they differ (e.g. abnormal results in red) — to count or sort its rows without opening any of them.',
+  schema: z.object({
+    near: z.coerce.string().optional().default('').describe('Text inside the list you mean — a column header or a row\'s text — when the page has more than one'),
+    max: z.coerce.number().int().min(1).max(200).optional().default(100).describe('At most this many rows'),
+  }),
+  risk: 'read',
+  touchesPage: true,
+  label: (a) => (a.near ? `Reading the list with ${quote(a.near)}` : 'Reading the list'),
+  async execute(a, ctx) {
+    const t = await ctx.browser.send({ kind: 'table', near: a.near, max: a.max });
+    return { output: tableOutput(t), note: t.found ? `${t.total} row${t.total === 1 ? '' : 's'}` : 'No list found' };
+  },
+};
+
 export const BROWSER_TOOLS: AgentTool<any>[] = [
-  readPage, findElement, scroll, wait, click, clickText, readRecords, hover, openMenu, type, clear, selectOption, pressKey, navigate, goBack, goForward, listTabs, openTab, switchTab, closeTab,
+  readPage, findElement, scroll, wait, click, clickText, readTable, readRecords, hover, openMenu, type, clear, selectOption, pressKey, navigate, goBack, goForward, listTabs, openTab, switchTab, closeTab,
 ];
 
 // Keep the UI catalogue and the implementations in lock-step.
