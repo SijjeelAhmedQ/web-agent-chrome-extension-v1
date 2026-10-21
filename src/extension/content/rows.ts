@@ -19,7 +19,11 @@ export function colourName(css: string): string {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   if (max - min < 40) return max < 90 ? '' : 'grey';
-  if (r === max && r > 140 && g < 0.55 * r && b < 0.55 * r) return g > 0.35 * r ? 'orange' : 'red';
+  // Orange (255,165,0) has much green: red below a third of the red, orange up to ~80%.
+  if (r === max && r > 140 && b < 0.5 * r) {
+    if (g <= 0.35 * r) return 'red';
+    if (g <= 0.8 * r) return 'orange';
+  }
   if (g === max && g > 100 && r < 0.75 * g) return 'green';
   if (b === max && b > 100) return r < 0.6 * b && g < 0.75 * b ? 'blue' : '';
   return '';
@@ -100,7 +104,16 @@ export function readTable(near: string, max: number, scope: Element | Document =
     (want && tables.find((t) => (t as HTMLElement).innerText?.toLowerCase().includes(want))) ||
     tables.sort((a, b) => rowsOf(b).length - rowsOf(a).length)[0];
   if (!table) return { found: false, headers: [], rows: [], total: 0 };
-  const cellText = (c: Element) => ((c as HTMLElement).innerText ?? '').replace(/\s+/g, ' ').trim();
+  const plainText = (c: Element) => ((c as HTMLElement).innerText ?? '').replace(/\s+/g, ' ').trim();
+  // A cell that is only a sign (“!”, “✓”, “●”): its colour or title is what it says (a priority, a status).
+  const cellText = (c: Element) => {
+    const text = plainText(c);
+    if (!text || /\p{L}|\d/u.test(text) || text.length > 3) return text;
+    const marked = Array.from(c.querySelectorAll('*')).find((e) => (e.textContent ?? '').trim() === text) ?? c;
+    const title = (marked.getAttribute('title') ?? c.getAttribute('title') ?? '').trim();
+    const colour = colourName(getComputedStyle(marked).color);
+    return [text, title || (colour ? `(${colour})` : '')].filter(Boolean).join(' ');
+  };
   const all = rowsOf(table);
   const headerRow = all.find((r) => r.querySelector('th,[role=columnheader]'));
   // A grid with its header in a table of its own (fixed headers): the table just before it.
