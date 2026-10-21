@@ -106,3 +106,14 @@ export interface ElementRisk {
   href?: string;
   target?: string;
 }
+
+/** The form around an element: what still stops it, and what it holds. */
+export interface FormAround {
+  missing: string[];
+  flagged: string[];
+  popup: boolean;
+  /** Every filled field, by the name the form shows. */
+  values: { label: string; value: string }[];
+  /** The name of the element asked about, when it is a field. */
+  self: string;
+}

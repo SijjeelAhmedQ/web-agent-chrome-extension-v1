@@ -10,6 +10,8 @@ import type { AgentTool } from '../tools/types';
  */
 export class Checklist {
   items: ChecklistItem[];
+  /** Items whose tick was held back once because the page didn't show what they quote. */
+  asked = new Set<number>();
 
   constructor(items: ChecklistItem[] = []) {
     this.items = items.map((i) => ({ ...i }));
@@ -56,6 +58,9 @@ export class Checklist {
 
 const norm = (s: string) => s.toLowerCase().replace(/[“”"'‘’]/g, '').replace(/\s+/g, ' ').trim();
 
+/** The words an item quotes (“[web agent test] serial recall”) — a few words, not a single short name. */
+const quotedIn = (text: string) => [...text.matchAll(/["“]([^"“”]{6,120})["”]/g)].map((m) => m[1].trim()).filter((q) => /\p{L}/u.test(q));
+
 /** Several items may come as one string, one per line. */
 const itemList = z.preprocess(
   (v) => (typeof v === 'string' ? v.split('\n').map((l) => l.replace(/^\s*(?:[-*•☐☑]|\d+[.)])\s*/, '').trim()).filter(Boolean) : v),
@@ -80,7 +85,7 @@ export function checklistTool(list: Checklist, onChange: (done: number | null) =
       if (a.done) return `Ticking off task ${a.done}${list.items[a.done - 1] ? `: ${list.items[a.done - 1].text}` : ''}`;
       return 'Checking the checklist';
     },
-    async execute(a) {
+    async execute(a, ctx) {
       if (a.items?.length) {
         if (list.items.some((i) => i.done)) return { output: `The checklist is already made and items are done — don't make it again. Carry on with it:\n${list.format()}`, note: 'Checklist already made' };
         list.items = a.items.map((text) => ({ text: text.trim(), done: false }));
@@ -91,6 +96,19 @@ export function checklistTool(list: Checklist, onChange: (done: number | null) =
         const item = list.items[a.done - 1];
         if (!item) return { output: list.size ? `There is no item ${a.done}. The checklist:\n${list.format()}` : 'There is no checklist yet. Make one with items first.', note: 'No such task' };
         if (item.done) return { output: `Item ${a.done} is already ticked — don't do it again.\n${list.format()}`, note: 'Already ticked' };
+        // The user's own words for it (a note, a subject) shown nowhere on the page: it may not have been
+        // saved — an old record that looks alike is no proof. Asked once; a second tick is taken as checked.
+        if (!list.asked.has(a.done)) {
+          const quotes = quotedIn(item.text);
+          const shown = await Promise.all(quotes.map((q) => Promise.resolve().then(() => ctx.browser.send({ kind: 'waitForText', text: q, timeoutMs: 400 })).then((r) => r.found, () => true)));
+          if (quotes.length && !shown.some(Boolean)) {
+            list.asked.add(a.done);
+            return {
+              output: `Not ticked yet: the page doesn't show ${quotes.map((q) => `“${q}”`).join(' or ')} from this item. A record that only looks alike (an older one) is no proof. If it was saved, open the list where it shows and look for it; if it was not saved, finish it. Once you have seen it saved, call task_list with done: ${a.done} again.`,
+              note: 'Not seen on the page yet',
+            };
+          }
+        }
         item.done = true;
         if (a.note?.trim()) item.note = a.note.trim().slice(0, 80);
         onChange(a.done);

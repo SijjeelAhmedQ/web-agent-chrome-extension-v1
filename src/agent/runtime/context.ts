@@ -106,6 +106,18 @@ export function compactMessages(messages: ChatMessage[], budgetTokens: number): 
     messages[i] = { ...m, content: shrinkSnapshot(m.content, room) };
     total += tokensOf(messages[i]);
   }
+  // Still over: the server would cut the prompt from the front and lose the request (Ollama: “no user query
+  // found”). Last resort — every step after the request, oldest first, the newest ones and the chain too,
+  // is cut down; the latest page stays at its least.
+  for (let i = request + 1; i < messages.length && total > budgetTokens; i++) {
+    const m = messages[i];
+    if (i === latest || m.content.length <= 400) continue;
+    const room = Math.max(100, budgetTokens - (total - tokensOf(m)));
+    const keep = Math.max(300, Math.min(m.content.length - 1, room * 3));
+    total -= tokensOf(m);
+    messages[i] = { ...m, content: `${m.content.slice(0, keep)}\n[…cut to fit]` };
+    total += tokensOf(messages[i]);
+  }
   return messages;
 }
 

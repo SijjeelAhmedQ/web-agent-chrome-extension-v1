@@ -7,7 +7,7 @@ import { formatDialogs, formatElement, formatSnapshot } from './format';
 import { memoOf, pageDiff } from './pageDiff';
 import { statusSummary } from './recordStatus';
 import type { TextResult } from '@/extension/messaging/protocol';
-import type { TableResult, VisualRow } from '@/shared/types/page';
+import type { FormAround, TableResult, VisualRow } from '@/shared/types/page';
 import type { AgentTool, ApprovalRequest, ToolContext, ToolOutcome } from './types';
 
 /**
@@ -287,6 +287,19 @@ async function clickAndReport(ctx: ToolContext, elementId: number, double: boole
       };
     }
   }
+  // A Save that did change the page — a message, a field turned red — with its pop-up still there and a
+  // required field still empty or marked wrong: refused too (a saved pop-up closes).
+  if (changed() && !after.navigated && /^(save|submit|ok|done|add|update|confirm|apply)\b/i.test(res.element.name ?? '')) {
+    const around = await ctx.browser.send({ kind: 'formAround', id: elementId }).catch(() => null);
+    if (around?.popup && (around.missing.length || around.flagged.length)) {
+      const said = effect?.added.length ? ` The page says: ${effect.added.map((l) => `“${clip(l, 80)}”`).join(', ')}.` : '';
+      const what = [around.missing.length ? ` Required fields still empty: ${around.missing.join(', ')}.` : '', around.flagged.length ? ` Fields the page marks as wrong: ${around.flagged.join(', ')}.` : ''].join('');
+      return {
+        output: `${verb} ${label}, but its pop-up is still open — it was most likely NOT saved.${said}${what} Fix them (a field with suggestions needs one of them clicked), then press ${label} again. Don't press any other of the form's buttons instead, and don't count this as done.`,
+        note: 'Not saved — the form is still open',
+      };
+    }
+  }
   if (!changed() && effect && !opener) {
     return { output: `${verb} ${label}. Nothing on the page changed — fine if there was nothing to do (e.g. the fields were already empty). Don’t click it again; carry on with the next step.${covered}`, note: 'Nothing changed' };
   }
@@ -422,6 +435,26 @@ const clickText: AgentTool<ClickTextArgs> = {
   },
 };
 
+/** A form's filled fields around a field, to tell what else filling it changed. */
+async function formAroundOf(ctx: ToolContext, id: number): Promise<FormAround | null> {
+  return ctx.browser.send({ kind: 'formAround', id }).catch(() => null);
+}
+
+/**
+ * Other fields the page itself rewrote when this one was set — Indici writes the Directions anew when
+ * the Frequency is chosen, over what the agent had typed there. Said, so what the user gave is set again.
+ */
+async function otherChanges(ctx: ToolContext, id: number, before: FormAround | null): Promise<string> {
+  if (!before) return '';
+  await ctx.browser.send({ kind: 'settle', quietMs: 300, timeoutMs: 1500 }).catch(() => null);
+  const after = await formAroundOf(ctx, id);
+  if (!after) return '';
+  const was = new Map(before.values.map((v) => [v.label, v.value]));
+  const changed = after.values.filter((v) => v.label !== after.self && was.has(v.label) && was.get(v.label) !== v.value);
+  if (!changed.length) return '';
+  return ` The page also changed ${changed.map((v) => `“${v.label}” from ${quote(was.get(v.label)!)} to ${quote(v.value)}`).join(', ')}. If the user gave a value for it, set it again now.`;
+}
+
 const type: AgentTool<{ id: number; text: string; clear: boolean; submit: boolean }> = {
   name: 'type',
   description: 'Type text into a text field, search box, combobox or editor. Replaces the existing text unless clear is false. Set submit to true to press Enter afterwards (e.g. to run a search).',
@@ -445,9 +478,10 @@ const type: AgentTool<{ id: number; text: string; clear: boolean; submit: boolea
   },
   async execute(a, ctx) {
     const before = await pageUrl(ctx);
+    const form = a.submit || isSecretField(ctx, a.id) ? null : await formAroundOf(ctx, a.id);
     const res = await ctx.browser.send({ kind: 'type', id: a.id, text: a.text, clear: a.clear, highlight: ctx.settings.highlightActions });
     const label = res.element.name ? quote(res.element.name) : 'the field';
-    let output = `Typed into ${label}. It now contains: ${quote(res.value)}.`;
+    let output = `Typed into ${label}. It now contains: ${quote(res.value)}.${await otherChanges(ctx, a.id, form)}`;
     if (res.suggestions?.length && !a.submit) {
       output += ` A list of suggestions opened under it: ${res.suggestions.map((s) => quote(s)).join(', ')}. Typing alone chose none of them — click the one you mean (click_text with its text), or the field stays unset.`;
     }
@@ -487,9 +521,11 @@ const selectOption: AgentTool<{ id: number; option: string }> = {
   touchesPage: true,
   label: (a, ctx) => `Choosing ${quote(a.option)}${ctx.elements.get(a.id)?.name ? ` in ${nameOf(ctx, a.id)}` : ''}`,
   async execute(a, ctx) {
+    const form = await formAroundOf(ctx, a.id);
     const res = await ctx.browser.send({ kind: 'select', id: a.id, option: a.option, highlight: ctx.settings.highlightActions });
-    await ctx.browser.send({ kind: 'settle', quietMs: 300, timeoutMs: 1500 }).catch(() => null);
-    return { output: `Selected ${quote(res.selected)} in ${res.element.name ? quote(res.element.name) : 'the dropdown'}.` };
+    const also = form ? await otherChanges(ctx, a.id, form) : '';
+    if (!form) await ctx.browser.send({ kind: 'settle', quietMs: 300, timeoutMs: 1500 }).catch(() => null);
+    return { output: `Selected ${quote(res.selected)} in ${res.element.name ? quote(res.element.name) : 'the dropdown'}.${also}` };
   },
 };
 

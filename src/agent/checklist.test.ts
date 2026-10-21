@@ -28,6 +28,20 @@ describe('the checklist for a request with several things to do', () => {
     expect(list.section()).toContain('Now: item 2');
   });
 
+  it('holds back a tick once when the page shows nothing the item quotes', async () => {
+    const shows = new Set(['[web agent test] serial - review bloods']);
+    const page = { browser: { send: async (r: { text: string }) => ({ found: shows.has(r.text) }) } } as unknown as ToolContext;
+    const list = new Checklist([
+      { text: 'Add recall: group Bloods, note "[web agent test] serial recall" — save', done: false },
+      { text: 'Add task: subject “[web agent test] serial - review bloods” — save', done: false },
+    ]);
+    const tool = checklistTool(list, () => undefined);
+    expect((await tool.execute(tool.schema.parse({ done: 1 }), page)).output).toMatch(/^Not ticked yet: the page doesn't show “\[web agent test\] serial recall”/);
+    expect(list.pending()).toEqual([1, 2]);
+    expect((await tool.execute(tool.schema.parse({ done: 1 }), page)).output).toContain('☑ 1.');
+    expect((await tool.execute(tool.schema.parse({ done: 2 }), page)).output).toContain('☑ 2.');
+  });
+
   it('takes items sent as one string, one per line', () => {
     const tool = checklistTool(new Checklist(), () => undefined);
     expect(tool.schema.parse({ items: '1. Hypertension\n- Asthma\n' }).items).toEqual(['Hypertension', 'Asthma']);

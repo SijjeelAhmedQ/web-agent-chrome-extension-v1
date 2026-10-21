@@ -224,6 +224,14 @@ describe('prompt and context', () => {
     expect(msgs[2].content).toMatch(/^Done with the user’s approval: Click “Delete” — row 1 “Essential hypertension”\n\[Result of an earlier step/);
     expect(msgs[3].content).toMatch(/^\[Result of an earlier step/);
   });
+  it('cuts even the newest steps rather than let the server drop the request', () => {
+    const msgs: ChatMessage[] = [{ role: 'system', content: 'rules '.repeat(1000) }, { role: 'user', content: 'add a medication, a task, a recall and a diagnosis' }];
+    msgs.push({ role: 'tool', toolName: 'read_page', toolCallId: 'p', content: `Page: Consult\n${'[1] link "x"\n'.repeat(300)}` });
+    for (let i = 0; i < 3; i++) msgs.push({ role: 'tool', toolName: 'site_knowledge', toolCallId: `k${i}`, content: 'how to add a diagnosis '.repeat(400) });
+    compactMessages(msgs, 4_000);
+    expect(msgs.reduce((n, m) => n + estimateTokens(m.content) + 4, 0)).toBeLessThanOrEqual(4_000);
+    expect(msgs[1].content).toBe('add a medication, a task, a recall and a diagnosis');
+  });
   it('estimates more tokens for digits', () => {
     expect(estimateTokens('2026-10-15')).toBeGreaterThan(estimateTokens('abcdefghij'));
   });
