@@ -49,6 +49,16 @@ export function pickerState(field: Element): PickerState | null {
 }
 
 export function formFields(d: Element): string[] {
+  const { lines } = readForm(d);
+  return lines.length >= 3 ? lines.slice(0, 40) : [];
+}
+
+/** What the form holds now, by the names it shows — for the approval (fields that can't be changed left out). */
+export function formValues(d: Element): { label: string; value: string }[] {
+  return readForm(d).values.filter((v) => !v.fixed && v.value).map(({ label, value }) => ({ label, value }));
+}
+
+function readForm(d: Element): { lines: string[]; values: { label: string; value: string; fixed: boolean }[] } {
   // Not the fields of another pop-up opened inside this one.
   const own = (f: Element) => {
     const host = f.closest(POPUPS);
@@ -58,6 +68,7 @@ export function formFields(d: Element): string[] {
     (f) => own(f) && !(isInput(f) && ['hidden', 'button', 'submit', 'reset', 'image', 'file'].includes(f.type)) && isVisible(f),
   );
   const lines: string[] = [];
+  const values: { label: string; value: string; fixed: boolean }[] = [];
   const radiosDone = new Set<string>();
   const pickersDone = new Set<Element>();
   for (const f of fields) {
@@ -73,11 +84,14 @@ export function formFields(d: Element): string[] {
       const options = radios.map((r) => `${accessibleName(r) || r.value}${r.checked ? ' (chosen)' : ''}`);
       const label = seen.text || 'Choice';
       lines.push(`- ${label}${required ? '*' : ''} — choose one: ${list(options)}${radios.some((r) => r.checked) ? '' : ' — none chosen'}`);
+      const chosen = radios.find((r) => r.checked);
+      if (seen.text && chosen) values.push({ label: seen.text, value: accessibleName(chosen) || chosen.value, fixed: !!fixed });
       continue;
     }
     if (isInput(f) && f.type === 'checkbox') {
       const name = accessibleName(f) || seen.text;
       if (name) lines.push(`- ${name} — tick box: ${f.checked ? 'ticked' : 'not ticked'}${fixed}`);
+      if (name && f.checked) values.push({ label: name, value: 'Yes', fixed: !!fixed });
       continue;
     }
     // A mask (“__/__/____”) is not a name: the label the page shows is.
@@ -89,6 +103,7 @@ export function formFields(d: Element): string[] {
       const options = Array.from(f.options).map((o) => clean(o.text)).filter((o) => o && !/^-+\s*select\s*-+$/i.test(o));
       const empty = !value || /^-+\s*select\s*-+$/i.test(value);
       lines.push(`- ${name}${required ? '*' : ''} — dropdown: ${empty ? 'empty' : `“${value}”`}; options: ${list(options)}${fixed}`);
+      if (!empty) values.push({ label: name, value, fixed: !!fixed });
       continue;
     }
     const picker = pickerState(f);
@@ -103,6 +118,7 @@ export function formFields(d: Element): string[] {
           ? `- ${name}${required ? '*' : ''} — picker that can hold several: ${shown} (add one: type its name and choose it; take one off: its “Unselect” ×)${fixed}`
           : `- ${name}${required ? '*' : ''} — dropdown: ${shown}${picker.options.length ? `; options: ${list(picker.options)}` : ''} (open it, type to narrow, choose)${fixed}`,
       );
+      if (picker.chosen.length) values.push({ label: name, value: picker.chosen.join(', '), fixed: !!fixed });
       continue;
     }
     const value = clean((f as HTMLInputElement | HTMLTextAreaElement).value ?? '');
@@ -112,6 +128,7 @@ export function formFields(d: Element): string[] {
     const blank = !value || /^[_\s/.:-]+$/.test(value);
     const shown = blank ? 'empty' : `“${value.length > 60 ? `${value.slice(0, 59)}…` : value}”`;
     lines.push(`- ${name}${required ? '*' : ''} — ${kind}: ${shown}${fixed}`);
+    if (!blank) values.push({ label: name, value: value.length > 120 ? `${value.slice(0, 119)}…` : value, fixed: !!fixed });
   }
-  return lines.length >= 3 ? lines.slice(0, 40) : [];
+  return { lines, values };
 }

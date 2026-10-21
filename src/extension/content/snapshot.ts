@@ -15,7 +15,7 @@ import {
   roleOf,
 } from './elements';
 import { visualRows } from './rows';
-import { formFields, pickerOf, pickerState } from './form';
+import { formFields, formValues, pickerOf, pickerState } from './form';
 import { isAnchor, isButton, isHTML, isInput, isSelect, isTextArea } from './dom';
 
 const clip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
@@ -539,7 +539,12 @@ export function describeRisk(el: Element): ElementRisk {
         /search/i.test(form.getAttribute('action') ?? '') ||
         fields.some((f) => (f as HTMLInputElement).type === 'search' || /^(q|query|search|s|k|keywords?|term)$/i.test(f.getAttribute('name') ?? ''))),
     formSubmitLabels: submitLabels,
-    formValues: filledValues(form ?? el.closest('dialog,[role=dialog],[aria-modal=true]')),
+    // A pop-up form: its fields as the live form reading names them (pickers, radios, ticks); else the form's filled fields.
+    formValues: (() => {
+      const dialog = el.closest(DIALOGS);
+      const live = dialog ? formValues(dialog) : [];
+      return live.length ? live : filledValues(form ?? el.closest('dialog,[role=dialog],[aria-modal=true]'));
+    })(),
     formActions: actions,
     shown: el.isConnected && isVisible(el),
   };
