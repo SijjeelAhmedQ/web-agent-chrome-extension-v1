@@ -408,6 +408,16 @@ export function contextOf(el: Element): string | undefined {
     const name = clean(form.getAttribute('aria-label') ?? form.getAttribute('name'), 40) || clean(form.querySelector('legend,h1,h2,h3')?.textContent, 40);
     if (name) return `form “${name}”`;
   }
+  // An icon with no words of its own (⌄, ⟳, 🖨): the bar it sits in tells which list it belongs to —
+  // the task list's ⌄ (“Records 1 to 1 of 1”) is not the timeline's (“21 October, 2026”).
+  if (!clean((el as HTMLElement).innerText ?? el.textContent ?? '')) {
+    let box = el.parentElement;
+    for (let depth = 0; box && depth < 4; depth++, box = box.parentElement) {
+      const words = clean((box as HTMLElement).innerText ?? '', 80);
+      if (words.length >= 4 && words.length < 80 && /\p{L}{2}/u.test(words)) return `bar “${words}”`;
+      if (words.length >= 80) break;
+    }
+  }
   return undefined;
 }
 
@@ -511,7 +521,9 @@ function isPointerClickable(el: Element): boolean {
   if (parent.closest('a[href],button,[role=button],[role=link],[role=option],[role=menuitem],[role=tab],label')) return false;
   const style = getComputedStyle(el);
   if (style.cursor !== 'pointer') return false;
-  if (getComputedStyle(parent).cursor === 'pointer') return false;
+  // The pointer box around it is the control — unless that box has no size of its own (an <a> collapsed
+  // around a floated ⌄ icon): then the icon is what the user clicks.
+  if (getComputedStyle(parent).cursor === 'pointer' && isVisible(parent)) return false;
   if (!isVisible(el)) return false;
   const name = accessibleName(el);
   return name.length > 0 && name.length < 120;

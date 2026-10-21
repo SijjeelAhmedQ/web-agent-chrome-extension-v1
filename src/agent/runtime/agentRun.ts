@@ -321,7 +321,7 @@ export class AgentRun {
           const unseen = await this.unseenQuotes(ctx, answer, request, messages);
           if (unseen.length) {
             messages.push({ role: 'assistant', content: answer });
-            messages.push({ role: 'user', content: `${NOT_FINISHED_PROMPT} your answer quotes ${unseen.map((q) => `"${q}"`).join(', ')} as what the page shows, but no tool result in this task and nothing on the page now has ${unseen.length === 1 ? 'it' : 'them'}. Call read_page and answer only from what the page shows.` });
+            messages.push({ role: 'user', content: `${NOT_FINISHED_PROMPT} your answer quotes ${unseen.map((q) => `"${q}"`).join(', ')} as what the page shows, but no tool result in this task and nothing on the page now has ${unseen.length === 1 ? 'it' : 'them'}. Call read_page and answer only from what the page shows — give the user the answer itself, without mentioning this check or your earlier wording.` });
             continue;
           }
         }
