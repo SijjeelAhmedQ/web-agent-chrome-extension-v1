@@ -268,6 +268,19 @@ async function clickAndReport(ctx: ToolContext, elementId: number, double: boole
     const real = await realClick(ctx, elementId, label, double, openedTab).catch(() => null);
     if (real) return real;
   }
+  // A form's Save that changed nothing, its pop-up still open: it was refused — not “fine”. Say which
+  // required fields are still empty, or the model goes on as if it had saved (and presses Complete).
+  if (!changed() && effect && /^(save|submit|ok|done|add|update|confirm|apply)\b/i.test(res.element.name ?? '')) {
+    const shown = await ctx.browser.send({ kind: 'dialogs', waitMs: 300, settle: false }).catch(() => null);
+    const form = shown?.dialogs[0]?.form ?? [];
+    if (form.length) {
+      const missing = form.filter((l) => /^- [^—]*\*\s—/.test(l) && /:\s*empty\b|none chosen/.test(l)).map((l) => l.replace(/^- /, '').replace(/\s—.*$/, ''));
+      return {
+        output: `${verb} ${label}, but the form is still open and nothing changed — it was NOT saved.${missing.length ? ` Required fields still empty: ${missing.join(', ')}. Fill them (a field with suggestions needs one of them clicked), then press ${label} again.` : ' Read the page: look for a message or a required field that is not set, fix it, then press it again.'} Don't press any other of the form's buttons instead.`,
+        note: 'Not saved — the form is still open',
+      };
+    }
+  }
   if (!changed() && effect && !opener) {
     return { output: `${verb} ${label}. Nothing on the page changed — fine if there was nothing to do (e.g. the fields were already empty). Don’t click it again; carry on with the next step.${covered}`, note: 'Nothing changed' };
   }

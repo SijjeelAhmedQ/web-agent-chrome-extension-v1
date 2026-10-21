@@ -562,7 +562,7 @@ export class AgentRun {
         }
         // No to a pop-up form's buttons: its own Cancel is pressed too — cancelled here means cancelled there.
         if (answer === false && approvalNeeded.choices?.length) {
-          const cancel = approvalNeeded.choices.find((c) => /^(cancel|close)$/i.test(c.label));
+          const cancel = approvalNeeded.choices.find((c) => /^(cancel|close)\b/i.test(c.label));
           if (cancel) await ctx.browser.send({ kind: 'click', id: cancel.id, highlight: true }).catch(() => undefined);
           finish({ status: 'skipped', note: cancel ? `You cancelled — pressed “${cancel.label}” on the form` : 'You declined' });
           this.endWith = cancel ? `Cancelled — you said no, so I pressed the form's “${cancel.label}” too. Nothing was saved.` : declinedAnswer(approvalNeeded.title);

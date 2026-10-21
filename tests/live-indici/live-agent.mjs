@@ -72,8 +72,21 @@ try {
       if (await panel.$('.approval')) {
         const text = await panel.$eval('.approval', (e) => e.innerText.replace(/\s+/g, ' '));
         const ok = !!approve && approve.test(text);
-        say(`  approval: ${text.slice(0, 300)} → ${ok ? 'APPROVED' : 'declined'}`);
-        await panel.$eval(ok ? '.approval .ant-btn-primary' : '.approval .ant-btn:not(.ant-btn-primary)', (b) => b.click());
+        if (await panel.$('.approval-choices')) {
+          // A form's own buttons: approve means only APPROVE_BUTTON (Save) — never Complete or another;
+          // anything else is a no, given with the card's cancel-like button.
+          const want = process.env.APPROVE_BUTTON ?? 'Save';
+          const pressed = await panel.$$eval('.approval-choices button', (bs, want, ok) => {
+            const label = (b) => b.textContent.trim();
+            const pick = (ok && bs.find((b) => label(b) === want)) || bs.find((b) => /^(cancel|close|not now)/i.test(label(b)));
+            pick?.click();
+            return pick ? label(pick) : 'nothing';
+          }, want, ok);
+          say(`  approval (form buttons): ${text.slice(0, 300)} → pressed “${pressed}”`);
+        } else {
+          say(`  approval: ${text.slice(0, 300)} → ${ok ? 'APPROVED' : 'declined'}`);
+          await panel.$eval(ok ? '.approval .ant-btn-primary' : '.approval .ant-btn:not(.ant-btn-primary)', (b) => b.click());
+        }
         await sleep(800);
       }
       if (await panel.$$eval('.turn', (x, n) => x.length > n && !!x.at(-1).querySelector('.activity.done, .activity.failed, .notice.error'), before)) break;

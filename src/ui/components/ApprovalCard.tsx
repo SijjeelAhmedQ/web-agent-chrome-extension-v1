@@ -3,7 +3,7 @@ import { ShieldAlert } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import type { ApprovalAnswer, ApprovalPrompt } from '@/agent/runtime/events';
 
-const CANCELS = /^(cancel|close)$/i;
+const CANCELS = /^(cancel|close)\b/i;
 
 /** Asks before consequential actions. Focus lands on Cancel — the safe choice. */
 export function ApprovalCard({ prompt, onRespond }: { prompt: ApprovalPrompt; onRespond: (answer: ApprovalAnswer) => void }) {

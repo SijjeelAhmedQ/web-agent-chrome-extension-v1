@@ -123,7 +123,7 @@ function readForm(d: Element): { lines: string[]; values: { label: string; value
     }
     const value = clean((f as HTMLInputElement | HTMLTextAreaElement).value ?? '');
     const placeholder = f.getAttribute('placeholder') ?? '';
-    const date = (isInput(f) && f.type === 'date') || DATE_MASK.test(placeholder) || DATE_MASK.test(value) || /date|dob/i.test(name);
+    const date = (isInput(f) && f.type === 'date') || DATE_MASK.test(placeholder) || DATE_MASK.test(value) || /\bdate\b|\bdob\b/i.test(name);
     const kind = isTextArea(f) ? 'text box' : date ? 'date (DD/MM/YYYY)' : 'text';
     const blank = !value || /^[_\s/.:-]+$/.test(value);
     const shown = blank ? 'empty' : `“${value.length > 60 ? `${value.slice(0, 59)}…` : value}”`;
