@@ -218,20 +218,20 @@
           "id": "kb_inbox_6",
           "kind": "workflow",
           "title": "Add a recall",
-          "content": "1. The consult of the patient it is for must be open. If it already is (the patient's name is at the top of the consult), work there — don't search for the patient again. If no consult or another patient's consult is open, tell the user to open the patient first.\n   Then click \"Recall\" in the left sidebar, and the ⊕ icon at the top right of the Recall list. The \"Recall\" form opens.\n2. Ask the user for what they didn't give: Recall Group, Description (its options depend on the Recall Group — choose the group first, then read the description options and offer them), and when: a period for \"Recall-in\" (e.g. 2 Day(s), 3 weeks, 3 months) or a date.\n3. Fill: Recall Group, then Description, Note (if given), Recall-in (choose the period) — Due Date fills itself; or type the date the user gave into Due Date. Priority, Cycle, Confidential, Do not show on Portal: only if the user said. Leave Provider and Active as they are.\n4. Click \"Save\" (not \"Complete\") — the user approves it. Check the recall is in the list, then tell the user.",
+          "content": "1. The consult of the patient it is for must be open. If it already is (the patient's name is at the top of the consult), work there — don't search for the patient again. If no consult or another patient's consult is open, tell the user to open the patient first.\n   Then click \"Recall\" in the left sidebar, and the ⊕ icon at the top right of the Recall list. The \"Recall\" form opens.\n2. Fill what the user gave (rule \"Filling a form\"): \"bowel screening\" → the matching Recall Group and Description (choose the group first, then read the Description options); \"in 3 months\" → Recall-in 3 Month(s). Ask only for a required field still empty that the user didn't give — with its name as on the form.\n3. Fill: Recall Group, then Description, Note (if given), Recall-in (choose the period) — Due Date fills itself; or type the date the user gave into Due Date. Priority, Cycle, Confidential, Do not show on Portal: only if the user said. Leave Provider and Active as they are.\n4. Click \"Save\" (not \"Complete\") — the user approves it. Check the recall is in the list, then tell the user.",
           "enabled": true,
           "createdAt": 1792506198652,
-          "updatedAt": 1792506198652,
+          "updatedAt": 1792569289951,
           "trigger": "add a recall for bowel screening in 3 months"
         },
         {
           "id": "kb_inbox_7",
           "kind": "workflow",
           "title": "Add a task",
-          "content": "1. The consult of the patient it is for must be open. If it already is (the patient's name is at the top of the consult), work there — don't search for the patient again. If no consult or another patient's consult is open, tell the user to open the patient first.\n   Then click \"Task\" in the left sidebar, and the ⊕ icon at the top right of the task list. \"Add Task\" opens.\n2. Ask the user for what they didn't give: the subject, who it is \"To\" (a provider — read the options), the \"Type\" (read the options), the priority and the due date.\n3. Fill: Subject / Progress, To (remove the provider already there if the user named another), Priority, Due (DD/MM/YYYY), Type; Start stays today unless the user said. Leave Patient, From, Status and the checkboxes as they are unless the user said.\n4. Click \"Save\" (not \"Complete\" or \"Reset\") — the user approves it. Check it is in the task list, then tell the user.",
+          "content": "1. The consult of the patient it is for must be open. If it already is (the patient's name is at the top of the consult), work there — don't search for the patient again. If no consult or another patient's consult is open, tell the user to open the patient first.\n   Then click \"Task\" in the left sidebar, and the ⊕ icon at the top right of the task list. \"Add Task\" opens.\n2. Fill what the user gave (rule \"Filling a form\"): Subject / Progress from the request (e.g. \"Review bloods\"); Due from when (\"next week\" → today + 7 days). To, Priority, Start and Status already have values — keep them unless the user named others (another provider for To: remove the one there with × and choose theirs). Type has no * — fill it only if the user said. Leave Patient, From and the checkboxes as they are.\n3. Ask only for a required (*) field still empty — with its name as on the form.\n4. Click \"Save\" (not \"Complete\" or \"Reset\") — the user approves it. Check it is in the task list, then tell the user.",
           "enabled": true,
           "createdAt": 1792506198652,
-          "updatedAt": 1792506198652,
+          "updatedAt": 1792569289951,
           "trigger": "add a task for Arya to review her bloods next week"
         },
         {
@@ -261,6 +261,15 @@
           "enabled": true,
           "createdAt": 1792515345673,
           "updatedAt": 1792520286911
+        },
+        {
+          "id": "kb_forms_0",
+          "kind": "rule",
+          "title": "Filling a form — ask only for what is missing",
+          "content": "- Fill every field the user's request gives a value for, in the user's words tidied: \"review her bloods next week\" → Subject / Progress: \"Review bloods\". Work out dates from today's date (DD/MM/YYYY): \"next week\" → today + 7 days, \"in 3 months\" → today + 3 months.\n- A field that already has a value (To, Priority, Start, Status…) stays as it is — change it only if the user named another value.\n- Ask the user only for required fields (marked *) that are still empty and that the user didn't give. Never ask about optional fields (no *) or fields that already have a value.\n- When you ask, use the field names exactly as the form shows them (e.g. \"Subject / Progress\", \"Due\", \"Recall Group\") — in one short question.\n- Nothing missing: fill the form and click Save — the approval shows the values; don't ask in chat first.",
+          "enabled": true,
+          "createdAt": 1792569289951,
+          "updatedAt": 1792569289951
         },
         {
           "id": "kb_search_0",

@@ -40,12 +40,12 @@ export const activeKnowledge = (profiles: SiteProfile[]) => profiles.flatMap((p)
 
 /**
  * How many characters of site knowledge fit a model: about a fifth of its context window
- * (16k tokens → ~13k characters), never less than 3,000 or more than 24,000.
+ * (16k tokens → ~13k characters), never less than 3,000 or more than 48,000.
  */
 export function knowledgeBudget(contextTokens: number | undefined): number {
   // No limit given: a cloud model (DeepSeek, Claude, GPT…) with a large context — room for a site's whole knowledge.
-  if (!contextTokens) return 24_000;
-  return Math.min(24_000, Math.max(3_000, Math.round(contextTokens * 0.8)));
+  if (!contextTokens) return 48_000;
+  return Math.min(48_000, Math.max(3_000, Math.round(contextTokens * 0.8)));
 }
 
 /** The prompt section for the sites the agent is on, within about `budget` characters. */
