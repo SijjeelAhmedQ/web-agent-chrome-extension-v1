@@ -294,3 +294,12 @@ describe('tool schemas the providers accept', () => {
     expect(specs).not.toMatch(/"nullable":/);
   });
 });
+
+describe('the wrong-row guard and words for the same action', () => {
+  it('lets “delete the HBA1C recall” press that row’s Inactive icon', async () => {
+    const { wrongRowClick } = await import('./runtime/clickGuard');
+    const inactive = { name: 'Inactive', role: 'image', context: 'row 14 “HBA1C · [web agent test] HbA1c recall · 6 Day(s)”' };
+    expect(wrongRowClick('delete Arya’s recall HBA1C', inactive)).toBeNull();
+    expect(wrongRowClick('open the HBA1C recall', inactive)).not.toBeNull();
+  });
+});

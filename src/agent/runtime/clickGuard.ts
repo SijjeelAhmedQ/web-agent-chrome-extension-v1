@@ -20,8 +20,20 @@ export function namedIn(request: string, item: string): boolean {
 const GENERIC = new Set(['icon', 'button', 'image', 'link', 'the', 'and', 'for', 'open', 'click', 'here', 'more']);
 
 /** Does the request ask for what this control does (“book appointment for arya stark” → “Book appointment”)? */
+/** Words a user says for what a control is called otherwise (“delete” a recall = its “Inactive” icon). */
+const SAME_ACTION: Record<string, string[]> = {
+  delete: ['inactive', 'inactivate', 'deactivate', 'remove', 'trash', 'archive'],
+  remove: ['inactive', 'inactivate', 'deactivate', 'delete', 'trash'],
+  change: ['edit', 'update', 'modify'],
+  update: ['edit', 'modify'],
+  modify: ['edit', 'update'],
+  finish: ['complete', 'done'],
+  close: ['complete'],
+};
+
 function asksFor(request: string, control: string): boolean {
-  const asked = words(request).filter((w) => w.length >= 4);
+  const said = words(request);
+  const asked = [...said, ...said.flatMap((w) => SAME_ACTION[w] ?? [])].filter((w) => w.length >= 4);
   const does = words(control).filter((w) => w.length >= 4 && !GENERIC.has(w));
   const stem = (w: string) => w.slice(0, 5);
   return does.some((d) => asked.some((a) => stem(a) === stem(d)));
