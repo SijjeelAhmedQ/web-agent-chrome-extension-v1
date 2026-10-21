@@ -243,6 +243,29 @@ function setFieldValue(field: HTMLInputElement | HTMLTextAreaElement, value: str
   field.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, inputType: data ? 'insertText' : 'deleteContentBackward', data }));
 }
 
+/** Calendars that open on a date field (bootstrap-datepicker, jQuery UI, flatpickr, Kendo, pikaday…). */
+const DATE_PICKERS = '.datepicker-dropdown,.ui-datepicker,.flatpickr-calendar.open,.daterangepicker,.bootstrap-datetimepicker-widget,.k-calendar-container,.pika-single:not(.is-hidden),.react-datepicker-popper,.xdsoft_datetimepicker';
+
+/**
+ * A date typed in full needs no calendar: close the one it opened, as a person would — Tab out of
+ * the field, then a press outside it. Not Escape: on many sites that closes the whole pop-up.
+ */
+async function closeDatePicker(field: HTMLElement): Promise<void> {
+  const open = () => Array.from(field.ownerDocument.querySelectorAll(DATE_PICKERS)).some((p) => isVisible(p));
+  await sleep(120);
+  if (!open()) return;
+  const key = (type: string) => field.dispatchEvent(new KeyboardEvent(type, { key: 'Tab', code: 'Tab', keyCode: 9, which: 9, bubbles: true, cancelable: true } as KeyboardEventInit));
+  key('keydown');
+  key('keyup');
+  await sleep(150);
+  if (!open()) return;
+  // A press on the form around the field (not on the calendar) — what “click elsewhere” does.
+  const around = field.closest('.modal-body,form,[role=dialog],.modal') ?? field.ownerDocument.body;
+  for (const type of ['mousedown', 'mouseup']) around.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: field.ownerDocument.defaultView }));
+  field.blur();
+  await sleep(150);
+}
+
 export async function type(id: number, text: string, clearFirst: boolean, show: boolean): Promise<TypeResult> {
   const el = resolve(id);
   if (isDisabled(el)) fail('disabled', `“${accessibleName(el) || 'That field'}” is disabled.`);
@@ -260,6 +283,7 @@ export async function type(id: number, text: string, clearFirst: boolean, show: 
     setFieldValue(field, start + text, text);
     field.dispatchEvent(new KeyboardEvent('keyup', { key: last, bubbles: true, composed: true }));
     field.dispatchEvent(new Event('change', { bubbles: true }));
+    await closeDatePicker(field);
     return { element: summary(el), value: field.type === 'password' ? '••••' : field.value };
   }
 
