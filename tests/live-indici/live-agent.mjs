@@ -1,0 +1,84 @@
+// The real Web Agent, with a real model (DeepSeek on OpenRouter), on the live Indici training site,
+// in the window the user logged in to. Requests come one per turn:
+//   REQUESTS='["open arya stark", "follow up"]' APPROVE='reason to view' node live-agent.mjs
+// Approvals are declined unless their text matches APPROVE (a regex) — writes only with the user's leave.
+// The key is read from the user's file at run time; it is never printed or saved anywhere else.
+import puppeteer from 'puppeteer';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { DIR } from './indici-live.mjs';
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const key = readFileSync('C:/Users/92313/.webagent-openrouter.env', 'utf8').match(/OPENROUTER_KEY\s*=\s*(\S+)/)?.[1];
+if (!key) throw new Error('no OPENROUTER_KEY in the env file');
+const requests = JSON.parse(process.env.REQUESTS ?? '[]');
+const approve = process.env.APPROVE ? new RegExp(process.env.APPROVE, 'i') : null;
+const restore = JSON.parse(readFileSync("D:/learing AI after Movement in Syed Ammar's Team/web-agent-chrome-extension/knowledge/web-agent-restore-indici.json", 'utf8'));
+const extId = readFileSync(join(DIR, 'ext-id.txt'), 'utf8').trim();
+
+const browser = await puppeteer.connect({ browserWSEndpoint: readFileSync(join(DIR, 'indici-ws.txt'), 'utf8').trim(), defaultViewport: null, protocolTimeout: 1800000 });
+const log = [];
+const say = (s) => { console.log(s); log.push(s); };
+let panel;
+try {
+  const site = (await browser.pages()).filter((p) => /vitonta\.com/.test(p.url())).at(-1);
+  panel = await browser.newPage();
+  await panel.setViewport({ width: 460, height: 1000 });
+  // Every model call, as sent and as answered — to see what the model saw (the key header is not kept).
+  const calls = [];
+  panel.on('response', async (res) => {
+    if (!/openrouter\.ai\/api\/v1\/chat/.test(res.url())) return;
+    try {
+      calls.push({ request: JSON.parse(res.request().postData() ?? '{}'), response: await res.json() });
+      writeFileSync(join(DIR, 'model-calls.json'), JSON.stringify(calls, null, 1));
+    } catch {}
+  });
+  await panel.goto(`chrome-extension://${extId}/sidepanel.html`);
+  const provider = { id: 'p', name: 'OpenRouter', kind: 'openai', preset: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', apiKey: key, timeoutMs: 300000, defaultModel: process.env.MODEL ?? '~deepseek/deepseek-v4-flash-latest', createdAt: 1 };
+  if (!process.env.KEEP_CHAT) {
+    await panel.evaluate(async (provider, agents, sites) => {
+      const toolIds = agents[0].toolIds;
+      await chrome.storage.local.set({ 'wa.config': { version: 1, providers: [provider], agents: agents.map((a) => ({ ...a, providerId: 'p' })), skills: [], customTools: [], sites, settings: { defaultProviderId: 'p', defaultAgentId: agents[0].id, developerMode: true, expandActivity: true, autoBackup: false, knownToolIds: toolIds } } });
+      await chrome.storage.session.remove('wa.chat');
+    }, provider, restore.agents, restore.sites);
+  }
+  await site.bringToFront();
+  await panel.reload();
+  await panel.waitForSelector('#composer-input');
+  await sleep(800);
+  for (const request of requests) {
+    say(`\n>>> ${request}`);
+    const before = await panel.$$eval('.turn', (x) => x.length);
+    await panel.$eval('#composer-input', (el) => el.focus());
+    await panel.keyboard.type(request);
+    await panel.keyboard.press('Enter');
+    const t0 = Date.now();
+    for (;;) {
+      if (Date.now() - t0 > 20 * 60_000) throw new Error('timed out');
+      if (await panel.$('.approval') && process.env.NO_ANSWER) {
+        // Show the card only: a picture of it, then leave without pressing anything.
+        await sleep(800);
+        await panel.screenshot({ path: join(DIR, 'captures', 'approval-card.png'), fullPage: true });
+        say(`  approval shown, not answered: ${await panel.$eval('.approval', (e) => e.innerText.replace(/\s+/g, ' '))}`);
+        break;
+      }
+      if (await panel.$('.approval')) {
+        const text = await panel.$eval('.approval', (e) => e.innerText.replace(/\s+/g, ' '));
+        const ok = !!approve && approve.test(text);
+        say(`  approval: ${text.slice(0, 300)} → ${ok ? 'APPROVED' : 'declined'}`);
+        await panel.$eval(ok ? '.approval .ant-btn-primary' : '.approval .ant-btn:not(.ant-btn-primary)', (b) => b.click());
+        await sleep(800);
+      }
+      if (await panel.$$eval('.turn', (x, n) => x.length > n && !!x.at(-1).querySelector('.activity.done, .activity.failed, .notice.error'), before)) break;
+      await sleep(1000);
+    }
+    await sleep(600);
+    say(`--- ${Math.round((Date.now() - t0) / 1000)}s ---\n${await panel.$eval('.turn:last-child', (e) => e.innerText)}`);
+  }
+  await panel.screenshot({ path: join(DIR, 'captures', 'agent-panel.png'), fullPage: true });
+  await site.screenshot({ path: join(DIR, 'captures', 'agent-site.png') });
+} finally {
+  writeFileSync(join(DIR, 'agent-run.log'), log.join('\n'));
+  if (panel && !process.env.KEEP_PANEL) await panel.close().catch(() => {});
+  browser.disconnect();
+}

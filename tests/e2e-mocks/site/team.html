@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Clinic Records</title>
+<style>body{font-family:sans-serif;margin:24px} form{border:1px solid #ddd;padding:12px;margin:12px 0} .row{margin:6px 0}</style></head>
+<body>
+<h1>Clinic Records — Tom Baker</h1>
+<form id="med" onsubmit="event.preventDefault(); save('meds', {name: v('mname'), dose: v('mdose'), freq: v('mfreq')})">
+  <h2>Add medication</h2>
+  <div class="row"><label for="mname">Medication name</label> <input id="mname" required></div>
+  <div class="row"><label for="mdose">Dosage</label> <input id="mdose"></div>
+  <div class="row"><label for="mfreq">Frequency</label> <select id="mfreq"><option value="">Choose…</option><option>Once daily</option><option>Twice daily</option></select></div>
+  <button type="submit">Save medication</button>
+</form>
+<form id="dx" onsubmit="event.preventDefault(); save('dx', {name: v('dname')})">
+  <h2>Add diagnosis</h2>
+  <div class="row"><label for="dname">Diagnosis</label> <input id="dname" required></div>
+  <button type="submit">Save diagnosis</button>
+</form>
+<form id="task" onsubmit="event.preventDefault(); save('tasks', {title: v('ttitle')})">
+  <h2>Add task</h2>
+  <div class="row"><label for="ttitle">Task</label> <input id="ttitle" required></div>
+  <button type="submit">Save task</button>
+</form>
+<div id="saved"></div>
+<script>
+function v(id){return document.getElementById(id).value}
+function save(key, rec){
+  const list = JSON.parse(localStorage.getItem('clinic.'+key) || '[]'); list.push(rec);
+  localStorage.setItem('clinic.'+key, JSON.stringify(list));
+  document.getElementById('saved').textContent = 'Saved ' + key + ': ' + JSON.stringify(rec);
+  event.target.reset();
+}
+</script></body></html>

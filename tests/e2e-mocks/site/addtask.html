@@ -1,0 +1,36 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Consult Detail</title>
+<style>body{font:13px Arial,sans-serif;margin:0}.modal{position:fixed;top:20px;left:40px;width:1000px;background:#fff;border:1px solid #999;z-index:20}
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:10}.row{display:flex;align-items:center;margin:6px 0}.lbl{width:140px;color:#2a7ab0;font-weight:bold}
+.req{color:red}.select2-container{border:1px solid #ccc;min-width:300px;padding:2px}.select2-selection__choice{display:inline-block;background:#eee;border:1px solid #aaa;padding:1px 4px}
+.left{float:left;width:400px;margin:10px}.right{float:left;width:540px;margin:10px}.foot{clear:both;padding:10px;text-align:right}</style><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-datepicker@1.10.0/dist/css/bootstrap-datepicker3.standalone.min.css">
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap-datepicker@1.10.0/dist/js/bootstrap-datepicker.min.js"></script></head>
+<body>
+<h3>Consult Detail — Arya STARK</h3>
+<div><button type="button" onclick="window.__clicked='page-save'">Save</button> <span>Consult notes</span></div>
+<div class="modal-backdrop"></div>
+<div class="modal in" role="dialog" style="display:block">
+  <h4 class="modal-title">Add Task</h4>
+  <div class="left">
+    <div class="lbl">Subject / Progress: <span class="req">*</span></div>
+    <textarea id="subj" placeholder="Enter Task Subject/Progress" style="width:380px;height:200px"></textarea>
+  </div>
+  <div class="right">
+    <div class="row"><span class="lbl">Location:</span><select><option>All</option><option>Victoria Clinic</option></select></div>
+    <div class="row"><span class="lbl">To:<span class="req">*</span></span><span class="select2-container select2-container--multi"><span class="select2-selection__choice">PM Judy GILMOUR (Practice Manager) <span class="select2-selection__choice__remove">×</span></span> <input class="select2-search__field" style="width:80px"></span>
+      <select multiple style="display:none"><option selected>PM Judy GILMOUR (Practice Manager)</option><option>Kanna GOUNDAR</option></select></div>
+    <div class="row"><span class="lbl">From:</span><input value="Chadmin CHADMIN (Doctor)" readonly></div>
+    <div class="row"><span class="lbl">Priority:<span class="req">*</span></span><label><input type="radio" name="pri" checked> Normal</label> <label><input type="radio" name="pri"> Medium</label> <label><input type="radio" name="pri"> Urgent</label></div>
+    <div class="row"><span class="lbl">Start:<span class="req">*</span></span><input id="start" placeholder="__/__/____" value="21/10/2026"></div>
+    <div class="row"><span class="lbl">Due-in:</span><input id="duein"></div>
+    <div class="row"><span class="lbl">Due:<span class="req">*</span></span><input id="due" placeholder="__/__/____" value="21/10/2026"></div>
+    <div class="row"><span class="lbl">Status:<span class="req">*</span></span><label><input type="radio" name="st" checked> Active</label> <label><input type="radio" name="st"> Inactive</label> <label><input type="radio" name="st"> Completed</label></div>
+    <div class="row"><span class="lbl">Type:</span><select><option>--Select--</option><option>call back task</option><option>Referral follow-up</option><option>Remind Me</option></select></div>
+    <div class="row"><label><input type="checkbox" id="conf"> Confidential</label></div>
+    <div class="row"><label><input type="checkbox"> Add to Timeline</label></div>
+    <div class="row"><label><input type="checkbox"> Add to Prompts</label></div>
+  </div>
+  <div class="foot"><button type="button" style="float:left" onclick="window.__clicked='complete'">Complete</button> <button type="button" onclick="window.__clicked='dialog-save'">Save</button> <button type="button" onclick="window.__clicked='reset'">Reset</button> <button type="button" onclick="window.__clicked='cancel';document.querySelector('.modal').style.display='none';document.querySelector('.modal-backdrop').style.display='none'">Cancel</button></div>
+</div>
+<script>$('#start,#due').datepicker({ format: 'dd/mm/yyyy', autoclose: true }); window.__pickerOpen = () => [...document.querySelectorAll('.datepicker-dropdown')].some((p) => p.offsetWidth > 0);</script>
+</body></html>

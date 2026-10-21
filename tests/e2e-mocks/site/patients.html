@@ -1,0 +1,26 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Patients · Clinic</title>
+<style>body{font-family:sans-serif;margin:24px} td,th{padding:4px 10px;text-align:left}</style></head>
+<body>
+<header id="ctx">No patient selected</header>
+<h1>Patients</h1>
+<input type="search" id="q" placeholder="Search by name or MRN" aria-label="Search patients" oninput="render()">
+<table><thead><tr><th>Patient</th><th>MRN</th><th>Phone</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+<p id="pager"></p>
+<button id="next" onclick="page++;render()">Next page</button>
+<script>
+const people = [
+  ['Tom Baker','MRN-100075','(485) 555-8564'],['Chloe Bell','MRN-100108','(810) 555-2158'],['Sophie Brown','MRN-100065','(392) 555-2744'],
+  ['Josh Clarke','MRN-100103','(814) 555-4910'],['Grace Cooper','MRN-100083','(685) 555-7264'],['Henry Green','MRN-100060','(613) 555-4487'],
+  ['Luke King','MRN-104512','(212) 555-3391'],['Lucy Young','MRN-100091','(415) 555-0021'],
+];
+let page = 0;
+function render(){
+  const q = document.getElementById('q').value.toLowerCase();
+  const list = people.filter(p => !q || p[0].toLowerCase().includes(q) || p[1].toLowerCase().includes(q));
+  const per = 6, start = q ? 0 : page * per, shown = list.slice(start, start + per);
+  document.getElementById('rows').innerHTML = shown.map(p => `<tr><td>${p[0]}</td><td>${p[1]}</td><td>${p[2]}</td><td><button onclick="pick('${p[0]}')">Select</button></td></tr>`).join('');
+  document.getElementById('pager').textContent = `${start + 1}–${start + shown.length} of ${list.length}`;
+}
+function pick(name){ localStorage.setItem('selected', name); document.getElementById('ctx').textContent = 'Selected patient: ' + name; }
+render();
+</script></body></html>

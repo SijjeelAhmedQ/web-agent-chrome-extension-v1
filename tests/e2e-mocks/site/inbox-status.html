@@ -1,0 +1,39 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Consult Detail</title>
+<style>body{font:13px Arial,sans-serif;margin:0}table{border-collapse:collapse;width:900px}td,th{border:1px solid #ccc;padding:4px 6px;text-align:left;vertical-align:top}
+.subj{color:#035;cursor:pointer}.modal{position:fixed;top:30px;left:30px;width:900px;background:#fff;border:1px solid #999;padding:12px;z-index:20;display:none}
+textarea{width:600px;height:70px}.ab{color:red}.gr{color:#777}.r span{display:inline-block;vertical-align:top}.n{width:240px}.m{width:70px;font-size:10px}.f{width:150px}</style></head>
+<body>
+<h3>Mailbox › Inbox</h3>
+<label>File Status: <select id="fs"><option selected>All</option><option>Filed</option><option>Not Filed</option></select></label> <button type="button" onclick="render()">Search</button>
+<table id="list"><thead><tr><th>Imported Date</th><th>Patient</th><th>Subject</th><th>Comments</th><th>Actions</th></tr></thead><tbody></tbody></table>
+<p id="pager"><a href="#" onclick="window.__pagerClicks=(window.__pagerClicks||0)+1;return false">Next</a></p>
+<div class="modal in" role="dialog" id="viewer">
+  <h4 class="modal-title" id="vtitle"></h4>
+  <textarea id="comment" title="Enter comments" placeholder="Enter comments"></textarea>
+  <div><span>Subject:</span> <input id="vsubj"> <span>Result Date:</span> <input id="vdate"></div>
+  <div><label>Provider:* <select id="prov"></select></label> <label>Folder:* <select><option>Inbox</option><option selected>Lab</option></select></label> <label>ACC45: <select id="acc"></select></label></div>
+  <div id="body"></div>
+  <p><input type="button" id="fileBtn" value="File" onclick="toggleFile()"> <input type="button" value="Previous" onclick="go(-1)"> <input type="button" value="Next" onclick="go(1)"> <input type="button" value="OK" onclick="save();close_()"> <input type="button" value="Cancel" onclick="close_()"></p>
+</div>
+<script>
+const recs = [
+  { date: '21-10-2026', patient: 'Arya STARK', subject: 'Testing', comments: '', filed: false, abnormal: true, body: '<div class=ban>Name: Arya STARK</div><div class=ban>Last RX: 21/10/2026</div><div class=r><span class=n><b class=ab>HbA1c</b></span><span class=m>Status</span><span class=f><i class=ab>Abnormal</i></span></div><div class=r><span class=n><b>Bicarbonate blood</b></span><span class=m>Status</span><span class=f><i></i></span></div><div class=r><span class=n><b class=ab>Blood Culture</b></span><span class=m>Status</span><span class=f><i class=ab>Abnormal alert</i></span></div><div class=r><span class=n><b class=ab>Blood Culture</b></span><span class=m>Status</span><span class=f><i class=ab>better</i></span></div><div class=r><span class=n><b class=ab>Blood Group Ab (interpretation)</b></span><span class=m>Status</span><span class=f><i class=ab>decreased</i></span></div><div class=r><span class=n><b class=ab>Blood Test</b></span><span class=m>Status</span><span class=f><i class=ab>High</i></span></div><div class=r><span class=n><b class=ab>Cadmium blood</b></span><span class=m>Status</span><span class=f><i class=ab>intermediate</i></span></div><div class=r><span class=n><b class=ab>CO2 blood ( total)</b></span><span class=m>Status</span><span class=f><i class=ab>increased</i></span></div><div class=ban>Observation Date: 21-Oct-2026 07:38 AM</div>' },
+  { date: '21-10-2026', patient: 'Arya STARK', subject: 'Test Web Agent', comments: '', filed: false, abnormal: true, body: '<div class=ban>Name: Arya STARK</div><div class=ban>Last RX: 21/10/2026</div><div class=r><span class=n><b class=ab>Blood Test</b></span><span class=m>Test</span><span class=f><i class=ab>Abnormal</i></span></div><div class=ban>Observation Date: 21-Oct-2026 07:38 AM</div>' },
+  { date: '21-10-2026', patient: 'Arya STARK', subject: 'Test', comments: 'Test', filed: false, abnormal: false, body: '<div class=ban>Name: Arya STARK</div><div class=ban>Last RX: 21/10/2026</div><div class=r><span class=n><b>HbA1c</b></span><span class=m>Status</span><span class=f><i></i></span></div><div class=ban>Observation Date: 21-Oct-2026 07:38 AM</div>' },
+  { date: '21-10-2026', patient: 'Arya STARK', subject: 'test result normal', comments: 'test result normal heelo world', filed: false, abnormal: true, body: '<div class=ban>Name: Arya STARK</div><div class=ban>Last RX: 21/10/2026</div><div class=r><span class=n><b class=ab>HbA1c</b></span><span class=m>Normal</span><span class=f><i class=ab>Abnormal</i></span></div><div class=r><span class=n><b>Blood Test</b></span><span class=m>Status</span><span class=f><i></i></span></div><div class=ban>Observation Date: 21-Oct-2026 07:38 AM</div>' },
+];
+let cur = -1;
+const shown = () => { const f = document.getElementById('fs').value; return recs.map((r, i) => i).filter((i) => f === 'All' || (f === 'Filed') === recs[i].filed); };
+function render() {
+  document.querySelector('#list tbody').innerHTML = shown().map((i) => { const r = recs[i]; return `<tr class="${r.abnormal ? 'ab' : 'gr'}"><td>${r.date}</td><td>${r.patient}</td><td class="subj" onclick="openRec(${i})">${r.subject}</td><td style="white-space:pre-line">${r.comments}</td><td><img title="View Audit Log" src="data:,"> <img title="Mark as unread" src="data:,"></td></tr>`; }).join('');
+}
+function openRec(i) { cur = i; const r = recs[i]; document.getElementById('vtitle').textContent = `${r.patient} — ${r.subject}`; document.getElementById('vsubj').value = r.subject; document.getElementById('vdate').value = r.date; document.getElementById('comment').value = r.comments; document.getElementById('body').innerHTML = r.body; document.getElementById('fileBtn').value = r.filed ? 'Un File' : 'File'; document.getElementById('viewer').style.display = 'block'; }
+function save() { if (cur >= 0) recs[cur].comments = document.getElementById('comment').value; render(); }
+function go(d) { save(); const list = shown(); const k = list.indexOf(cur) + d; if (k >= 0 && k < list.length) openRec(list[k]); }
+function close_() { document.getElementById('viewer').style.display = 'none'; cur = -1; render(); }
+function toggleFile() { recs[cur].filed = !recs[cur].filed; document.getElementById('fileBtn').value = recs[cur].filed ? 'Un File' : 'File'; render(); }
+window.__recs = recs;
+document.getElementById('prov').innerHTML = Array.from({ length: 120 }, (_, i) => `<option${i === 7 ? ' selected' : ''}>Provider number ${i} Chadmin</option>`).join('');
+document.getElementById('acc').innerHTML = '<option>--Select--</option>' + Array.from({ length: 400 }, (_, i) => `<option>ACC45 code ${i} injury description text</option>`).join('');
+render();
+</script></body></html>

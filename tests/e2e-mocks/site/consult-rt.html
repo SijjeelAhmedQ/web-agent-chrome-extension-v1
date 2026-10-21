@@ -1,0 +1,40 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Consult Detail</title>
+<style>body{font:13px Arial,sans-serif;margin:0;display:flex}#side{width:180px;background:#e6f4f8;padding:8px}#side a{display:block;padding:4px}#main{padding:10px;flex:1}
+table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:3px 6px}.modal{position:fixed;top:40px;left:220px;width:520px;background:#fff;border:1px solid #999;padding:12px;z-index:20;display:none}
+label{display:block;margin:4px 0}</style></head>
+<body>
+<div id="side"><b>Patient Note Functions</b><a href="#" onclick="show('recall');return false">Recall</a><a href="#" onclick="show('task');return false">Task (6/6)</a><a href="#">Medications</a></div>
+<div id="main"><h3>Arya STARK — consult</h3>
+  <div id="recallPanel" style="display:none"><b>Recall</b> <img title="Add" src="data:," style="cursor:pointer;width:14px;height:14px" onclick="open_('recallForm')">
+    <table id="recalls"><tr><th>Description</th><th>Due Date</th></tr><tr><td>Bowel testing</td><td>30-Apr-2026</td></tr></table></div>
+  <div id="taskPanel" style="display:none"><b>Task</b> <img title="Add" src="data:," style="cursor:pointer;width:14px;height:14px" onclick="open_('taskForm')">
+    <table id="tasks"><tr><th>Subject</th><th>To</th><th>Type</th><th>Due</th></tr></table></div>
+</div>
+<div class="modal in" role="dialog" id="recallForm"><h4 class="modal-title">Recall</h4>
+  <label>Provider: <input value="Chadmin CHADMIN" readonly></label>
+  <label>Recall Group: <select id="group" onchange="descs()"><option>--Select--</option><option>Screening</option><option>Immunisation</option></select></label>
+  <label>Description: <select id="desc"><option>--Select--</option></select></label>
+  <label>Note: <textarea id="note"></textarea></label>
+  <label>Recall-in: <select id="rin" onchange="due()"><option>--Select--</option><option>2 Day(s)</option><option>3 weeks</option><option>3 months</option><option>3+ Year</option></select></label>
+  <label>Due Date: <input id="rdue"></label>
+  <input type="button" value="Complete"> <input type="button" value="Save" onclick="saveRecall()"> <input type="button" value="Cancel" onclick="close_('recallForm')">
+</div>
+<div class="modal in" role="dialog" id="taskForm"><h4 class="modal-title">Add Task</h4>
+  <label>Subject / Progress: <textarea id="subj" placeholder="Enter Task Subject/Progress"></textarea></label>
+  <label>To: <select id="to"><option>PM Judy GILMOUR (Practice Manager)</option><option>Kanna GOUNDAR (Doctor)</option><option>Natalia ARGUELLES (Doctor)</option></select></label>
+  Priority: <label style="display:inline"><input type="radio" name="pri" value="Normal" checked> Normal</label> <label style="display:inline"><input type="radio" name="pri" value="Medium"> Medium</label> <label style="display:inline"><input type="radio" name="pri" value="Urgent"> Urgent</label>
+  <label>Due: <input id="tdue" value="21/10/2026"></label>
+  <label>Type: <select id="type"><option>--Select--</option><option>Clinical</option><option>Admin</option><option>Follow-up</option></select></label>
+  <input type="button" value="Complete"> <input type="button" value="Save" onclick="saveTask()"> <input type="button" value="Reset"> <input type="button" value="Cancel" onclick="close_('taskForm')">
+</div>
+<script>
+const D = { Screening: ['Bowel screening', 'Cervical screening', 'Breast screening'], Immunisation: ['Flu vaccine', 'Tetanus booster'] };
+window.__saved = { recalls: [], tasks: [] };
+function show(w) { document.getElementById('recallPanel').style.display = w === 'recall' ? 'block' : 'none'; document.getElementById('taskPanel').style.display = w === 'task' ? 'block' : 'none'; }
+function open_(id) { document.getElementById(id).style.display = 'block'; }
+function close_(id) { document.getElementById(id).style.display = 'none'; }
+function descs() { const g = document.getElementById('group').value; document.getElementById('desc').innerHTML = '<option>--Select--</option>' + (D[g] ?? []).map((d) => `<option>${d}</option>`).join(''); }
+function due() { const m = { '2 Day(s)': '23/10/2026', '3 weeks': '11/11/2026', '3 months': '21/01/2027', '3+ Year': '21/10/2029' }; document.getElementById('rdue').value = m[document.getElementById('rin').value] ?? ''; }
+function saveRecall() { const r = { group: group.value, desc: desc.value, note: note.value, rin: rin.value, due: rdue.value }; __saved.recalls.push(r); document.getElementById('recalls').insertAdjacentHTML('beforeend', `<tr><td>${r.desc}</td><td>${r.due}</td></tr>`); close_('recallForm'); }
+function saveTask() { const t = { subj: subj.value, to: to.value, pri: document.querySelector('input[name=pri]:checked').value, due: tdue.value, type: type.value }; __saved.tasks.push(t); document.getElementById('tasks').insertAdjacentHTML('beforeend', `<tr><td>${t.subj}</td><td>${t.to}</td><td>${t.type}</td><td>${t.due}</td></tr>`); close_('taskForm'); }
+</script></body></html>

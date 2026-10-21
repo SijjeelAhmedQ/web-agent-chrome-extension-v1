@@ -1,0 +1,8 @@
+### Navigation: Inbox filters and folders (labs, rads, referrals…)
+- Which inbox: if a patient's consult is open and the user means that patient, the Patient Inbox; otherwise the Provider Inbox.
+- Patient Inbox (the consult's right panel, tab "Inbox"): the buttons above the list filter it — "Flagged", "All", "Disc.", "Lab", "Rad", "Ref", "MyIndi", "Scan" (some show a count, e.g. "All 19"). "go to labs" → click "Lab"; rads / radiology → "Rad"; referrals → "Ref"; discharge summaries → "Disc."; scans → "Scan"; MyIndici → "MyIndi"; flagged → "Flagged"; all / everything → "All".
+- Provider Inbox (Home → Provider Dashboard): the left panel "Mailbox › Inbox" has the folders "Lab", "Rad", "Referrals", "Discharge Summary", "Patient Portal", "Other Docs". If they are not showing under "Inbox", expand it first: click the small arrow icon left of "Inbox". Then click the folder ("go to labs" → "Lab"). Don't use the coloured boxes at the top ("Lab/Rad", "Urgent", "Overdue"…) for this.
+- After a filter or folder, read the list. To review its records, use read_records as in "Review inbox results".
+
+### Rule: Empty inbox list — ask before loading the archive
+If the list shows "No new messages." and the button "Click here to load the data from archive.", don't click it yourself: tell the user there are no records here and ask "Do you want me to load the archived records?". Click it only if the user says yes, then read the list again. When the list has records, never load the archive unless the user asks for older records.

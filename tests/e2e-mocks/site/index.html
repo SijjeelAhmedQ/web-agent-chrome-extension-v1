@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Clinic Test App</title>
+<style>body{font-family:sans-serif;margin:24px} .row{margin:10px 0} #combo-list{border:1px solid #ccc;display:none} #combo-list.open{display:block} [role=option]{padding:4px;cursor:pointer}</style></head>
+<body>
+<h1>Clinic Test App</h1>
+<form role="search" action="/results.html" method="get"><input type="search" name="q" placeholder="Search patients" aria-label="Search patients"><button>Search</button></form>
+<h2>Patients</h2>
+<table><thead><tr><th>Name</th><th>Action</th></tr></thead><tbody>
+<tr><td>Sara Ahmed</td><td><button onclick="openP('Sara Ahmed')">Open</button></td></tr>
+<tr><td>Bilal Raza</td><td><button onclick="openP('Bilal Raza')">Open</button></td></tr>
+<tr><td>Hina Malik</td><td><button onclick="openP('Hina Malik')">Open</button></td></tr>
+</tbody></table>
+<div id="opened"></div>
+<h2>Add medication</h2>
+<form id="med" onsubmit="event.preventDefault(); save()">
+ <div class="row"><label for="pname">Patient name</label> <input id="pname" required></div>
+ <div class="row"><label for="drug">Medication</label> <input id="drug"></div>
+ <div class="row"><label for="freq">Frequency</label> <select id="freq"><option value="">Choose…</option><option>Once daily</option><option>Twice daily</option><option>Every 8 hours</option></select></div>
+ <div class="row"><span id="route-label">Route</span> <div role="combobox" aria-labelledby="route-label" aria-expanded="false" tabindex="0" id="combo" onclick="toggleCombo()">Select route</div>
+   <div id="combo-list" role="listbox"><div role="option" onclick="pick('Oral')">Oral</div><div role="option" onclick="pick('IV')">IV</div></div></div>
+ <fieldset class="row"><legend>As needed (PRN)</legend><label><input type="radio" name="prn" value="yes"> Yes</label> <label><input type="radio" name="prn" value="no" checked> No</label></fieldset>
+ <div class="row"><label>Unit</label> <div class="my-select"><span class="sel-search"><input role="combobox" readonly aria-label="Unit" style="width:4px;border:0"></span><span class="sel-item">mg</span></div></div>
+ <button type="submit">Save</button>
+</form>
+<div id="status"></div>
+<p><a href="/results.html?q=help" target="_blank">Help center</a></p>
+<script>
+function openP(n){document.getElementById('opened').textContent='Opened chart: '+n}
+function toggleCombo(){const l=document.getElementById('combo-list');l.classList.toggle('open');document.getElementById('combo').setAttribute('aria-expanded',l.classList.contains('open'))}
+function pick(v){document.getElementById('combo').textContent=v;toggleCombo()}
+function save(){document.getElementById('status').textContent='Saved: '+document.getElementById('pname').value+' / '+document.getElementById('drug').value+' / '+document.getElementById('freq').value+' / '+document.getElementById('combo').textContent}
+</script></body></html>

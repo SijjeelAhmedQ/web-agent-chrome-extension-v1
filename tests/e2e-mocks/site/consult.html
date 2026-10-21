@@ -1,0 +1,29 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Consult Detail</title>
+<style>
+  body { font: 13px Arial, sans-serif; margin: 12px; }
+  .modal { position: fixed; inset: 60px 25%; background: #fff; border: 1px solid #999; padding: 16px; box-shadow: 0 8px 30px #0004; }
+  iframe { border: 0; width: 100%; height: 160px; }
+</style></head>
+<body>
+<h2>Consult — Arya STARK</h2>
+<div><input id="filter" placeholder="Filter notes"> <input type="button" value="Clear" onclick="document.getElementById('filter').value=''"></div>
+<p id="result">Not saved</p>
+<div class="modal" role="dialog" aria-label="Reason" id="reasonModal">
+  <div id="inline"><b>Add reason to view patient file</b><br><input id="reason" title="Add reason to view patient file"> <input type="button" value="Save" onclick="save(document.getElementById('reason').value)"></div>
+</div>
+<script>
+  // ?late=1: the reason pop-up appears a moment after the page loads.
+  if (location.search.includes('late')) {
+    document.getElementById('reasonModal').style.display = 'none';
+    setTimeout(() => (document.getElementById('reasonModal').style.display = ''), 1200);
+  }
+  function save(v) { document.getElementById('result').textContent = 'Saved: ' + v; }
+  // ?frame=1: the reason form lives in a same-origin iframe inside the modal.
+  if (location.search.includes('frame')) {
+    document.getElementById('inline').innerHTML = '<iframe id="f"></iframe>';
+    const doc = document.getElementById('f').contentDocument;
+    doc.open();
+    doc.write('<body style="font:13px Arial"><b>Add reason to view patient file</b><br><input id="reason" title="Add reason to view patient file"> <input type="button" value="Save" onclick="parent.save(document.getElementById(&quot;reason&quot;).value)"></body>');
+    doc.close();
+  }
+</script></body></html>

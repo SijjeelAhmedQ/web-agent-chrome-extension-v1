@@ -1,0 +1,13 @@
+<!doctype html><html><head><title>Consult Detail</title></head><body>
+<div id="main"></div>
+<div id="right"><button id="tabInbox" onclick="document.getElementById('inbox').style.display='block'">Inbox</button>
+<div id="inbox" style="display:none">
+<button>Flagged</button><button>All 19</button><button>Lab</button>
+<i class="fa fa-chevron-down" style="cursor:pointer;display:inline-block;width:14px;height:14px" onclick="document.getElementById('filters').style.display='block'"></i>
+<div id="filters" style="display:none"><label>Folder <select><option>Inbox</option><option>Lab</option></select></label><button>Search</button></div>
+<a href="#">LFT result</a><a href="#">CBC result</a>
+</div></div>
+<script>
+const m=document.getElementById('main');
+for(let i=0;i<400;i++){const b=document.createElement('button');b.textContent='Consult control '+i;b.style.cssText='width:40px;height:10px;font-size:4px';m.appendChild(b);}
+</script></body></html>

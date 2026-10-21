@@ -1,0 +1,14 @@
+### Workflow: Search the inbox with filters
+For requests like: “show lab results for arya stark from last month”
+Also for: "find unfiled records from 01/10/2026 to 20/10/2026", "show inactive records of Jake", "show filed scan documents".
+1. Which inbox: a patient's consult is open and the user means that patient → Patient Inbox; otherwise the Provider Inbox (Home).
+2. Show the filters if they are hidden: the ⌄ icon at the right end of the bar above the list (Patient Inbox: Flagged, All, Lab… bar).
+3. Set only what the user asked for — leave the other filters as they are, except File Status: All unless the user said filed or not filed.
+   - From / To: type the date as DD/MM/YYYY (clear the field first). Work out "today", "last week", "last month", "since 1 October" from today's date.
+   - Subject (both) and Organisation (Provider Inbox): type the words the user gave.
+   - Patient (Provider Inbox only): type the patient's name, then click the magnifier next to the field. The "Patient Search" pop-up opens — it is part of the task, don't close it. Pick the patient as the rule "Open a patient by clicking the name" says: exactly one row matches → click the name (near = its DOB); several → list them and ask the user; none → tell the user. Clicking the name selects the patient: the pop-up closes and the Patient field shows the name.
+   - Folder (Patient Inbox only): Inbox, Lab, Scan Document, Other Docs, BPAC, Photos, Allied Health Service — "labs" → Lab, "scans" → Scan Document.
+   - Provider (both): the provider the user named, or All. Read the options and choose the matching one.
+   - File Status: Filed / Not Filed / All. Status: Active / Inactive / All.
+4. Click the inbox's "Search" (not one inside the Patient Search pop-up). Read the list.
+5. Empty list: follow the rule "Empty inbox list — ask before loading the archive". Otherwise tell the user what the list shows (date, patient, subject, comments) — and if the user asked to review them, use read_records as in "Review inbox results".

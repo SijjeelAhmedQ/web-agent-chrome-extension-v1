@@ -1,0 +1,67 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Big Store</title>
+<style>
+  body { font-family: sans-serif; margin: 0; }
+  nav { display: flex; gap: 6px; background: #1e293b; padding: 0 12px; }
+  nav > .top { position: relative; }
+  nav a, nav button { display: block; color: #fff; padding: 12px 14px; text-decoration: none; background: none; border: 0; font: inherit; cursor: pointer; }
+  .menu { display: none; position: absolute; left: 0; top: 100%; min-width: 180px; background: #334155; list-style: none; margin: 0; padding: 4px 0; }
+  .menu .menu { left: 100%; top: 0; }
+  .menu li { position: relative; }
+  /* 1) CSS-only hover menus, three levels deep */
+  .css-nav:hover > .menu, .menu li:hover > .menu { display: block; }
+  /* 2) JS menus are toggled with .open */
+  .open > .menu { display: block; }
+  main { padding: 24px; }
+  /* 4) Navbar like the user's app: ul > li > a + hidden ul, opened by CSS :hover */
+  .navbar { list-style: none; margin: 0; padding: 0; display: flex; }
+  .nav-li { position: relative; }
+  .nav-li > .sub { display: none; position: absolute; top: 100%; left: 0; min-width: 200px; list-style: none; margin: 0; padding: 4px 0; background: #0e7490; }
+  .nav-li:hover > .sub { display: block; }
+</style></head>
+<body>
+<nav>
+  <ul class="navbar"><li class="nav-li"><a href="/patients-page.html">Patients</a>
+    <ul class="sub">
+      <li><a href="#" onclick="done('Search & Add')">Search &amp; Add</a></li>
+      <li><a href="#" onclick="done('Search & List')">Search &amp; List</a></li>
+      <li><a href="#" onclick="done('Merge Patient')">Merge Patient</a></li>
+    </ul>
+  </li></ul>
+  <div class="top css-nav"><a href="/menus.html#products">Products</a>
+    <ul class="menu">
+      <li><a href="#phones">Phones</a>
+        <ul class="menu"><li><a href="#" onclick="done('Android phones')">Android phones</a></li><li><a href="#" onclick="done('iPhones')">iPhones</a></li></ul></li>
+      <li><a href="#laptops">Laptops</a>
+        <ul class="menu"><li><a href="#" onclick="done('Gaming laptops')">Gaming laptops</a></li><li><a href="#" onclick="done('Business laptops')">Business laptops</a></li></ul></li>
+    </ul>
+  </div>
+  <div class="top js-nav" id="services"><a href="/menus.html#services">Services</a>
+    <ul class="menu">
+      <li class="js-item"><a href="#cloud">Cloud</a>
+        <ul class="menu"><li><a href="#" onclick="done('Storage')">Storage</a></li><li><a href="#" onclick="done('Compute')">Compute</a></li></ul></li>
+      <li class="js-item"><a href="#support">Support</a>
+        <ul class="menu"><li><a href="#" onclick="done('Live chat')">Live chat</a></li></ul></li>
+    </ul>
+  </div>
+  <div class="top click-nav"><button aria-haspopup="true" aria-expanded="false" id="account" onclick="toggleAccount()">Account</button>
+    <ul class="menu" id="account-menu">
+      <li><a href="#" onclick="done('Settings')">Settings</a></li><li><a href="#" onclick="done('Orders')">Orders</a></li><li><a href="#" onclick="done('Delete account')">Delete account</a></li>
+    </ul>
+  </div>
+</nav>
+<main><h1>Big Store</h1><p id="result">Nothing chosen</p></main>
+<script>
+  function done(what) { event.preventDefault(); document.getElementById('result').textContent = 'Chose: ' + what; }
+  // 2) JavaScript hover menus (mouseenter / mouseleave), two levels.
+  for (const el of document.querySelectorAll('.js-nav, .js-item')) {
+    el.addEventListener('mouseenter', () => el.classList.add('open'));
+    el.addEventListener('mouseleave', () => el.classList.remove('open'));
+  }
+  // 3) A click-to-open menu button.
+  function toggleAccount() {
+    const top = document.querySelector('.click-nav');
+    const open = !top.classList.contains('open');
+    top.classList.toggle('open', open);
+    document.getElementById('account').setAttribute('aria-expanded', String(open));
+  }
+</script></body></html>

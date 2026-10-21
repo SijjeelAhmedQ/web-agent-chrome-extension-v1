@@ -1,0 +1,14 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Consult Detail</title>
+<style>.modal{position:fixed;top:30px;left:30px;width:700px;background:#fff;border:1px solid #999;padding:10px;z-index:20}.close{float:right;border:0;background:none;font-size:18px}</style></head>
+<body><h2>Medications — Arya STARK</h2><p id="result">none</p>
+<div class="modal in" id="nzf">
+  <button type="button" class="close" onclick="done('closed')">×</button>
+  <h4 class="modal-title">NZF</h4>
+  <iframe id="f" style="width:680px;height:260px;border:0"></iframe>
+  <input type="button" value="OK" onclick="done('OK')"> <input type="button" value="Cancel" onclick="done('Cancel')">
+</div>
+<script>
+  const cross = new URLSearchParams(location.search).get('frame') === 'cross';
+  document.getElementById('f').src = (cross ? 'http://127.0.0.1:4599' : '') + '/nzf-frame.html';
+  function done(v) { document.getElementById('result').textContent = v; document.getElementById('nzf').style.display = 'none'; }
+</script></body></html>

@@ -1,0 +1,10 @@
+import puppeteer from 'puppeteer';
+import { readFileSync } from 'node:fs';
+const b = await puppeteer.connect({ browserWSEndpoint: readFileSync('../indici-live/indici-ws.txt', 'utf8').trim(), defaultViewport: null });
+const p = await b.newPage();
+await p.goto(`chrome-extension://${readFileSync('../indici-live/ext-id.txt', 'utf8').trim()}/options.html`);
+const c = await p.evaluate(async () => (await chrome.storage.local.get('wa.config'))['wa.config']);
+console.log('agents', c.agents.map((a) => `${a.name}: ${a.toolIds.join(',')}`));
+console.log('disabled', c.settings.disabledToolIds, 'site disabled', c.sites.map((s) => s.disabledToolIds), 'overrides', Object.keys(c.settings.toolOverrides ?? {}));
+await p.close();
+b.disconnect();
