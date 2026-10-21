@@ -143,7 +143,11 @@ const readPage: AgentTool<{ mode: 'overview' | 'content'; full: boolean }> = {
     // The same page read again: only what changed — when that is clearly shorter than the whole page.
     const whole = formatSnapshot(snap, a.mode);
     const changes = a.mode === 'overview' && !a.full && ctx.lastPage ? pageDiff(ctx.lastPage, snap) : null;
-    const diff = changes !== null && changes.length < whole.length * 0.6;
+    // Each “only the changes” read stands on the ones before it, so none of them can be dropped to fit. On a
+    // small context, once they add up, a whole read starts a new chain and the old one can go.
+    const chainRoom = ctx.overviewTextChars ? 6_000 : 40_000;
+    const diff = changes !== null && changes.length < whole.length * 0.6 && (ctx.diffChars ?? 0) + changes.length <= chainRoom;
+    ctx.diffChars = diff ? (ctx.diffChars ?? 0) + changes.length : 0;
     ctx.lastPage = memoOf(snap);
     return { output: diff ? changes : whole, note: `${n} controls · ${clip(snap.title || siteOf(snap.url), 40)}${diff ? ' · only the changes' : ''}` };
   },

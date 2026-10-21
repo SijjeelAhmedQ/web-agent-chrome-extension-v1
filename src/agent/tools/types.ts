@@ -48,6 +48,8 @@ export interface ToolContext {
   recordsRead?: Map<string, number>;
   /** What the last read_page saw — the next read of the same page gives only the changes. */
   lastPage?: PageMemo;
+  /** Characters of “only the changes” reads since the last whole read — a long chain can't be shortened. */
+  diffChars?: number;
   /** Most page text in a read_page overview, for models with a small context (Kaggle's 16K). */
   overviewTextChars?: number;
   /** Titles of the pop-ups that came up with the page or tab that opened last. */

@@ -45,7 +45,9 @@ export const activeKnowledge = (profiles: SiteProfile[]) => profiles.flatMap((p)
 export function knowledgeBudget(contextTokens: number | undefined): number {
   // No limit given: a cloud model (DeepSeek, Claude, GPT…) with a large context — room for a site's whole knowledge.
   if (!contextTokens) return 48_000;
-  return Math.min(48_000, Math.max(3_000, Math.round(contextTokens * 0.8)));
+  // A small context (Kaggle's 16K) also holds the tools, the instructions and every step: knowledge gets less of it.
+  const share = contextTokens <= 32_768 ? 0.55 : 0.8;
+  return Math.min(48_000, Math.max(3_000, Math.round(contextTokens * share)));
 }
 
 /** The prompt section for the sites the agent is on, within about `budget` characters. */

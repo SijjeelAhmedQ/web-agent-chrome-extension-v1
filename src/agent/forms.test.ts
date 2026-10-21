@@ -42,8 +42,8 @@ describe('field names in older, table-based forms', () => {
 
 describe('room for site knowledge', () => {
   it('grows with the model’s context window', () => {
-    expect(knowledgeBudget(16384)).toBe(13107);
-    expect(knowledgeBudget(4096)).toBe(3277);
+    expect(knowledgeBudget(16384)).toBe(9011);
+    expect(knowledgeBudget(4096)).toBe(3000);
     expect(knowledgeBudget(128000)).toBe(48000);
     expect(knowledgeBudget(undefined)).toBe(48000);
   });
