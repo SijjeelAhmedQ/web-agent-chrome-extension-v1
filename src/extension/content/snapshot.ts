@@ -493,7 +493,14 @@ const ACTION_BUTTONS = 'button,input[type=button],input[type=submit],input[type=
  * Cancel): the smallest box around the button holding three or more such buttons, in a pop-up.
  */
 function formActions(el: Element): { id: number; name: string }[] {
-  if (!el.closest(DIALOGS)) return [];
+  const dialog = el.closest(DIALOGS);
+  if (!dialog) return [];
+  // Enter in a field (not a button): the form's own footer — the box around its last button with three or more.
+  if (!el.matches(ACTION_BUTTONS)) {
+    const all = Array.from(dialog.querySelectorAll(ACTION_BUTTONS)).filter((b) => isVisible(b) && !isDisabled(b) && /\p{L}/u.test(accessibleName(b)) && accessibleName(b).length <= 24);
+    const last = all.at(-1);
+    return last ? formActions(last) : [];
+  }
   let box = el.parentElement;
   for (let depth = 0; box && depth < 5; depth++, box = box.parentElement) {
     const buttons = Array.from(box.querySelectorAll(ACTION_BUTTONS)).filter((b) => isVisible(b) && !isDisabled(b));
@@ -508,12 +515,14 @@ export function describeRisk(el: Element): ElementRisk {
   const info = describeElement(el);
   const form = (el as HTMLInputElement).form ?? el.closest('form');
   const fields = form ? Array.from(form.querySelectorAll('input,select,textarea')) : [];
+  // No <form> (a pop-up built with divs): its footer buttons (Save, Complete…) are what Enter would do.
+  const actions = formActions(el);
   const submitLabels = form
     ? Array.from(form.querySelectorAll('button,input[type=submit],[role=button]'))
         .map((b) => accessibleName(b))
         .filter(Boolean)
         .slice(0, 6)
-    : [];
+    : actions.map((b) => b.name);
   return {
     name: info.name,
     role: info.role,
@@ -531,7 +540,7 @@ export function describeRisk(el: Element): ElementRisk {
         fields.some((f) => (f as HTMLInputElement).type === 'search' || /^(q|query|search|s|k|keywords?|term)$/i.test(f.getAttribute('name') ?? ''))),
     formSubmitLabels: submitLabels,
     formValues: filledValues(form ?? el.closest('dialog,[role=dialog],[aria-modal=true]')),
-    formActions: formActions(el),
+    formActions: actions,
     shown: el.isConnected && isVisible(el),
   };
 }

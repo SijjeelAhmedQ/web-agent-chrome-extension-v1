@@ -572,6 +572,8 @@ export class AgentRun {
         if (typeof answer === 'number' && answer !== approvalNeeded.target) {
           const picked = approvalNeeded.choices?.find((c) => c.id === answer);
           this.declined.add(approvalNeeded.title);
+          // Text typed with Enter: the text still goes in — only the Enter is replaced by the user's button.
+          if (tool.name === 'type') await this.inFront(ctx, () => tool.execute({ ...(args as object), submit: false }, ctx)).catch(() => undefined);
           const clicked = await this.inFront(ctx, () => byName.get('click')!.execute({ id: answer, name: picked?.label ?? '', double: false }, ctx)).catch((err: unknown) => ({ output: `Couldn't press it: ${err instanceof Error ? err.message : String(err)}` }) as ToolOutcome);
           finish({ status: 'done', note: `You chose “${picked?.label ?? 'another button'}”`, ...(dev ? { result: clicked.output } : {}) });
           return `The user chose “${picked?.label}” instead of “${String((args as { name?: unknown; text?: unknown }).name ?? (args as { text?: unknown }).text ?? '')}”, and it was pressed: ${clicked.output}
