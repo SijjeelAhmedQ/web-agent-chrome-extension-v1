@@ -108,7 +108,12 @@ async function approvalFor(
   const choices = kind !== 'type' && (info.formActions?.length ?? 0) >= 2 ? info.formActions!.map((b) => ({ id: b.id, label: b.name })) : undefined;
   return {
     // A row's action (Delete, Complete…): say which row — the record it changes.
-    title: choices ? `Which should I press: ${choices.map((c) => `“${c.label}”`).join(', ')}?` : /^row \d+ “/.test(info.context ?? '') ? `${action.replace(/\?$/, '')} — ${info.context}?` : action,
+    // Not a form's own Save that sits in a layout table: its “row” is the form's buttons, not a record.
+    title: choices
+      ? `Which should I press: ${choices.map((c) => `“${c.label}”`).join(', ')}?`
+      : /^row \d+ “/.test(info.context ?? '') && !/^(save|submit|ok|done|add|update|confirm|apply|cancel)\b/i.test(info.name ?? '')
+        ? `${action.replace(/\?$/, '')} — ${info.context}?`
+        : action,
     detail: choices
       ? `The form is filled${info.formValues?.length ? ' — check the details' : ''}. “${info.name}” will ${verdict.consequence} on ${site}; pick what to do.`
       : `This will ${verdict.consequence} on ${site}.${kind !== 'type' && info.formValues?.length ? ' Check the details:' : ''}`,
