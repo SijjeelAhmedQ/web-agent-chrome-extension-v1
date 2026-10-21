@@ -51,6 +51,13 @@ describe('risk policy', () => {
     expect(classifyClick(risk({ name: 'Delete patient' })).consequence).toBe('delete something');
     expect(classifyClick(risk({ name: 'Save' })).consequential).toBe(true);
   });
+  it('asks before completing or filing records, and before a confirm’s Yes', () => {
+    expect(classifyClick(risk({ name: 'Complete' })).consequence).toBe('complete or file a record');
+    expect(classifyClick(risk({ name: 'File' })).consequential).toBe(true);
+    expect(classifyClick(risk({ name: 'Yes', dialogText: 'Are you sure you want to complete the selected task(s)? Yes No' })).consequence).toBe('complete or file a record');
+    expect(classifyClick(risk({ name: 'Yes', dialogText: 'Do you want to see more results? Yes No' })).consequential).toBe(false);
+    expect(classifyClick(risk({ name: 'Profile' })).consequential).toBe(false);
+  });
   it('leaves ordinary navigation alone', () => {
     expect(classifyClick(risk({ name: 'Search' })).consequential).toBe(false);
     expect(classifyClick(risk({ name: 'Next page' })).consequential).toBe(false);

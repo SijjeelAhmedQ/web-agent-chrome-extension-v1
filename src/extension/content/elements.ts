@@ -140,7 +140,8 @@ export function accessibleName(el: Element): string {
     if (isInput(el) && el.type === 'image') return clean(el.alt || el.value || el.title) || iconName(el) || 'Submit';
     // A radio or tick box with its words in the next box over (“◉ | Active”), not in a <label>.
     if (isInput(el) && (el.type === 'radio' || el.type === 'checkbox')) {
-      const caption = captionRightOf(el);
+      // Else its label on the left (“Confidential: ☐”).
+      const caption = captionRightOf(el) || visualLabel(el);
       if (caption) return caption;
     }
     // Older forms lay out label and field in table cells: <td>Take:</td><td><input></td>.
@@ -263,7 +264,8 @@ export function captionRightOf(field: Element): string {
     const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const text = (node.textContent ?? '').replace(/\s+/g, ' ').trim();
-      if (!text || text.length > 50 || !/\p{L}/u.test(text) || node.parentElement?.closest('button,select,option,textarea,script,style')) continue;
+      // “Do not show on Portal:” right of a box is the next field's label, not this box's caption.
+      if (!text || text.length > 50 || !/\p{L}/u.test(text) || /[:：*]\s*$/.test(text) || node.parentElement?.closest('button,select,option,textarea,script,style')) continue;
       const range = document.createRange();
       range.selectNodeContents(node);
       const r = range.getBoundingClientRect();

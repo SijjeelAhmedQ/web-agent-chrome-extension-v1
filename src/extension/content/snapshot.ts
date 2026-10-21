@@ -547,6 +547,7 @@ export function describeRisk(el: Element): ElementRisk {
     })(),
     formActions: actions,
     shown: el.isConnected && isVisible(el),
+    dialogText: clip(((el.closest(DIALOGS) as HTMLElement | null)?.innerText ?? '').replace(/\s+/g, ' ').trim(), 300) || undefined,
   };
 }
 

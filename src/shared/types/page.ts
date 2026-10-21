@@ -99,6 +99,8 @@ export interface ElementRisk {
   formActions?: { id: number; name: string }[];
   /** Showing on the page now (a pop-up the user closed hides its buttons). */
   shown?: boolean;
+  /** The words of the pop-up the control is in (a confirm's question). */
+  dialogText?: string;
   href?: string;
   target?: string;
 }

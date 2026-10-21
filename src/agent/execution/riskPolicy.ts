@@ -26,7 +26,11 @@ const RULES: Rule[] = [
   { pattern: /\b(deactivate|close (my |your )?account|cancel (my |your )?(subscription|membership|order|account|plan)|unsubscribe|change password|reset password)\b/i, consequence: 'change your account', links: true },
   { pattern: /\b(send|reply( all)?|forward|post|publish|tweet|submit (review|comment|feedback|application))\b/i, consequence: 'send or publish something', links: false },
   { pattern: /\b(save|submit|update profile|save changes|confirm|sign (the )?(document|form|contract)|approve|authori[sz]e)\b/i, consequence: 'save or submit changes', links: false },
+  { pattern: /\b(complete( (the |this |these )?(selected )?tasks?)?|mark (it |them )?(as )?(done|complete)|finali[sz]e|sign off|file( as normal)?|un ?file)\b/i, consequence: 'complete or file a record', links: false },
 ];
+
+/** “Yes” / “OK” in a confirm pop-up: it does what the pop-up asks (“complete the selected task?”). */
+const CONFIRMS = /^(yes|ok|okay|confirm|continue|proceed|yes,? .{0,30})$/i;
 
 const BUTTONISH = new Set(['button', 'clickable', 'menuitem', 'option', 'gridcell', 'image']);
 
@@ -37,6 +41,9 @@ export function classifyClick(info: ElementRisk): RiskVerdict {
   // Long names are usually cards or rows of content, not commands: only the strongest rules apply.
   const candidates = name.length > 60 ? RULES.slice(0, 3) : RULES;
 
+  if ((BUTTONISH.has(info.role) || isSubmit) && CONFIRMS.test(name) && info.dialogText) {
+    for (const rule of RULES) if (rule.pattern.test(info.dialogText)) return { consequential: true, consequence: rule.consequence };
+  }
   if (BUTTONISH.has(info.role) || isLink || isSubmit) {
     for (const rule of candidates) {
       if (isLink && !rule.links) continue;
