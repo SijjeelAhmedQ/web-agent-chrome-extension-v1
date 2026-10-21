@@ -69,6 +69,7 @@ export class AgentRun {
   private readonly repeats = new Map<string, number>();
   /** How often each exact action ran in this task. */
   private readonly sameActions = new Map<string, number>();
+  private skippedInARow = 0;
   /** Actions in this task that changed nothing at all. */
   private noEffect = 0;
   /** What each page action did, in order (its label, e.g. “Typing “x” into “Find Medicine””) — to spot cycles. */
@@ -352,6 +353,9 @@ export class AgentRun {
         recent.push(signature);
         let output = await this.runTool(call, byName, ctx);
         if (this.endWith) return this.endWith;
+        if (this.skippedInARow >= 6) {
+          return `I got stuck: my last ${this.skippedInARow} steps were all ones I had already tried, so I stopped rather than go round in circles. Tell me what to do next, or say it differently and I'll try again.`;
+        }
         if (recent.slice(-3).every((s) => s === signature) && recent.length >= 3) {
           output += '\nYou have repeated this exact action three times. Try a different approach or explain to the user what is blocking you.';
         }
@@ -444,6 +448,9 @@ export class AgentRun {
     };
     this.upsertStep(step);
     const finish = (patch: Partial<StepRecord>) => {
+      // Steps the guards refuse, one after another: the model is going round in circles.
+      if (patch.status === 'skipped') this.skippedInARow++;
+      else if (patch.status) this.skippedInARow = 0;
       step = { ...step, ...patch, durationMs: Date.now() - step.startedAt };
       this.upsertStep(step);
     };
@@ -539,7 +546,8 @@ export class AgentRun {
     // “did nothing”, yet it never gets anywhere (a timeline entry clicked 50 times instead of the list's Edit).
     // (Paging — “Next”, “Load more” — repeats by design.)
     const pager = /^\s*(next|previous|prev|more|load more|show more|[›»>‹«<])\s*$/i.test(String((args as { name?: unknown; text?: unknown }).name ?? (args as { text?: unknown }).text ?? ''));
-    const sameKey = isAction && !pager ? `${tool.name} ${JSON.stringify(args)}` : '';
+    // Reading the same thing again gives the same answer too (read_page and wait excepted: the page moves on).
+    const sameKey = !pager && tool.name !== 'read_page' && tool.name !== 'wait' ? `${tool.name} ${JSON.stringify(args)}` : '';
     if (sameKey && (this.sameActions.get(sameKey) ?? 0) >= 3) {
       finish({ status: 'skipped', note: 'Done 3 times already — not again' });
       return `Not done: you already did exactly this 3 times in this task (“${step.label}”) and it hasn't got you there. Don't do it again. Read the page and use another control — for a row in a list, its icons in the Actions column (e.g. "Edit") — or tell the user what you can't find.`;

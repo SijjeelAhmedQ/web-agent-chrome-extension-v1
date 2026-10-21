@@ -66,10 +66,14 @@ export function compactMessages(messages: ChatMessage[], budgetTokens: number): 
       total += tokensOf(messages[i]);
     }
   }
-  // Many short results add up over a long task: the steps before the latest full page read keep only
-  // that they happened (their calls stay — each result still answers its call).
-  for (let i = request + 1; i < (latest >= 0 ? latest : lastIndex - 6) && total > budgetTokens; i++) {
+  // Many short results add up over a long task: older steps keep only that they happened (their calls stay —
+  // each result still answers its call). Not the latest page read, nor the changes read after it (they stand
+  // on it), nor the last few steps.
+  const keepFrom = lastIndex - 6;
+  const chain = (i: number) => i === latest || (latest >= 0 && i > latest && isRead(messages[i]) && messages[i].content.startsWith(DIFF_HEAD));
+  for (let i = request + 1; i < keepFrom && total > budgetTokens; i++) {
     const m = messages[i];
+    if (chain(i)) continue;
     if (m.role === 'tool' && m.content !== PLACEHOLDER && m.content.length > 80) {
       total -= tokensOf(m);
       messages[i] = { ...m, content: EARLIER_STEP };

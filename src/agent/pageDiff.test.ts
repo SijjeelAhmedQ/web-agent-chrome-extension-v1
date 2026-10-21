@@ -114,3 +114,22 @@ describe('a long task on a small context', () => {
     expect(msgs.at(-1)!.content).toContain('Field 39');
   });
 });
+
+describe('a long task after one whole page read', () => {
+  it('drops older results after the read too — the request and the read stay', () => {
+    const msgs: ChatMessage[] = [
+      { role: 'system', content: 'rules '.repeat(400) },
+      { role: 'user', content: 'list all of Arya’s recalls' },
+      { role: 'tool', toolName: 'read_page', toolCallId: 'r', content: `Page: Consult Detail\n${'[5000] button "Control" '.repeat(120)}` },
+    ];
+    for (let i = 0; i < 40; i++) {
+      msgs.push({ role: 'assistant', content: '', toolCalls: [{ id: `k${i}`, name: 'site_knowledge', arguments: { topic: 'Recall list' } }] });
+      msgs.push({ role: 'tool', toolName: 'site_knowledge', toolCallId: `k${i}`, content: `### Page: Recall list\n${'- a row of the knowledge text '.repeat(40)}` });
+    }
+    compactMessages(msgs, 4_000);
+    const total = msgs.reduce((n, m) => n + Math.ceil(m.content.length / 3.2) + (m.role === 'assistant' && m.toolCalls ? Math.ceil(JSON.stringify(m.toolCalls).length / 3.2) : 0), 0);
+    expect(total).toBeLessThan(4_800);
+    expect(msgs[1].content).toContain('list all of Arya');
+    expect(msgs[2].content.startsWith('Page: Consult Detail')).toBe(true);
+  });
+});
