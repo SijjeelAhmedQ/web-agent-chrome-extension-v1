@@ -176,7 +176,16 @@ export function accessibleName(el: Element): string {
   const labelledChild = el.querySelector('[aria-label]');
   if (labelledChild) return clean(labelledChild.getAttribute('aria-label'));
   const tooltip = tooltipOf(el) || tooltipOf(el.querySelector(`[title],${TOOLTIP_ATTRS.map((a) => `[${a}]`).join(',')}`));
-  return tooltip || iconName(el);
+  return tooltip || chipRemover(el) || iconName(el);
+}
+
+/** The empty × of a chosen item (“PM Judy GILMOUR ×” in a picker): “Unselect “PM Judy GILMOUR”” — it only edits the form. */
+function chipRemover(el: Element): string {
+  if (!/(^|[-_\s])(close|remove|delete|clear)([-_\s]|$)/i.test(String(el.className))) return '';
+  const chip = el.parentElement;
+  if (!chip) return '';
+  const words = clean(Array.from(chip.childNodes).filter((n) => n !== el).map((n) => n.textContent ?? '').join(' '), 80);
+  return words && /\p{L}/u.test(words) ? `Unselect “${words}”` : '';
 }
 
 const FIELDS = 'input:not([type=hidden]),select,textarea,button,[role=combobox],[contenteditable=true]';

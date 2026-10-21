@@ -100,7 +100,7 @@ export function formFields(d: Element): string[] {
       const shown = picker.chosen.length ? picker.chosen.map((p) => `“${p}”`).join(', ') : 'empty';
       lines.push(
         picker.several
-          ? `- ${name}${required ? '*' : ''} — picker that can hold several: ${shown} (add one: type its name and choose it; remove one: its ×)${fixed}`
+          ? `- ${name}${required ? '*' : ''} — picker that can hold several: ${shown} (add one: type its name and choose it; take one off: its “Unselect” ×)${fixed}`
           : `- ${name}${required ? '*' : ''} — dropdown: ${shown}${picker.options.length ? `; options: ${list(picker.options)}` : ''} (open it, type to narrow, choose)${fixed}`,
       );
       continue;
