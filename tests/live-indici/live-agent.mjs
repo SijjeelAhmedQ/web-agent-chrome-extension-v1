@@ -70,7 +70,11 @@ try {
       }
       if (await panel.$('.approval')) {
         const text = await panel.$eval('.approval', (e) => e.innerText.replace(/\s+/g, ' '));
-        const ok = !!approve && approve.test(text);
+        // A careful user: a card that matches a pattern must also show what the request asked for
+        // (APPROVE_IF='[["Strength 500 mg", "Take 1 .*Frequency TDS"]]'), or it is declined.
+        const wrong = JSON.parse(process.env.APPROVE_IF ?? '[]').find(([card, need]) => new RegExp(card, 'i').test(text) && !new RegExp(need, 'i').test(text));
+        if (wrong) say(`  (card lacks /${wrong[1]}/ — declining)`);
+        const ok = !!approve && approve.test(text) && !wrong;
         if (await panel.$('.approval-choices')) {
           // A form's own buttons: approve means only APPROVE_BUTTON (Save) — never Complete or another;
           // anything else is a no, given with the card's cancel-like button.

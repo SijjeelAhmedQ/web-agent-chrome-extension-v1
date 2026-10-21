@@ -330,6 +330,10 @@ export class AgentRun {
         }
         // The double-check came back clean (“CONFIRMED”, maybe after some reasoning): the user gets the answer that was checked.
         if (checkedAnswer && (/^\W*confirmed\b/i.test(answer) || /\bCONFIRMED\W*$/.test(answer))) return checkedAnswer;
+        // Nothing to say with checklist items left: not “Done.” — the user is told what was and wasn't done.
+        if (!response.content.trim() && left.length) {
+          return `I stopped before finishing everything. Done (☑) and not done (☐):\n${this.checklist.format()}`;
+        }
         // A claim that something was done gets checked against the page before the user sees it.
         // An answer that stops to ask the user something isn't the end of the task: no check (it would lose the question).
         // Nor when the model read the page last and did nothing since: it answered from the page as it is now.

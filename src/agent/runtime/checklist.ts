@@ -104,7 +104,7 @@ export function checklistTool(list: Checklist, onChange: (done: number | null) =
           if (quotes.length && !shown.some(Boolean)) {
             list.asked.add(a.done);
             return {
-              output: `Not ticked yet: the page doesn't show ${quotes.map((q) => `“${q}”`).join(' or ')} from this item. A record that only looks alike (an older one) is no proof. If it was saved, open the list where it shows and look for it; if it was not saved, finish it. Once you have seen it saved, call task_list with done: ${a.done} again.`,
+              output: `Not ticked yet: the page doesn't show ${quotes.map((q) => `“${q}”`).join(' or ')} from this item. A record that only looks alike (an older one) is no proof. Don't add it again — a second save makes a duplicate. First open the list where these records show and look for it there. Seen it: call task_list with done: ${a.done} again. Not there: then finish it.`,
               note: 'Not seen on the page yet',
             };
           }
