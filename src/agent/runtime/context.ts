@@ -4,6 +4,7 @@ import { DIFF_HEAD } from '../tools/pageDiff';
 const SNAPSHOT_TOOLS = new Set(['read_page']);
 const MAX_TOOL_CHARS = 20_000;
 const PLACEHOLDER = '[Earlier page snapshot removed — its element ids are no longer valid.]';
+const RUNTIME_PROMPT = /^(Before you finish|Not finished yet:|Your last reply was cut off|You have not finished the task yet)/;
 const EARLIER_STEP = '[Result of an earlier step — removed to fit; it was done.]';
 /** The least of the latest page the model keeps, in tokens, however tight the budget. */
 const MIN_PAGE_TOKENS = 1_200;
@@ -57,7 +58,8 @@ export function compactMessages(messages: ChatMessage[], budgetTokens: number): 
     }
   }
   // Earlier turns of the chat (before this request): their gist is enough.
-  const request = messages.findLastIndex((m) => m.role === 'user');
+  // The user's request — not the runtime's own prompts after it (the double-check, “not finished yet”…).
+  const request = messages.findLastIndex((m) => m.role === 'user' && !RUNTIME_PROMPT.test(m.content));
   for (let i = 1; i < request && total > budgetTokens; i++) {
     const m = messages[i];
     if ((m.role === 'user' || m.role === 'assistant') && m.content.length > 500) {
@@ -87,7 +89,19 @@ export function compactMessages(messages: ChatMessage[], budgetTokens: number): 
   if (total > budgetTokens && latest >= 0) {
     const m = messages[latest];
     const room = Math.max(MIN_PAGE_TOKENS, budgetTokens - (total - tokensOf(m)));
+    total -= tokensOf(m);
     messages[latest] = { ...m, content: shrinkSnapshot(m.content, room) };
+    total += tokensOf(messages[latest]);
+  }
+  // The runtime's own prompts after the request can carry a whole page (the double-check before
+  // answering): on a small context they are shortened too, or the server cuts the request instead.
+  for (let i = messages.length - 1; i > request && total > budgetTokens; i--) {
+    const m = messages[i];
+    if (m.role !== 'user' || m.content.length < 2_000) continue;
+    const room = Math.max(MIN_PAGE_TOKENS, budgetTokens - (total - tokensOf(m)));
+    total -= tokensOf(m);
+    messages[i] = { ...m, content: shrinkSnapshot(m.content, room) };
+    total += tokensOf(messages[i]);
   }
   return messages;
 }

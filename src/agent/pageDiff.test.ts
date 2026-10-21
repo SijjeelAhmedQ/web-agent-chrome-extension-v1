@@ -133,3 +133,19 @@ describe('a long task after one whole page read', () => {
     expect(msgs[2].content.startsWith('Page: Consult Detail')).toBe(true);
   });
 });
+
+describe('the double-check on a small context', () => {
+  it('shortens the page in the double-check prompt, and keeps the request', () => {
+    const page = `Page: Consult Detail\n${'[5000] button "Control" \n'.repeat(600)}`;
+    const msgs: ChatMessage[] = [
+      { role: 'system', content: 'rules '.repeat(300) },
+      { role: 'user', content: 'edit the paracetamol I added today' },
+      { role: 'assistant', content: 'Saved.' },
+      { role: 'user', content: `Before you finish, check your answer against the page as it is right now (below).\n\nCurrent page:\n${page}` },
+    ];
+    compactMessages(msgs, 3_000);
+    expect(msgs[1].content).toBe('edit the paracetamol I added today');
+    expect(msgs[3].content.startsWith('Before you finish')).toBe(true);
+    expect(msgs[3].content.length).toBeLessThan(page.length / 2);
+  });
+});
