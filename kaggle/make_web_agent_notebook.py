@@ -7,6 +7,9 @@ Builds the Web Agent's own Kaggle notebooks (the CareFlow notebook, careflow_kag
   web_agent_qwen38_kaggle.ipynb    Qwen3.8 27B (qwen3.8:27b-q4_K_M, ~18 GB) across both T4s — the strongest
                                    tool-calling model that fits Kaggle's free GPU. The Ternary Bonsai 2 27B of the
                                    CareFlow notebook is made from it; ~2–3 minutes for a ten-step task.
+  web_agent_qwen38long_kaggle.ipynb  The same Qwen3.8 27B with 64k tokens of context instead of 16k — for long
+                                   requests (several forms one after another). Set Context window = 65536 in the
+                                   extension (Models → Kaggle GPU). Still the strongest tool-calling model that fits.
   web_agent_qwen3vl4b_kaggle.ipynb Qwen3-VL 4B Instruct (qwen3-vl:4b-instruct-q8_0, ~5 GB) — small and fast, sees
                                    images as well as text; one T4 is enough.
 
@@ -45,7 +48,7 @@ except Exception:
     pass
 
 MODEL = "@MODEL@"   # @MODEL_NOTE@
-CTX = 16384                    # tokens per request — what the extension plans for on Kaggle
+CTX = @CTX@                    # tokens per request — set the same Context window in the extension (Models → Kaggle GPU)
 PARALLEL = "@PARALLEL@"                 # requests answered together; each holds its own CTX-token cache on the GPU.
                                # One for a slow model: each step of a task then reuses the cache of the step
                                # before (the instructions and the pages read so far are not read again).
@@ -211,6 +214,7 @@ def banner(url, note=""):
     print("  Server address:", url)
     print("  Notebook key:  ", KEY if KEY != "CHANGE-ME" else "CHANGE-ME — set KEY or the WEB_AGENT_KEY secret")
     print("  Model:         ", MODEL, "— in GPU memory now:", ", ".join(in_memory()) or "none yet")
+    print("  Context window:", CTX, "— set the same number in the extension")
     print("  Voice:          Whisper large-v3-turbo (same address and key)")
     print("Keep this notebook running while you use the extension.")
     print("=" * 64, flush=True)
@@ -249,12 +253,21 @@ PRESETS = {
     "qwen38": {
         "@TITLE@": "Qwen3.8 27B", "@ACCELERATOR@": "GPU T4 x2", "@MODEL@": "qwen3.8:27b-q4_K_M",
         "@MODEL_NOTE@": "~18 GB, across both T4s; tools + thinking (the server turns thinking off unless asked)",
-        "@PARALLEL@": "1", "@LOAD_STALL_S@": "300", "@MIN_GPUS@": "2", "@SIZE@": "~18 GB",
+        "@PARALLEL@": "1", "@LOAD_STALL_S@": "300", "@MIN_GPUS@": "2", "@SIZE@": "~18 GB", "@CTX@": "16384",
+    },
+    # The same model with four times the room: only 16 of its 64 layers keep a KV cache (the rest are Gated
+    # DeltaNet, a fixed-size state), ~32 KB a token at q8_0 — 64k tokens is ~2 GB beside the ~18 GB of weights.
+    # Long requests (a medication, a task, a recall and a diagnosis in one go) then keep their workflow and
+    # steps instead of having them cut to fit, and the prompt is rarely rewritten, so each step reuses the cache.
+    "qwen38long": {
+        "@TITLE@": "Qwen3.8 27B, 64k context", "@ACCELERATOR@": "GPU T4 x2", "@MODEL@": "qwen3.8:27b-q4_K_M",
+        "@MODEL_NOTE@": "~18 GB across both T4s + ~2 GB of cache for 64k tokens; tools (the server turns thinking off unless asked)",
+        "@PARALLEL@": "1", "@LOAD_STALL_S@": "300", "@MIN_GPUS@": "2", "@SIZE@": "~18 GB", "@CTX@": "65536",
     },
     "qwen3vl4b": {
         "@TITLE@": "Qwen3-VL 4B Instruct", "@ACCELERATOR@": "GPU T4 (or GPU T4 x2)", "@MODEL@": "qwen3-vl:4b-instruct-q8_0",
         "@MODEL_NOTE@": "~5 GB at 8 bits (the 3.3 GB qwen3-vl:4b-instruct is Q4); text, images and tools",
-        "@PARALLEL@": "4", "@LOAD_STALL_S@": "180", "@MIN_GPUS@": "1", "@SIZE@": "~5 GB",
+        "@PARALLEL@": "4", "@LOAD_STALL_S@": "180", "@MIN_GPUS@": "1", "@SIZE@": "~5 GB", "@CTX@": "16384",
     },
 }
 

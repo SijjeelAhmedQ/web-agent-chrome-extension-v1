@@ -369,7 +369,7 @@ function ProviderEditor({ value, onClose, onSave }: { value: { provider: Provide
                 {draft.kind === 'ollama'
                   ? 'How much the model can read at once, in tokens. Web pages need room — 12k or more works well. Larger uses more memory.'
                   : draft.preset === 'kaggle'
-                    ? 'The notebook gives every model 16,384 tokens (CTX in the notebook). Change this only if you changed CTX there.'
+                    ? 'The notebook prints its context window (CTX): 16,384 for most, 65,536 for the web_agent_qwen38long notebook. Set the same number here.'
                     : 'How much the server lets the model read, in tokens. Long tasks are trimmed to fit. Leave empty if you don’t know.'}
               </div>
             </div>
