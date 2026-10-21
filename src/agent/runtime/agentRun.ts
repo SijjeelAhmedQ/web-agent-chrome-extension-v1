@@ -848,7 +848,7 @@ export function declinedAnswer(title: string): string {
 
 const NOT_FINISHED_PROMPT = 'Not finished yet:';
 /** Tools that only look at the page; this many in a row without an action is searching in circles. */
-const LOOK_TOOLS = new Set(['read_page', 'find_element', 'scroll', 'wait']);
+const LOOK_TOOLS = new Set(['read_page', 'find_element', 'scroll', 'wait', 'hover', 'read_table']);
 const MAX_LOOKS = 8;
 const CUT_OFF_PROMPT = 'Your last reply was cut off because the conversation got long. Continue the task: call the next tool now, and keep any text short.';
 const CONTINUE_PROMPT = 'You have not finished the task yet — you described a next step instead of doing it. Continue by calling the next tool. If the task is truly complete, reply with your final answer for the user.';

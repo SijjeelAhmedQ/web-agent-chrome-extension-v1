@@ -228,10 +228,10 @@
           "id": "kb_tasklist_0",
           "kind": "page",
           "title": "Task list (consult › Task)",
-          "content": "- \"Task\" in the consult's left sidebar opens the patient's task list in the middle panel. Its bar shows \"Records 1 to N of N\" and icons: ⊕ \"Add New Task\", \"Refresh\", ✓ \"Complete\" (completes the ticked tasks), \"Print\", and at the right end ⌄ (named \"show hide\") — it opens the search filters.\n- The list starts filtered: Status Active and From about 6 months ago — older or completed tasks don't show (\"For older records, please use date filter available in search\").\n- Filters (after ⌄): From / To (dates DD/MM/YYYY), Priority, Status, Provider From, Provider To, Type, Subject, Custom Search, Read/Un-Read — then \"Search\" (\"Reset\" clears them). To find tasks by due date, subject or type, set these and Search; read the list with read_table.\n- Columns: Subject, Type, To, From, Due Date Time, Reg. Prov., P (priority), Actions. In Actions: ✓ completes that task, the edit icon opens \"Edit Task\", ☰ opens more actions.",
+          "content": "- \"Task\" in the consult's left sidebar opens the patient's task list in the middle panel. Its bar shows \"Records 1 to N of N\" and icons: ⊕ \"Add New Task\", \"Refresh\", ✓ \"Complete\" (completes the ticked tasks), \"Print\", and at the right end ⌄ (named \"show hide\") — it opens the search filters.\n- The list starts filtered: Status Active and From about 6 months ago — older or completed tasks don't show (\"For older records, please use date filter available in search\").\n- Filters (after ⌄): From / To (dates DD/MM/YYYY), Priority, Status, Provider From, Provider To, Type, Subject, Custom Search, Read/Un-Read — then \"Search\" (\"Reset\" clears them). To find tasks by due date, subject or type, set these and Search; read the list with read_table.\n- Columns: Subject, Type, To, From, Due Date Time, Reg. Prov., P (priority), Actions. In Actions: ✓ \"Complete Task\", the edit icon \"Edit Task\" (change any field, then Save), ☰ \"View Audit Log\".\n- A task can't be deleted in Indici — there is no delete. To take one off the active list it is completed (✓ \"Complete Task\"); ask the user before completing. If the user asks to delete a task, say this and offer to complete it.",
           "enabled": true,
           "createdAt": 1792585121559,
-          "updatedAt": 1792585121559
+          "updatedAt": 1792586765328
         },
         {
           "id": "kb_inbox_7",
