@@ -61,6 +61,8 @@ describe('what the user said now', () => {
     expect(saidNow('Routine follow-up.', ['routine   follow-up'])).toBe(true);
     expect(saidNow('checking labs', ['reason: “Checking labs” please'])).toBe(true);
     expect(saidNow('routine follow-up', ['goto patients and select Arya Stark', ''])).toBe(false);
-    expect(saidNow('i am testing', ['select Arya', 'Rule: type “i am testing” as the reason'])).toBe(true);
+    expect(saidNow('i am testing', ['select Arya'], 'Rule: type “i am testing” as the reason')).toBe(true);
+    // Words the knowledge merely contains are not a reason the user gave.
+    expect(saidNow('Add recall', ['add a recall for Arya'], 'Then click the ⊕ — the Add Recall form opens.')).toBe(false);
   });
 });

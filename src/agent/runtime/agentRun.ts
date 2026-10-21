@@ -478,7 +478,7 @@ export class AgentRun {
     if (tool.name === 'type') {
       const { id, text } = args as { id: number; text: string };
       const popup = ctx.elements.get(id)?.inBlockingPopup;
-      if (popup && !saidNow(text, [this.options.request, this.knowledgeText])) {
+      if (popup && !saidNow(text, [this.options.request], this.knowledgeText)) {
         finish({ status: 'skipped', note: 'Asking you what to enter' });
         return `Not typed: “${popup}” is a pop-up that can’t be closed, and the user hasn’t told you in this message what to enter. Don’t make it up and don’t reuse an answer from earlier in the chat. Stop now and ask the user what to enter in “${popup}”. When they reply, type exactly their reply.`;
       }
@@ -899,11 +899,16 @@ function lacksToolSupport(err: unknown): boolean {
 }
 
 /** True when `text` was given by the user in one of these (ignoring case, spaces and end punctuation). */
-export function saidNow(text: string, sources: string[]): boolean {
+/**
+ * Text the user gave in this message — or that the site's knowledge spells out in quotes (“type “Clinical
+ * care” as the reason”). Not just any words the knowledge happens to contain (“Add recall”).
+ */
+export function saidNow(text: string, sources: string[], knowledge = ''): boolean {
   const norm = (s: string) => s.toLowerCase().replace(/[“”"'‘’]/g, '').replace(/\s+/g, ' ').trim();
   const t = norm(text).replace(/[.!,;:]+$/, '');
   if (!t) return true;
-  return sources.some((s) => norm(s).includes(t));
+  const quoted = Array.from(knowledge.matchAll(/[“"]([^”"\n]{2,80})[”"]/g), (m) => m[1]);
+  return sources.some((s) => norm(s).includes(t)) || quoted.some((q) => norm(q) === t);
 }
 
 function safeLabel(fn: () => string, fallback: string): string {
