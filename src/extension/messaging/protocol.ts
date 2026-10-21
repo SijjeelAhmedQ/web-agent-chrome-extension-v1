@@ -29,6 +29,7 @@ export type ContentRequest =
   | { kind: 'popupControl'; name: string }
   | { kind: 'fetchPdf'; url: string }
   | { kind: 'table'; near: string; max: number }
+  | { kind: 'formAround'; id: number }
   | { kind: 'hover'; id: number; highlight: boolean }
   | { kind: 'menuPath'; path: string[]; highlight: boolean }
   | { kind: 'presence'; active: boolean };
@@ -148,6 +149,8 @@ export interface ResponseMap {
   popupControl: { id: number | null; disabled: boolean };
   fetchPdf: { data: string | null; bytes: number; error?: string };
   table: TableResult;
+  /** The form around a button: null when it sits in none. */
+  formAround: { missing: string[]; flagged: string[] } | null;
   presence: null;
 }
 

@@ -1,5 +1,6 @@
 import { CHANNEL, CONTENT_VERSION, type ContentRequest, type ContentResponse, type Envelope } from '../messaging/protocol';
 import { ActionError, clear, click, currentEffect, pointAt, pressKey, resolve, scroll, select, settle, type, visibleDialogs, waitForText } from './actions';
+import { formAround } from './form';
 import { hover, openMenu } from './hover';
 import { setPresence } from './overlay';
 import { readTable } from './rows';
@@ -56,6 +57,8 @@ async function handle(request: ContentRequest): Promise<unknown> {
       return fetchPdf(request.url);
     case 'table':
       return readTable(request.near, request.max);
+    case 'formAround':
+      return formAround(resolve(request.id));
     case 'hover':
       return hover(resolve(request.id), request.highlight);
     case 'menuPath':

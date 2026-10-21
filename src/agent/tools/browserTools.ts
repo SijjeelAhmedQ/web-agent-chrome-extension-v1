@@ -274,11 +274,16 @@ async function clickAndReport(ctx: ToolContext, elementId: number, double: boole
   if (!changed() && effect && /^(save|submit|ok|done|add|update|confirm|apply)\b/i.test(res.element.name ?? '')) {
     const shown = await ctx.browser.send({ kind: 'dialogs', waitMs: 300, settle: false }).catch(() => null);
     const form = shown?.dialogs[0]?.form ?? [];
-    if (form.length) {
-      const missing = form.filter((l) => /^- [^—]*\*\s—/.test(l) && /:\s*empty\b|none chosen/.test(l)).map((l) => l.replace(/^- /, '').replace(/\s—.*$/, ''));
+    let missing = form.filter((l) => /^- [^—]*\*\s—/.test(l) && /:\s*empty\b|none chosen/.test(l)).map((l) => l.replace(/^- /, '').replace(/\s—.*$/, ''));
+    // A form laid out in the page (not a pop-up): its own fields, and the ones the page marked as wrong.
+    const around = await ctx.browser.send({ kind: 'formAround', id: elementId }).catch(() => null);
+    if (around) missing = [...new Set([...missing, ...around.missing])];
+    const flagged = around?.flagged ?? [];
+    if (form.length || around) {
+      const what = [missing.length ? ` Required fields still empty: ${missing.join(', ')}.` : '', flagged.length ? ` Fields the page marks as wrong: ${flagged.join(', ')}.` : ''].join('');
       return {
-        output: `${verb} ${label}, but the form is still open and nothing changed — it was NOT saved.${missing.length ? ` Required fields still empty: ${missing.join(', ')}. Fill them (a field with suggestions needs one of them clicked), then press ${label} again.` : ' Read the page: look for a message or a required field that is not set, fix it, then press it again.'} Don't press any other of the form's buttons instead.`,
-        note: 'Not saved — the form is still open',
+        output: `${verb} ${label}, but the form is still there and nothing changed — it was NOT saved.${what ? `${what} Fill them (a field with suggestions needs one of them clicked), then press ${label} again.` : ' Read the page: look for a message or a required field that is not set, fix it, then press it again.'} Don't press any other of the form's buttons instead, and don't count this as done.`,
+        note: 'Not saved — the form is still there',
       };
     }
   }

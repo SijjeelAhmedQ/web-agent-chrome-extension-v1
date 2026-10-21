@@ -640,7 +640,12 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
       finish({ status: 'done', note: outcome.note, ...(dev ? { result: clip(outcome.output, 4000) } : {}) });
       // What the user let it do stays in the model's memory when older steps are cut to fit — or, a delete
       // done and forgotten, it looks for the record again and deletes another.
-      return approvalNeeded ? `${APPROVED_DONE} ${approvalNeeded.title.replace(/\?$/, '')}\n${outcome.output}` : outcome.output;
+      if (!approvalNeeded) return outcome.output;
+      // A form's button: which one, and the form's first values say what it saved.
+      const what = approvalNeeded.choices
+        ? `${step.label}${approvalNeeded.fields?.length ? ` — ${approvalNeeded.fields.slice(0, 4).map((f) => `${f.label}: ${f.value}`).join('; ')}` : ''}`
+        : approvalNeeded.title.replace(/\?$/, '');
+      return `${APPROVED_DONE} ${what}\n${outcome.output}`;
     } catch (err) {
       if (this.abort.signal.aborted || isAbort(err)) throw err;
       if (err instanceof PageError) {

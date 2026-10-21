@@ -132,3 +132,25 @@ function readForm(d: Element): { lines: string[]; values: { label: string; value
   }
   return { lines, values };
 }
+
+/**
+ * The form a button belongs to — its pop-up, its <form>, or the nearest box around it with a few
+ * fields (a form laid out in the page) — and what still stops it: required fields left empty, and
+ * fields the page marks as wrong (red, “validation-error”, aria-invalid).
+ */
+export function formAround(el: Element): { missing: string[]; flagged: string[] } | null {
+  const fieldsIn = (c: Element) => Array.from(c.querySelectorAll('input,select,textarea')).filter((f) => isVisible(f) && !(isInput(f) && ['hidden', 'button', 'submit', 'reset', 'image'].includes(f.type)));
+  let box: Element | null = el.closest(POPUPS) ?? el.closest('form');
+  for (let up = el.parentElement, depth = 0; !box && up && depth < 10; up = up.parentElement, depth++) {
+    if (fieldsIn(up).length >= 3) box = up;
+  }
+  if (!box) return null;
+  const missing = readForm(box)
+    .lines.filter((l) => /^- [^—]*\*\s—/.test(l) && /:\s*empty\b|none chosen/.test(l))
+    .map((l) => l.replace(/^- /, '').replace(/\*?\s—.*$/, ''));
+  const flagged = fieldsIn(box)
+    .filter((f) => f.getAttribute('aria-invalid') === 'true' || /validation-error|\binvalid\b|has-error|error-field/i.test(`${f.className} ${f.parentElement?.className ?? ''}`))
+    .map((f) => visualLabelInfo(f).text || accessibleName(f) || f.getAttribute('name') || f.id)
+    .filter(Boolean);
+  return { missing: [...new Set(missing)], flagged: [...new Set(flagged)].filter((f) => !missing.includes(f)) };
+}

@@ -47,7 +47,7 @@ try {
     const toolIds = agents[0].toolIds;
     await chrome.storage.local.set({ 'wa.config': { version: 1, providers: [provider], agents: agents.map((a) => ({ ...a, providerId: 'p' })), skills: [], customTools: [], sites, settings: { defaultProviderId: 'p', defaultAgentId: agents[0].id, developerMode: true, expandActivity: true, autoBackup: false, knownToolIds: toolIds } } });
     if (!keep) await chrome.storage.session.remove('wa.chat');
-  }, provider, restore.agents, restore.sites, !!process.env.KEEP_CHAT);
+  }, provider, restore.agents.map((a) => (process.env.MAX_STEPS ? { ...a, maxSteps: Number(process.env.MAX_STEPS) } : a)), restore.sites, !!process.env.KEEP_CHAT);
   await site.bringToFront();
   await panel.reload();
   await panel.waitForSelector('#composer-input');
@@ -60,7 +60,7 @@ try {
     await panel.keyboard.press('Enter');
     const t0 = Date.now();
     for (;;) {
-      if (Date.now() - t0 > 20 * 60_000) throw new Error('timed out');
+      if (Date.now() - t0 > Number(process.env.REQUEST_MINUTES ?? 20) * 60_000) throw new Error('timed out');
       if (await panel.$('.approval') && process.env.NO_ANSWER) {
         // Show the card only: a picture of it, then leave without pressing anything.
         await sleep(800);
