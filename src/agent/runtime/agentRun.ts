@@ -67,6 +67,8 @@ export class AgentRun {
   private readonly declined = new Set<string>();
   /** How often each exact page action changed nothing in this task — to break loops. */
   private readonly repeats = new Map<string, number>();
+  /** How often each exact action ran in this task. */
+  private readonly sameActions = new Map<string, number>();
   /** Actions in this task that changed nothing at all. */
   private noEffect = 0;
   /** What each page action did, in order (its label, e.g. “Typing “x” into “Find Medicine””) — to spot cycles. */
@@ -533,6 +535,16 @@ export class AgentRun {
       finish({ status: 'skipped', note: 'Did nothing twice — not repeating' });
       return 'You already did exactly this twice in this task and nothing changed either time. Do not repeat it. Try a different way (double: true, another element, a link or icon that opens it) or tell the user what you tried and what happened.';
     }
+    // The same click on the same thing over and over — each time something flickers, so it never counts as
+    // “did nothing”, yet it never gets anywhere (a timeline entry clicked 50 times instead of the list's Edit).
+    // (Paging — “Next”, “Load more” — repeats by design.)
+    const pager = /^\s*(next|previous|prev|more|load more|show more|[›»>‹«<])\s*$/i.test(String((args as { name?: unknown; text?: unknown }).name ?? (args as { text?: unknown }).text ?? ''));
+    const sameKey = isAction && !pager ? `${tool.name} ${JSON.stringify(args)}` : '';
+    if (sameKey && (this.sameActions.get(sameKey) ?? 0) >= 3) {
+      finish({ status: 'skipped', note: 'Done 3 times already — not again' });
+      return `Not done: you already did exactly this 3 times in this task (“${step.label}”) and it hasn't got you there. Don't do it again. Read the page and use another control — for a row in a list, its icons in the Actions column (e.g. "Edit") — or tell the user what you can't find.`;
+    }
+    if (sameKey) this.sameActions.set(sameKey, (this.sameActions.get(sameKey) ?? 0) + 1);
 
     try {
       const blocked = await this.sitePolicy(tool, args, ctx);

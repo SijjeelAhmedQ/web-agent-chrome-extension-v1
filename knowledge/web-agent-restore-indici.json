@@ -215,6 +215,15 @@
           "trigger": "file the normal results"
         },
         {
+          "id": "kb_recalllist_0",
+          "kind": "page",
+          "title": "Recall list (consult › Recall)",
+          "content": "- \"Recall\" in the consult's left sidebar opens the patient's recalls in the middle panel: Description, Notes, Cycle, Due Date, P. (priority), Prov., Actions. Its bar: ⊕ \"Add New Recall\", print, ⌄ (filters).\n- A row's Actions: \"Contact\" (📞), \"Edit\" (✎ — opens the Recall form to change it, then Save), \"Delete\", \"Click to cancel recall\" (⊘), \"Complete Recall\" (✓ — closes it; with a Cycle it offers to make the next one), \"View Audit Log\" (☰). To change a recall use its \"Edit\" — not the entry in the Timeline on the right.\n- A Confidential recall shows masked in the list (******** in every column) with only 🔒 \"Click to view confidential data.\" and ☰. To edit or delete it, first click its 🔒; if that asks for a reason, ask the user what to enter. The Timeline shows the description with a lock — that is only a summary, not where it is edited.",
+          "enabled": true,
+          "createdAt": 1792592857133,
+          "updatedAt": 1792592857133
+        },
+        {
           "id": "kb_inbox_6",
           "kind": "workflow",
           "title": "Add a recall",
