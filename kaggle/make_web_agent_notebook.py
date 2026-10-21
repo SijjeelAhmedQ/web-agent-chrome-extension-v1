@@ -11,8 +11,14 @@ Builds the Web Agent's own Kaggle notebooks (the CareFlow notebook, careflow_kag
                                    images as well as text; one T4 is enough.
 
 Both also run Whisper large-v3-turbo for voice. Import a notebook into Kaggle (File → Import Notebook), set the
-Accelerator (GPU T4 x2 for Qwen3.8; GPU T4 or T4 x2 for Qwen3-VL) and Internet = On, change KEY, then Run All. It
-prints the address and key for the extension → Models → Kaggle GPU, and the model to choose.
+Accelerator (GPU T4 x2 for Qwen3.8; GPU T4 or T4 x2 for Qwen3-VL) and Internet = On, set the key (KEY, or better a
+secret WEB_AGENT_KEY under Add-ons → Secrets), then Run All. It prints the address and key for the extension →
+Models → Kaggle GPU, and the model to choose.
+
+Staying up: the last cell never ends — it watches the server and the tunnel every minute, restarts what stopped and
+prints a NEW address when the tunnel had to be reopened. An interactive session still stops when the tab is left
+idle; for hours of use, run it as Save Version → "Save & Run All (Commit)" (up to 12 hours; the address is in the
+version's log). Kaggle's free GPU time is about 30 hours a week.
 
 Cell 1 writes careflow_gpu_server.py (this folder's copy, unchanged — the same address, key header and voice API
 the extension already uses); cell 2 installs and starts everything.
@@ -29,8 +35,14 @@ LAUNCHER = r'''# Web Agent on Kaggle: @TITLE@ (Ollama) + Whisper large-v3-turbo,
 # Notebook settings: Accelerator = @ACCELERATOR@, Internet = On. Then Run All.
 import os, re, shutil, subprocess, time
 
-# The same key goes into the extension → Models → Kaggle GPU → Notebook key. Change it.
+# The same key goes into the extension → Models → Kaggle GPU → Notebook key. Change it — or, better, add it as a
+# Kaggle secret named WEB_AGENT_KEY (Add-ons → Secrets): then it is not in the notebook when you save a version.
 KEY = "CHANGE-ME"
+try:
+    from kaggle_secrets import UserSecretsClient
+    KEY = UserSecretsClient().get_secret("WEB_AGENT_KEY") or KEY
+except Exception:
+    pass
 
 MODEL = "@MODEL@"   # @MODEL_NOTE@
 CTX = 16384                    # tokens per request — what the extension plans for on Kaggle
@@ -154,11 +166,14 @@ sh("pip install -q faster-whisper fastapi uvicorn httpx")
 
 # 3. The server (port 8000): the extension's address, key check, Ollama's chat with thinking off, /transcribe.
 #    It restarts a stuck Ollama by itself, with the same settings (OLLAMA_ENV).
-server = subprocess.Popen(["python", "/kaggle/working/careflow_gpu_server.py"],
-                          env={**os.environ, **OLLAMA_ENV, "CAREFLOW_KEY": KEY, "CAREFLOW_NUM_CTX": str(CTX), "CAREFLOW_STT": "whisper",
-                               "CAREFLOW_WHISPER": "large-v3-turbo", "CUDA_VISIBLE_DEVICES": "1" if gpus >= 2 else "0",
-                               "CAREFLOW_KEEP_ALIVE": "-1", "CAREFLOW_LOAD_STALL_S": str(LOAD_STALL_S), "CAREFLOW_OLLAMA_LOG": OLLAMA_LOG},
-                          stdout=open("/kaggle/working/server.log", "w"), stderr=subprocess.STDOUT)
+def start_server():
+    return subprocess.Popen(["python", "/kaggle/working/careflow_gpu_server.py"],
+                            env={**os.environ, **OLLAMA_ENV, "CAREFLOW_KEY": KEY, "CAREFLOW_NUM_CTX": str(CTX), "CAREFLOW_STT": "whisper",
+                                 "CAREFLOW_WHISPER": "large-v3-turbo", "CUDA_VISIBLE_DEVICES": "1" if gpus >= 2 else "0",
+                                 "CAREFLOW_KEEP_ALIVE": "-1", "CAREFLOW_LOAD_STALL_S": str(LOAD_STALL_S), "CAREFLOW_OLLAMA_LOG": OLLAMA_LOG},
+                            stdout=open("/kaggle/working/server.log", "a"), stderr=subprocess.STDOUT)
+
+server = start_server()
 print("Starting the server — the first start downloads Whisper large-v3-turbo (~1.6 GB)…", flush=True)
 started = time.time()
 for step in range(240):  # up to 20 minutes
@@ -175,19 +190,58 @@ sh("nvidia-smi --query-gpu=index,name,memory.used,memory.total --format=csv")
 # 4. The public address: a Cloudflare quick tunnel (free, no account).
 if not os.access("/kaggle/working/cloudflared", os.X_OK):  # downloaded by the last run already: reuse it
     sh("wget -q -O /kaggle/working/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 && chmod +x /kaggle/working/cloudflared")
-tunnel = subprocess.Popen(["/kaggle/working/cloudflared", "tunnel", "--no-autoupdate", "--url", "http://localhost:8000"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-for line in tunnel.stdout:
-    found = re.search(r"https://[a-z0-9-]+\.trycloudflare\.com", line)
-    if found:
-        print("=" * 64)
-        print("Web Agent → Models → Kaggle GPU")
-        print("  Server address:", found.group(0))
-        print("  Notebook key:  ", KEY)
-        print("  Model:         ", MODEL, "— in GPU memory now:", ", ".join(in_memory()) or "none yet")
-        print("  Voice:          Whisper large-v3-turbo (same address and key)")
-        print("Keep this notebook running while you use the extension.")
-        print("=" * 64, flush=True)
-        break
+# Its log goes to a file, not a pipe: a pipe nobody reads fills up, and then cloudflared stalls and the address dies.
+TUNNEL_LOG = "/kaggle/working/tunnel.log"
+
+def start_tunnel():
+    """A new quick tunnel and its address (a new one each time)."""
+    sh("pkill -x cloudflared; sleep 2", check=False)
+    proc = subprocess.Popen(["/kaggle/working/cloudflared", "tunnel", "--no-autoupdate", "--url", "http://localhost:8000"],
+                            stdout=open(TUNNEL_LOG, "w"), stderr=subprocess.STDOUT)
+    for _ in range(90):
+        time.sleep(1)
+        found = re.search(r"https://[a-z0-9-]+\.trycloudflare\.com", open(TUNNEL_LOG, errors="replace").read())
+        if found:
+            return proc, found.group(0)
+    raise SystemExit("No tunnel address — " + tail(TUNNEL_LOG, 20))
+
+def banner(url, note=""):
+    print("=" * 64)
+    print("Web Agent → Models → Kaggle GPU" + (f"   ({note})" if note else ""))
+    print("  Server address:", url)
+    print("  Notebook key:  ", KEY if KEY != "CHANGE-ME" else "CHANGE-ME — set KEY or the WEB_AGENT_KEY secret")
+    print("  Model:         ", MODEL, "— in GPU memory now:", ", ".join(in_memory()) or "none yet")
+    print("  Voice:          Whisper large-v3-turbo (same address and key)")
+    print("Keep this notebook running while you use the extension.")
+    print("=" * 64, flush=True)
+
+tunnel, url = start_tunnel()
+banner(url)
+
+# 5. Stay up. This cell never ends: a finished notebook is an idle one, and Kaggle stops idle sessions. To keep it
+#    running for hours without this tab open, use Save Version → “Save & Run All (Commit)” — the address is then in
+#    the version's log (Kaggle runs a session for up to 12 hours). Every minute: the server and the tunnel are
+#    checked and restarted if they stopped (a restarted tunnel has a NEW address — printed here).
+started_at, last_note = time.time(), 0.0
+while True:
+    time.sleep(60)
+    if server.poll() is not None:
+        print(tail("/kaggle/working/server.log", 30))
+        print("The server stopped — starting it again.", flush=True)
+        server = start_server()
+        for _ in range(60):
+            time.sleep(5)
+            if answers("http://127.0.0.1:8000/health", {"X-CareFlow-Key": KEY}):
+                break
+    if tunnel.poll() is not None or not answers(url + "/health", {"X-CareFlow-Key": KEY}):
+        time.sleep(10)  # one slow answer is not a dead tunnel
+        if tunnel.poll() is not None or not answers(url + "/health", {"X-CareFlow-Key": KEY}):
+            print("The tunnel stopped answering — opening a new one.", flush=True)
+            tunnel, url = start_tunnel()
+            banner(url, "NEW address — change it in the extension")
+    if time.time() - last_note >= 600:
+        last_note = time.time()
+        print(f"[{time.strftime('%H:%M')}] up {int((time.time() - started_at) // 60)} min · {url} · in GPU memory: {', '.join(in_memory()) or 'none'}", flush=True)
 '''
 
 

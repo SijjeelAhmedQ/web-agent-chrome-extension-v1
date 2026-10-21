@@ -9,8 +9,13 @@ import { join } from 'node:path';
 import { DIR } from './indici-live.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const key = readFileSync('C:/Users/92313/.webagent-openrouter.env', 'utf8').match(/OPENROUTER_KEY\s*=\s*(\S+)/)?.[1];
-if (!key) throw new Error('no OPENROUTER_KEY in the env file');
+// Kaggle (C:/Users/92313/.webagent-kaggle.env: KAGGLE_URL=…, KAGGLE_KEY=…) when PROVIDER=kaggle, else OpenRouter.
+const envFile = (path) => { try { return readFileSync(path, 'utf8'); } catch { return ''; } };
+const kaggleEnv = envFile('C:/Users/92313/.webagent-kaggle.env');
+const useKaggle = process.env.PROVIDER === 'kaggle';
+const key = useKaggle ? kaggleEnv.match(/KAGGLE_KEY\s*=\s*(\S+)/)?.[1] : envFile('C:/Users/92313/.webagent-openrouter.env').match(/OPENROUTER_KEY\s*=\s*(\S+)/)?.[1];
+const kaggleUrl = kaggleEnv.match(/KAGGLE_URL\s*=\s*(\S+)/)?.[1]?.replace(/\/+$/, '');
+if (!key || (useKaggle && !kaggleUrl)) throw new Error(useKaggle ? 'no KAGGLE_URL / KAGGLE_KEY in the Kaggle env file' : 'no OPENROUTER_KEY in the env file');
 const requests = JSON.parse(process.env.REQUESTS ?? '[]');
 const approve = process.env.APPROVE ? new RegExp(process.env.APPROVE, 'i') : null;
 const restore = JSON.parse(readFileSync("D:/learing AI after Movement in Syed Ammar's Team/web-agent-chrome-extension/knowledge/web-agent-restore-indici.json", 'utf8'));
@@ -27,14 +32,16 @@ try {
   // Every model call, as sent and as answered — to see what the model saw (the key header is not kept).
   const calls = [];
   panel.on('response', async (res) => {
-    if (!/openrouter\.ai\/api\/v1\/chat/.test(res.url())) return;
+    if (!/openrouter\.ai\/api\/v1\/chat|\/vllm\/v1\/chat/.test(res.url())) return;
     try {
       calls.push({ request: JSON.parse(res.request().postData() ?? '{}'), response: await res.json() });
       writeFileSync(join(DIR, 'model-calls.json'), JSON.stringify(calls, null, 1));
     } catch {}
   });
   await panel.goto(`chrome-extension://${extId}/sidepanel.html`);
-  const provider = { id: 'p', name: 'OpenRouter', kind: 'openai', preset: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', apiKey: key, timeoutMs: 300000, defaultModel: process.env.MODEL ?? '~deepseek/deepseek-v4-flash-latest', createdAt: 1 };
+  const provider = useKaggle
+    ? { id: 'p', name: 'Kaggle GPU', kind: 'openai', preset: 'kaggle', baseUrl: `${kaggleUrl}/vllm/v1`, apiKey: key, keyHeader: 'X-CareFlow-Key', timeoutMs: 600000, contextWindow: 16384, defaultModel: process.env.MODEL ?? 'qwen3.8:27b-q4_K_M', createdAt: 1 }
+    : { id: 'p', name: 'OpenRouter', kind: 'openai', preset: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', apiKey: key, timeoutMs: 300000, defaultModel: process.env.MODEL ?? '~deepseek/deepseek-v4-flash-latest', createdAt: 1 };
   if (!process.env.KEEP_CHAT) {
     await panel.evaluate(async (provider, agents, sites) => {
       const toolIds = agents[0].toolIds;
