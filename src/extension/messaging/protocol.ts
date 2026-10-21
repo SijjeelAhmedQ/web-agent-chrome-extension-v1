@@ -94,6 +94,8 @@ export interface ClickResult {
 export interface TypeResult {
   element: Pick<ElementInfo, 'name' | 'role'>;
   value: string;
+  /** A list of suggestions that opened under the field (typing chose none of them). */
+  suggestions?: string[];
 }
 
 export interface SelectResult {

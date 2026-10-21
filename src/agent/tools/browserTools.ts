@@ -425,6 +425,9 @@ const type: AgentTool<{ id: number; text: string; clear: boolean; submit: boolea
     const res = await ctx.browser.send({ kind: 'type', id: a.id, text: a.text, clear: a.clear, highlight: ctx.settings.highlightActions });
     const label = res.element.name ? quote(res.element.name) : 'the field';
     let output = `Typed into ${label}. It now contains: ${quote(res.value)}.`;
+    if (res.suggestions?.length && !a.submit) {
+      output += ` A list of suggestions opened under it: ${res.suggestions.map((s) => quote(s)).join(', ')}. Typing alone chose none of them — click the one you mean (click_text with its text), or the field stays unset.`;
+    }
     if (a.submit) {
       try {
         const key = await ctx.browser.send({ kind: 'key', key: 'Enter', id: a.id });

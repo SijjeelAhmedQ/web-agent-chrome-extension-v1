@@ -266,6 +266,31 @@ async function closeDatePicker(field: HTMLElement): Promise<void> {
   await sleep(150);
 }
 
+/** Lists of suggestions that open under a field as you type (jQuery UI autocomplete, chosen, select2, typeahead…). */
+const SUGGESTION_LISTS = '.ui-autocomplete,[role=listbox],.chosen-results,.select2-results,.tt-menu,.typeahead,.autocomplete-suggestions,.easy-autocomplete-container,.dropdown-menu';
+
+/**
+ * What a field offered after typing — “3 Month(s)”, “Training DOCTOR (Doctor)”. Typing alone chooses none
+ * of them; the model has to click one, so it is told they are there.
+ */
+async function suggestionsUnder(field: HTMLElement): Promise<string[]> {
+  await sleep(700);
+  const box = field.getBoundingClientRect();
+  const doc = field.ownerDocument;
+  for (const list of Array.from(doc.querySelectorAll(SUGGESTION_LISTS))) {
+    if (!isVisible(list) || list.contains(field)) continue;
+    const r = list.getBoundingClientRect();
+    // Opened by this field: just under (or over) it, overlapping it sideways.
+    if (r.top > box.bottom + 40 || r.bottom < box.top - 400 || r.right < box.left - 20 || r.left > box.right + 20) continue;
+    const items = Array.from(list.querySelectorAll('li,[role=option],.tt-suggestion,a'))
+      .filter((i) => isVisible(i) && !i.querySelector('li,[role=option]'))
+      .map((i) => ((i as HTMLElement).innerText ?? '').replace(/\s+/g, ' ').trim())
+      .filter((t) => t && t.length <= 80);
+    if (items.length) return Array.from(new Set(items)).slice(0, 8);
+  }
+  return [];
+}
+
 export async function type(id: number, text: string, clearFirst: boolean, show: boolean): Promise<TypeResult> {
   const el = resolve(id);
   if (isDisabled(el)) fail('disabled', `“${accessibleName(el) || 'That field'}” is disabled.`);
@@ -284,7 +309,8 @@ export async function type(id: number, text: string, clearFirst: boolean, show: 
     field.dispatchEvent(new KeyboardEvent('keyup', { key: last, bubbles: true, composed: true }));
     field.dispatchEvent(new Event('change', { bubbles: true }));
     await closeDatePicker(field);
-    return { element: summary(el), value: field.type === 'password' ? '••••' : field.value };
+    const suggestions = await suggestionsUnder(field);
+    return { element: summary(el), value: field.type === 'password' ? '••••' : field.value, ...(suggestions.length ? { suggestions } : {}) };
   }
 
   // contenteditable (rich editors such as Gmail's composer).

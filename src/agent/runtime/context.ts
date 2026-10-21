@@ -4,6 +4,7 @@ import { DIFF_HEAD } from '../tools/pageDiff';
 const SNAPSHOT_TOOLS = new Set(['read_page']);
 const MAX_TOOL_CHARS = 20_000;
 const PLACEHOLDER = '[Earlier page snapshot removed — its element ids are no longer valid.]';
+const EARLIER_STEP = '[Result of an earlier step — removed to fit; it was done.]';
 /** The least of the latest page the model keeps, in tokens, however tight the budget. */
 const MIN_PAGE_TOKENS = 1_200;
 const SHRUNK_NOTE = '[…page list shortened to fit the model’s memory — use find_element or click_text for something not listed]';
@@ -18,7 +19,8 @@ export function estimateTokens(text: string): number {
   return digits + Math.ceil((text.length - digits) / 3.2);
 }
 
-const tokensOf = (m: ChatMessage) => estimateTokens(m.content) + 4;
+// A step's call (its arguments) is sent too: counted, or a long task runs past the model's context unseen.
+const tokensOf = (m: ChatMessage) => estimateTokens(m.content) + 4 + (m.role === 'assistant' && m.toolCalls?.length ? estimateTokens(JSON.stringify(m.toolCalls)) : 0);
 const size = (messages: ChatMessage[]) => messages.reduce((n, m) => n + tokensOf(m), 0);
 
 /**
@@ -61,6 +63,20 @@ export function compactMessages(messages: ChatMessage[], budgetTokens: number): 
     if ((m.role === 'user' || m.role === 'assistant') && m.content.length > 500) {
       total -= tokensOf(m);
       messages[i] = { ...m, content: `${m.content.slice(0, 500)} […]` };
+      total += tokensOf(messages[i]);
+    }
+  }
+  // Many short results add up over a long task: the steps before the latest full page read keep only
+  // that they happened (their calls stay — each result still answers its call).
+  for (let i = request + 1; i < (latest >= 0 ? latest : lastIndex - 6) && total > budgetTokens; i++) {
+    const m = messages[i];
+    if (m.role === 'tool' && m.content !== PLACEHOLDER && m.content.length > 80) {
+      total -= tokensOf(m);
+      messages[i] = { ...m, content: EARLIER_STEP };
+      total += tokensOf(messages[i]);
+    } else if (m.role === 'assistant' && m.content.length > 80) {
+      total -= tokensOf(m);
+      messages[i] = { ...m, content: '' };
       total += tokensOf(messages[i]);
     }
   }

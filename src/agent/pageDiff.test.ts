@@ -96,3 +96,21 @@ describe('the records read in one go', () => {
     expect(out.match(/Abnormal/g)?.length).toBe(6);
   });
 });
+
+describe('a long task on a small context', () => {
+  it('stays within the budget and keeps the user’s request, however many short steps', () => {
+    const msgs: ChatMessage[] = [
+      { role: 'system', content: 'rules '.repeat(400) },
+      { role: 'user', content: 'add a recall for Arya: provider Training DOCTOR' },
+    ];
+    for (let i = 0; i < 40; i++) {
+      msgs.push({ role: 'assistant', content: 'Next I will set the field. '.repeat(4), toolCalls: [{ id: `c${i}`, name: 'type', arguments: { id: 9000 + i, text: 'Training DOCTOR provider search text' } }] });
+      msgs.push({ role: 'tool', toolName: 'type', toolCallId: `c${i}`, content: `Typed into “Field ${i}”. It now contains: “value ${i}”. `.repeat(6) });
+    }
+    compactMessages(msgs, 3_000);
+    const total = msgs.reduce((n, m) => n + Math.ceil(m.content.length / 3.2) + (m.role === 'assistant' && m.toolCalls ? Math.ceil(JSON.stringify(m.toolCalls).length / 3.2) : 0), 0);
+    expect(total).toBeLessThan(3_600);
+    expect(msgs[1].content).toContain('add a recall for Arya');
+    expect(msgs.at(-1)!.content).toContain('Field 39');
+  });
+});
