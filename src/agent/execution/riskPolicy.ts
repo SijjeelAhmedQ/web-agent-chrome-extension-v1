@@ -27,6 +27,8 @@ const RULES: Rule[] = [
   { pattern: /\b(send|reply( all)?|forward|post|publish|tweet|submit (review|comment|feedback|application))\b/i, consequence: 'send or publish something', links: false },
   { pattern: /\b(save|submit|update profile|save changes|confirm|sign (the )?(document|form|contract)|approve|authori[sz]e)\b/i, consequence: 'save or submit changes', links: false },
   { pattern: /\b(complete( (the |this |these )?(selected )?tasks?)?|mark (it |them )?(as )?(done|complete)|finali[sz]e|sign off|file( as normal)?|un ?file)\b/i, consequence: 'complete or file a record', links: false },
+  // Taking a record off its list without deleting it (Indici's recall “delete” is its “Inactive” icon).
+  { pattern: /\b(inactive|inactivate|deactivate|archive|void|cancel (the |this )?(recall|appointment|task|order|prescription|referral|booking)s?|click to cancel)\b/i, consequence: 'cancel or deactivate a record', links: true },
 ];
 
 /** “Yes” / “OK” in a confirm pop-up: it does what the pop-up asks (“complete the selected task?”). */

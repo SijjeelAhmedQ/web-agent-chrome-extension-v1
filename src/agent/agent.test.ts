@@ -57,6 +57,9 @@ describe('risk policy', () => {
     expect(classifyClick(risk({ name: 'Yes', dialogText: 'Are you sure you want to complete the selected task(s)? Yes No' })).consequence).toBe('complete or file a record');
     expect(classifyClick(risk({ name: 'Yes', dialogText: 'Do you want to see more results? Yes No' })).consequential).toBe(false);
     expect(classifyClick(risk({ name: 'Profile' })).consequential).toBe(false);
+    expect(classifyClick(risk({ name: 'Inactive', role: 'image', tag: 'img' })).consequence).toBe('cancel or deactivate a record');
+    expect(classifyClick(risk({ name: 'Click to cancel recall' })).consequential).toBe(true);
+    expect(classifyClick(risk({ name: 'Cancel' })).consequential).toBe(false);
   });
   it('leaves ordinary navigation alone', () => {
     expect(classifyClick(risk({ name: 'Search' })).consequential).toBe(false);
