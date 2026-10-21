@@ -74,6 +74,9 @@ export interface ApprovalRequest {
   confirmLabel: string;
   /** What will be saved or sent — the user checks these before confirming. */
   fields?: { label: string; value: string }[];
+  /** A pop-up form's own finishing buttons — the user picks which one is pressed. */
+  choices?: { id: number; label: string }[];
+  target?: number;
 }
 
 export interface AgentTool<A = Record<string, unknown>> {

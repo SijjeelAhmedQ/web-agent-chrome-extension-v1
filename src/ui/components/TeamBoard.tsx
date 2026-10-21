@@ -2,6 +2,7 @@ import { Button } from 'antd';
 import { AlertCircle, Check, Loader2, Pause, Square } from 'lucide-react';
 import { memo, useState } from 'react';
 import type { AgentConfig } from '@/shared/types/config';
+import type { ApprovalAnswer } from '@/agent/runtime/events';
 import type { MemberState } from '@/store/chatSlice';
 import { ActivityCard } from './Activity';
 import { ApprovalCard } from './ApprovalCard';
@@ -40,7 +41,7 @@ function MemberStatus({ m }: { m: MemberState }) {
   );
 }
 
-const MemberCard = memo(function MemberCard({ m, agent, developer, onRespond }: { m: MemberState; agent?: AgentConfig; developer: boolean; onRespond: (id: string, ok: boolean) => void }) {
+const MemberCard = memo(function MemberCard({ m, agent, developer, onRespond }: { m: MemberState; agent?: AgentConfig; developer: boolean; onRespond: (id: string, ok: ApprovalAnswer) => void }) {
   const [showTask, setShowTask] = useState(false);
   const status = m.task?.status ?? 'running';
   return (
@@ -62,7 +63,7 @@ const MemberCard = memo(function MemberCard({ m, agent, developer, onRespond }: 
 });
 
 /** The members of a team turn, each with its own live activity and approvals. */
-export function TeamBoard({ members, agents, developer, onRespond }: { members: MemberState[]; agents: AgentConfig[]; developer: boolean; onRespond: (id: string, ok: boolean) => void }) {
+export function TeamBoard({ members, agents, developer, onRespond }: { members: MemberState[]; agents: AgentConfig[]; developer: boolean; onRespond: (id: string, ok: ApprovalAnswer) => void }) {
   const pending = members.filter((m) => m.approval);
   const working = members.filter((m) => (m.task?.status ?? 'running') === 'running').length;
   return (

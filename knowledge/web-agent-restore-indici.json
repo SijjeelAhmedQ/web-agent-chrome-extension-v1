@@ -266,10 +266,10 @@
           "id": "kb_forms_0",
           "kind": "rule",
           "title": "Filling a form — ask only for what is missing",
-          "content": "- Fill every field the user's request gives a value for, in the user's words tidied: \"review her bloods next week\" → Subject / Progress: \"Review bloods\". Work out dates from today's date (DD/MM/YYYY): \"next week\" → today + 7 days, \"in 3 months\" → today + 3 months.\n- A field that already has a value (To, Priority, Start, Status…) stays as it is — change it only if the user named another value.\n- Ask the user only for required fields (marked *) that are still empty and that the user didn't give. Never ask about optional fields (no *) or fields that already have a value.\n- When you ask, use the field names exactly as the form shows them (e.g. \"Subject / Progress\", \"Due\", \"Recall Group\") — in one short question.\n- Nothing missing: fill the form and click Save — the approval shows the values; don't ask in chat first.",
+          "content": "- Fill every field the user's request gives a value for, in the user's words tidied: \"review her bloods next week\" → Subject / Progress: \"Review bloods\". Work out dates from today's date (DD/MM/YYYY): \"next week\" → today + 7 days, \"in 3 months\" → today + 3 months.\n- A field that already has a value (To, Priority, Start, Status…) stays as it is — change it only if the user named another value.\n- Ask the user only for required fields (marked *) that are still empty and that the user didn't give. Never ask about optional fields (no *) or fields that already have a value.\n- When you ask, use the field names exactly as the form shows them (e.g. \"Subject / Progress\", \"Due\", \"Recall Group\") — in one short question.\n- Nothing missing: fill the form, then click the button that finishes it (Save). The approval shows the values and the form's own buttons (e.g. Complete · Save · Reset · Cancel) — the user picks which one is pressed; don't ask in chat first, and press nothing else after.",
           "enabled": true,
           "createdAt": 1792569289951,
-          "updatedAt": 1792569289951
+          "updatedAt": 1792582455195
         },
         {
           "id": "kb_search_0",

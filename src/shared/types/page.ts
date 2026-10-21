@@ -95,6 +95,10 @@ export interface ElementRisk {
   formSubmitLabels: string[];
   /** What the surrounding form or dialog holds right now — shown in the approval. */
   formValues?: { label: string; value: string }[];
+  /** The buttons that finish the pop-up's form, beside this one (“Complete”, “Save”, “Reset”, “Cancel”) — the user picks one. */
+  formActions?: { id: number; name: string }[];
+  /** Showing on the page now (a pop-up the user closed hides its buttons). */
+  shown?: boolean;
   href?: string;
   target?: string;
 }

@@ -8,7 +8,7 @@ import { AgentError, isAbort, toAgentError } from '@/shared/utils/errors';
 import { createClient } from '../llm';
 import { upcomingDays } from '../planner/systemPrompt';
 import { AgentRun, resolveProvider, type RunOptions } from './agentRun';
-import type { RunEvent } from './events';
+import type { ApprovalAnswer, RunEvent } from './events';
 
 export interface MemberAssignment {
   key: string;
@@ -45,7 +45,7 @@ export class TeamRun {
     for (const run of this.runs.values()) run.cancel();
   }
 
-  respond(approvalId: string, approved: boolean): void {
+  respond(approvalId: string, approved: ApprovalAnswer): void {
     for (const run of this.runs.values()) run.respond(approvalId, approved);
   }
 

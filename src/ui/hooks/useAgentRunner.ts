@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { AgentRun } from '@/agent/runtime/agentRun';
-import type { RunEvent } from '@/agent/runtime/events';
+import type { ApprovalAnswer, RunEvent } from '@/agent/runtime/events';
 import { rememberedAnswer } from '@/agent/runtime/followUp';
 import { TeamRun, type TeamEvent } from '@/agent/runtime/teamRun';
 import { getItem, setItem } from '@/shared/storage/kv';
@@ -113,7 +113,7 @@ export function useAgentRunner(tab: ActiveTab) {
   );
 
   const stop = useCallback(() => runRef.current?.cancel(), []);
-  const respond = useCallback((approvalId: string, approved: boolean) => runRef.current?.respond(approvalId, approved), []);
+  const respond = useCallback((approvalId: string, approved: ApprovalAnswer) => runRef.current?.respond(approvalId, approved), []);
 
   return { send, stop, respond, running };
 }

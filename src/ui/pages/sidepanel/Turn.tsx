@@ -4,6 +4,7 @@ import { memo, useState } from 'react';
 import { errorTitle, recoveryFor, type ErrorCode } from '@/shared/utils/errors';
 import type { AgentConfig } from '@/shared/types/config';
 import type { ChecklistItem } from '@/shared/types/history';
+import type { ApprovalAnswer } from '@/agent/runtime/events';
 import type { Turn } from '@/store/chatSlice';
 import { ActivityCard } from '../../components/Activity';
 import { ApprovalCard } from '../../components/ApprovalCard';
@@ -22,7 +23,7 @@ interface Props {
   isLast: boolean;
   /** The agent is working: a request can't be run again until it's done. */
   busy: boolean;
-  onRespond: (approvalId: string, approved: boolean) => void;
+  onRespond: (approvalId: string, approved: ApprovalAnswer) => void;
   onRetry: (request: string) => void;
 }
 

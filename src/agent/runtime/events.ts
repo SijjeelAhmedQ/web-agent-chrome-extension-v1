@@ -8,7 +8,14 @@ export interface ApprovalPrompt {
   confirmLabel: string;
   site: string;
   fields?: { label: string; value: string }[];
+  /** A pop-up form's own finishing buttons (Complete · Save · Reset · Cancel): the user picks which one is pressed. */
+  choices?: { id: number; label: string }[];
+  /** The button the agent meant to press (one of the choices). */
+  target?: number;
 }
+
+/** Yes or no — or, for a form's buttons, the id of the one the user picked. */
+export type ApprovalAnswer = boolean | number;
 
 /** Everything the UI needs to show a run as it happens. */
 export type RunEvent =

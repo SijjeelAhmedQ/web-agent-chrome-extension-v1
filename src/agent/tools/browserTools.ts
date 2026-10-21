@@ -104,11 +104,16 @@ async function approvalFor(
   const verdict = kind === 'click' ? classifyClick(info) : kind === 'submit' ? classifySubmit(info) : classifyTyping(info);
   if (!verdict.consequential) return null;
   const site = siteOf(await pageUrl(ctx)) || 'this site';
+  // A pop-up form with its own finishing buttons (Complete · Save · Reset · Cancel): the user picks one.
+  const choices = kind !== 'type' && (info.formActions?.length ?? 0) >= 2 ? info.formActions!.map((b) => ({ id: b.id, label: b.name })) : undefined;
   return {
-    title: action,
-    detail: `This will ${verdict.consequence} on ${site}.${kind !== 'type' && info.formValues?.length ? ' Check the details:' : ''}`,
+    title: choices ? `Which should I press: ${choices.map((c) => `“${c.label}”`).join(', ')}?` : action,
+    detail: choices
+      ? `The form is filled${info.formValues?.length ? ' — check the details' : ''}. “${info.name}” will ${verdict.consequence} on ${site}; pick what to do.`
+      : `This will ${verdict.consequence} on ${site}.${kind !== 'type' && info.formValues?.length ? ' Check the details:' : ''}`,
     confirmLabel: kind === 'type' ? 'Allow' : 'Confirm',
     ...(kind !== 'type' && info.formValues?.length ? { fields: info.formValues } : {}),
+    ...(choices ? { choices, target: elementId } : {}),
   };
 }
 

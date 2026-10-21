@@ -486,6 +486,24 @@ function groupLabel(radio: Element): string {
 
 const isVisibleField = (el: Element) => el.getClientRects().length > 0 || (isInput(el) && (el.type === 'checkbox' || el.type === 'radio'));
 
+const ACTION_BUTTONS = 'button,input[type=button],input[type=submit],input[type=reset],a.btn,[role=button]';
+
+/**
+ * A button that ends a form in a pop-up and the ones beside it (a footer: Complete · Save · Reset ·
+ * Cancel): the smallest box around the button holding three or more such buttons, in a pop-up.
+ */
+function formActions(el: Element): { id: number; name: string }[] {
+  if (!el.closest(DIALOGS)) return [];
+  let box = el.parentElement;
+  for (let depth = 0; box && depth < 5; depth++, box = box.parentElement) {
+    const buttons = Array.from(box.querySelectorAll(ACTION_BUTTONS)).filter((b) => isVisible(b) && !isDisabled(b));
+    const named = buttons.map((b) => ({ el: b, name: accessibleName(b).trim() })).filter((b) => /\p{L}/u.test(b.name) && b.name.length <= 24);
+    if (named.length >= 3 && named.some((b) => b.el === el)) return named.slice(0, 6).map((b) => ({ id: idFor(b.el), name: b.name }));
+    if (box.matches(DIALOGS)) break;
+  }
+  return [];
+}
+
 export function describeRisk(el: Element): ElementRisk {
   const info = describeElement(el);
   const form = (el as HTMLInputElement).form ?? el.closest('form');
@@ -513,6 +531,8 @@ export function describeRisk(el: Element): ElementRisk {
         fields.some((f) => (f as HTMLInputElement).type === 'search' || /^(q|query|search|s|k|keywords?|term)$/i.test(f.getAttribute('name') ?? ''))),
     formSubmitLabels: submitLabels,
     formValues: filledValues(form ?? el.closest('dialog,[role=dialog],[aria-modal=true]')),
+    formActions: formActions(el),
+    shown: el.isConnected && isVisible(el),
   };
 }
 

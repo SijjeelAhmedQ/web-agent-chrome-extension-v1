@@ -15,9 +15,9 @@ import type { ChatMessage, ToolCall } from '../llm/types';
 import { buildSystemPrompt } from '../planner/systemPrompt';
 import { knowledgeBudget, knowledgeSection } from '../planner/siteKnowledge';
 import { buildToolset, sitesFor, toolSpecs } from '../tools/registry';
-import { ElementMemory, type AgentTool, type ApprovalRequest, type ToolContext } from '../tools/types';
+import { ElementMemory, type AgentTool, type ApprovalRequest, type ToolContext, type ToolOutcome } from '../tools/types';
 import { budgetFor, clipToolOutput, compactMessages, estimateTokens } from './context';
-import type { ApprovalPrompt, RunEvent } from './events';
+import type { ApprovalAnswer, ApprovalPrompt, RunEvent } from './events';
 import { asksUser, followUpOf, historyForModel } from './followUp';
 import { Checklist, checklistTool } from './checklist';
 import { changedSomething, namedIn, pageState, undoTool, wrongRowClick, type ClickRecord } from './clickGuard';
@@ -62,7 +62,7 @@ export function resolveProvider(agent: AgentConfig, config: AppConfig, url = '')
 export class AgentRun {
   readonly id = uid('task_');
   private readonly abort = new AbortController();
-  private approval: { id: string; resolve: (approved: boolean) => void } | null = null;
+  private approval: { id: string; resolve: (answer: ApprovalAnswer | 'gone') => void } | null = null;
   /** Approvals the user declined in this task (by their title). */
   private readonly declined = new Set<string>();
   /** How often each exact page action changed nothing in this task — to break loops. */
@@ -115,7 +115,7 @@ export class AgentRun {
     this.approval?.resolve(false);
   }
 
-  respond(approvalId: string, approved: boolean): void {
+  respond(approvalId: string, approved: ApprovalAnswer): void {
     if (this.approval?.id === approvalId) this.approval.resolve(approved);
   }
 
@@ -552,9 +552,32 @@ export class AgentRun {
         const site = siteOf((await ctx.browser.currentTab().catch(() => null))?.url) || 'this site';
         step = { ...step, status: 'waiting' };
         this.upsertStep(step);
-        const approved = await this.askApproval({ id: uid('ap_'), stepId: step.id, site, ...approvalNeeded });
+        const answer = await this.askApproval({ id: uid('ap_'), stepId: step.id, site, ...approvalNeeded }, ctx);
         this.throwIfCancelled();
-        if (!approved) {
+        // The form was closed on the page while it waited: cancelled there means cancelled here.
+        if (answer === 'gone') {
+          finish({ status: 'skipped', note: 'You closed it on the page' });
+          this.endWith = 'Stopped — the form was closed on the page, so nothing was saved.';
+          return 'The user closed the form on the page. The task is stopped.';
+        }
+        // No to a pop-up form's buttons: its own Cancel is pressed too — cancelled here means cancelled there.
+        if (answer === false && approvalNeeded.choices?.length) {
+          const cancel = approvalNeeded.choices.find((c) => /^(cancel|close)$/i.test(c.label));
+          if (cancel) await ctx.browser.send({ kind: 'click', id: cancel.id, highlight: true }).catch(() => undefined);
+          finish({ status: 'skipped', note: cancel ? `You cancelled — pressed “${cancel.label}” on the form` : 'You declined' });
+          this.endWith = cancel ? `Cancelled — you said no, so I pressed the form's “${cancel.label}” too. Nothing was saved.` : declinedAnswer(approvalNeeded.title);
+          return 'The user cancelled. The task is stopped.';
+        }
+        // Another of the form's buttons (“Complete” instead of “Save”): press the one the user picked.
+        if (typeof answer === 'number' && answer !== approvalNeeded.target) {
+          const picked = approvalNeeded.choices?.find((c) => c.id === answer);
+          this.declined.add(approvalNeeded.title);
+          const clicked = await this.inFront(ctx, () => byName.get('click')!.execute({ id: answer, name: picked?.label ?? '', double: false }, ctx)).catch((err: unknown) => ({ output: `Couldn't press it: ${err instanceof Error ? err.message : String(err)}` }) as ToolOutcome);
+          finish({ status: 'done', note: `You chose “${picked?.label ?? 'another button'}”`, ...(dev ? { result: clicked.output } : {}) });
+          return `The user chose “${picked?.label}” instead of “${String((args as { name?: unknown; text?: unknown }).name ?? (args as { text?: unknown }).text ?? '')}”, and it was pressed: ${clicked.output}
+Don't press any other of the form's buttons. Read the page and tell the user what happened.`;
+        }
+        if (!answer) {
           this.declined.add(approvalNeeded.title);
           finish({ status: 'skipped', note: 'You declined' });
           return 'The user declined this action. Do not try it again or work around it; continue without it, or tell the user what you would have done.';
@@ -736,17 +759,29 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
     return assessed ?? { title: `${label}?`, detail: 'This agent asks before every action.', confirmLabel: 'Allow' };
   }
 
-  private askApproval(prompt: ApprovalPrompt): Promise<boolean> {
+  private askApproval(prompt: ApprovalPrompt, ctx: ToolContext): Promise<ApprovalAnswer | 'gone'> {
     return new Promise((resolve) => {
+      let watch: ReturnType<typeof setInterval> | null = null;
       this.approval = {
         id: prompt.id,
-        resolve: (approved) => {
+        resolve: (answer) => {
+          if (watch) clearInterval(watch);
           this.approval = null;
           this.emit({ type: 'approval', taskId: this.id, prompt: null });
-          resolve(approved);
+          resolve(answer);
         },
       };
       this.emit({ type: 'approval', taskId: this.id, prompt });
+      // A form's buttons asked about: if the user closes the form on the page meanwhile, the question goes too.
+      const target = prompt.target;
+      if (target !== undefined) {
+        watch = setInterval(() => {
+          void ctx.browser
+            .send({ kind: 'describe', id: target })
+            .then((info) => info.shown === false && this.approval?.id === prompt.id && this.approval.resolve('gone'))
+            .catch(() => this.approval?.id === prompt.id && this.approval.resolve('gone'));
+        }, 1500);
+      }
     });
   }
 }
