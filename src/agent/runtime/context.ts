@@ -6,6 +6,8 @@ const MAX_TOOL_CHARS = 20_000;
 const PLACEHOLDER = '[Earlier page snapshot removed — its element ids are no longer valid.]';
 const RUNTIME_PROMPT = /^(Before you finish|Not finished yet:|Your last reply was cut off|You have not finished the task yet)/;
 const EARLIER_STEP = '[Result of an earlier step — removed to fit; it was done.]';
+/** The first line of a step the user approved: kept however tight the room, so what was done is not forgotten. */
+export const APPROVED_DONE = 'Done with the user’s approval:';
 /** The least of the latest page the model keeps, in tokens, however tight the budget. */
 const MIN_PAGE_TOKENS = 1_200;
 const SHRUNK_NOTE = '[…page list shortened to fit the model’s memory — use find_element or click_text for something not listed]';
@@ -78,7 +80,8 @@ export function compactMessages(messages: ChatMessage[], budgetTokens: number): 
     if (chain(i)) continue;
     if (m.role === 'tool' && m.content !== PLACEHOLDER && m.content.length > 80) {
       total -= tokensOf(m);
-      messages[i] = { ...m, content: EARLIER_STEP };
+      const first = m.content.split('\n')[0];
+      messages[i] = { ...m, content: first.startsWith(APPROVED_DONE) ? `${first.slice(0, 240)}\n${EARLIER_STEP}` : EARLIER_STEP };
       total += tokensOf(messages[i]);
     } else if (m.role === 'assistant' && m.content.length > 80) {
       total -= tokensOf(m);

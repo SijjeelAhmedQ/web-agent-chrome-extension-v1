@@ -5,7 +5,7 @@ import { matchesSite } from '@/shared/utils';
 import { classifyClick, classifySubmit, classifyTyping } from './execution/riskPolicy';
 import { extractTextToolCalls, parseArguments, stripThinking } from './llm/parse';
 import { buildSystemPrompt } from './planner/systemPrompt';
-import { budgetFor, compactMessages, estimateTokens, shrinkSnapshot } from './runtime/context';
+import { APPROVED_DONE, budgetFor, compactMessages, estimateTokens, shrinkSnapshot } from './runtime/context';
 import { namedIn, quotesIn, talksAboutPage } from './runtime/agentRun';
 import { formatElement, formatSnapshot } from './tools/format';
 import { buildToolset, toolSpecs } from './tools/registry';
@@ -214,6 +214,15 @@ describe('prompt and context', () => {
     const out = shrinkSnapshot(page, 2_000);
     expect(out).toContain('codeine (systemic) and gabapentin (systemic) — Monitor for signs of CNS depression — Moderate');
     expect(estimateTokens(out)).toBeLessThanOrEqual(2_100);
+  });
+  it('keeps what the user approved when older steps are cut to fit', () => {
+    const msgs: ChatMessage[] = [{ role: 'system', content: 's' }, { role: 'user', content: 'delete the test diagnosis' }];
+    msgs.push({ role: 'tool', toolName: 'click', toolCallId: 'd', content: `${APPROVED_DONE} Click “Delete” — row 1 “Essential hypertension”\nClicked “Delete”. ${'New on the page: x. '.repeat(40)}` });
+    msgs.push({ role: 'tool', toolName: 'click', toolCallId: 'o', content: `Clicked “Other”. ${'New on the page: x. '.repeat(40)}` });
+    for (let i = 0; i < 8; i++) msgs.push({ role: 'tool', toolName: 'find_element', toolCallId: `${i}`, content: `found ${i} `.repeat(60) });
+    compactMessages(msgs, 700);
+    expect(msgs[2].content).toMatch(/^Done with the user’s approval: Click “Delete” — row 1 “Essential hypertension”\n\[Result of an earlier step/);
+    expect(msgs[3].content).toMatch(/^\[Result of an earlier step/);
   });
   it('estimates more tokens for digits', () => {
     expect(estimateTokens('2026-10-15')).toBeGreaterThan(estimateTokens('abcdefghij'));

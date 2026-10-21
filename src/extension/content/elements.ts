@@ -398,11 +398,15 @@ export function contextOf(el: Element): string | undefined {
     const index = rows.indexOf(row);
     const header = table?.querySelector('thead tr, [role=row]:has([role=columnheader])');
     const position = header ? index : index + 1;
-    const cells = Array.from(row.querySelectorAll(':scope > td, :scope > th, [role=gridcell], [role=cell]'))
+    const texts = Array.from(row.querySelectorAll(':scope > td, :scope > th, [role=gridcell], [role=cell]'))
       .map((c) => clean(c.textContent, 40))
-      .filter((t) => t && t.length < 40)
-      .slice(0, 3);
-    const lead = clean(cells.join(' · '), 80);
+      .filter(Boolean);
+    // The row's wordiest cell names it (“Essential hypertension …”), however long — dates and codes do not.
+    const letters = (t: string) => t.match(/\p{L}/gu)?.length ?? 0;
+    const name = texts.reduce((best, t) => (letters(t) > letters(best) ? t : best), '');
+    const cells = texts.filter((t, i) => t === name || (t.length < 40 && i < 3)).slice(0, 3);
+    if (name && !cells.includes(name)) cells[cells.length - 1] = name;
+    const lead = clean(cells.join(' · '), 100);
     if (index >= 0 && row !== header) return `row ${position}${lead ? ` “${lead}”` : ''}`;
   }
   const form = el.closest('form');

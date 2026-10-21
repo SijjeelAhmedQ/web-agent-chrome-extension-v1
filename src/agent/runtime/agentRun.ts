@@ -16,7 +16,7 @@ import { buildSystemPrompt } from '../planner/systemPrompt';
 import { knowledgeBudget, knowledgeSection } from '../planner/siteKnowledge';
 import { buildToolset, sitesFor, toolSpecs } from '../tools/registry';
 import { ElementMemory, type AgentTool, type ApprovalRequest, type ToolContext, type ToolOutcome } from '../tools/types';
-import { budgetFor, clipToolOutput, compactMessages, estimateTokens } from './context';
+import { APPROVED_DONE, budgetFor, clipToolOutput, compactMessages, estimateTokens } from './context';
 import type { ApprovalAnswer, ApprovalPrompt, RunEvent } from './events';
 import { asksUser, followUpOf, historyForModel } from './followUp';
 import { Checklist, checklistTool } from './checklist';
@@ -638,7 +638,9 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
         }
       }
       finish({ status: 'done', note: outcome.note, ...(dev ? { result: clip(outcome.output, 4000) } : {}) });
-      return outcome.output;
+      // What the user let it do stays in the model's memory when older steps are cut to fit — or, a delete
+      // done and forgotten, it looks for the record again and deletes another.
+      return approvalNeeded ? `${APPROVED_DONE} ${approvalNeeded.title.replace(/\?$/, '')}\n${outcome.output}` : outcome.output;
     } catch (err) {
       if (this.abort.signal.aborted || isAbort(err)) throw err;
       if (err instanceof PageError) {

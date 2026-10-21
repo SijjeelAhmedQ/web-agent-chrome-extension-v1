@@ -95,6 +95,22 @@ export function visualRows(root: Element, max = 120): VisualRow[] {
     });
 }
 
+/** The list a heading or caption names (“Long Term Diagnosis”): the first table after it on the page. */
+function tableUnder(want: string, tables: Element[], scope: Element | Document): Element | undefined {
+  const labels = Array.from(scope.querySelectorAll('h1,h2,h3,h4,h5,h6,legend,caption,label,span,div,a,p,li'))
+    .filter((e) => isVisible(e) && e.children.length <= 2)
+    .map((e) => ({ e, text: ((e as HTMLElement).innerText ?? '').replace(/\s+/g, ' ').trim().toLowerCase() }))
+    .filter((x) => x.text.includes(want) && x.text.length <= want.length + 30)
+    .sort((a, b) => a.text.length - b.text.length);
+  // Hidden and empty tables count: a heading over an empty list must not take the next section's list.
+  const all = Array.from(scope.querySelectorAll('table,[role=grid],[role=table]')).filter((t) => !t.querySelector('table,[role=grid],[role=table]'));
+  for (const { e } of labels) {
+    const next = all.find((t) => !!(e.compareDocumentPosition(t) & Node.DOCUMENT_POSITION_FOLLOWING));
+    if (next && tables.includes(next)) return next;
+  }
+  return undefined;
+}
+
 /** A list on the page (or in the pop-up in front): its rows, and each row's text colour when they differ. */
 export function readTable(near: string, max: number, scope: Element | Document = document): TableResult {
   const want = near.trim().toLowerCase();
@@ -102,7 +118,8 @@ export function readTable(near: string, max: number, scope: Element | Document =
   const tables = Array.from(scope.querySelectorAll('table,[role=grid],[role=table]')).filter((t) => isVisible(t) && !t.querySelector('table,[role=grid],[role=table]'));
   const table =
     (want && tables.find((t) => (t as HTMLElement).innerText?.toLowerCase().includes(want))) ||
-    tables.sort((a, b) => rowsOf(b).length - rowsOf(a).length)[0];
+    (want && tableUnder(want, tables, scope)) ||
+    [...tables].sort((a, b) => rowsOf(b).length - rowsOf(a).length)[0];
   if (!table) return { found: false, headers: [], rows: [], total: 0 };
   const plainText = (c: Element) => ((c as HTMLElement).innerText ?? '').replace(/\s+/g, ' ').trim();
   // A cell that is only a sign (“!”, “✓”, “●”): its colour or title is what it says (a priority, a status).
