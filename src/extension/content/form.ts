@@ -12,29 +12,40 @@ const DATE_MASK = /^(?:[_dD]{2}[/.-][_mM]{2}[/.-][_yY]{4}|\d{1,2}[/.-]\d{1,2}[/.
 const clean = (s: string) => s.replace(/\s+/g, ' ').trim();
 const list = (items: string[], max = 12) => (items.length > max ? `${items.slice(0, max).join(' / ')} / … (${items.length} in all)` : items.join(' / '));
 
-/** The choices shown in a picker that holds several (“PM Judy GILMOUR ×”), and the hidden list behind it. */
-// Known multi-choice pickers (select2, chosen, token/tag inputs, chips) — not any class with “tag” in it (“stage”).
+// Known pickers (select2, chosen, token/tag inputs, chips) — not any class with “tag” in it (“stage”).
 const PICKER = '[class*=select2],[class*=chosen-],[class*=token-],[class*=tokenfield],[class*=tagsinput],[class*=tagit],[class*=chip],[class*=multiselect]';
 
-/** The outermost box of a picker that holds several choices, around its search field. */
-function pickerOf(field: Element): Element | null {
+/** The outermost box of a picker (a styled dropdown) around its small search field. */
+export function pickerOf(field: Element): Element | null {
   let box: Element | null = null;
   let node = field.parentElement;
   for (let depth = 0; node && depth < 6; depth++, node = node.parentElement) if (node.matches(PICKER)) box = node;
   return box;
 }
 
-function pickedChoices(field: Element): string[] | null {
+export interface PickerState {
+  /** Holds several choices (“To: PM Judy GILMOUR ×”) or one (“Location: All”). */
+  several: boolean;
+  chosen: string[];
+  options: string[];
+}
+
+/** What a picker shows now, from the list it stands for (the page's hidden <select>) when there is one. */
+export function pickerState(field: Element): PickerState | null {
   const box = pickerOf(field);
   if (!box) return null;
-  const hidden = box.parentElement?.querySelector('select[multiple]') as HTMLSelectElement | null;
-  if (hidden?.selectedOptions.length) return Array.from(hidden.selectedOptions).map((o) => clean(o.text));
+  const hidden = (box.previousElementSibling?.matches('select') ? box.previousElementSibling : box.parentElement?.querySelector('select')) as HTMLSelectElement | null;
+  const options = hidden ? Array.from(hidden.options).map((o) => clean(o.text)).filter(Boolean) : [];
+  const several = hidden ? hidden.multiple : !/single/.test(String(box.className));
+  if (hidden && (hidden.selectedOptions.length || !several)) {
+    return { several, chosen: Array.from(hidden.selectedOptions).map((o) => clean(o.text)).filter((t) => t && !/^-+\s*select\s*-+$/i.test(t)), options };
+  }
   const CHIP = '[class*=choice],[class*=token],[class*=tag],[class*=chip]';
   const chips = Array.from(box.querySelectorAll(CHIP))
     .filter((c) => !c.querySelector(CHIP) && !c.matches('[class*=remove],[class*=close],input') && isVisible(c))
     .map((c) => clean((c as HTMLElement).innerText ?? '').replace(/\s*[×✕x]\s*$/i, ''))
     .filter((t) => t && !/^[×✕]$/.test(t));
-  return chips;
+  return { several, chosen: chips, options };
 }
 
 export function formFields(d: Element): string[] {
@@ -48,6 +59,7 @@ export function formFields(d: Element): string[] {
   );
   const lines: string[] = [];
   const radiosDone = new Set<string>();
+  const pickersDone = new Set<Element>();
   for (const f of fields) {
     // A picker's label is beside its box, not beside the small search field inside it.
     const seen = visualLabelInfo(isInput(f) && pickerOf(f) ? pickerOf(f)! : f);
@@ -79,9 +91,18 @@ export function formFields(d: Element): string[] {
       lines.push(`- ${name}${required ? '*' : ''} — dropdown: ${empty ? 'empty' : `“${value}”`}; options: ${list(options)}${fixed}`);
       continue;
     }
-    const picked = pickedChoices(f);
-    if (picked) {
-      lines.push(`- ${name}${required ? '*' : ''} — picker that can hold several: ${picked.length ? picked.map((p) => `“${p}”`).join(', ') : 'empty'} (add one: type its name and choose it; remove one: its ×)${fixed}`);
+    const picker = pickerState(f);
+    if (picker) {
+      // One line per picker, however many small inputs it has.
+      const box = pickerOf(f)!;
+      if (pickersDone.has(box)) continue;
+      pickersDone.add(box);
+      const shown = picker.chosen.length ? picker.chosen.map((p) => `“${p}”`).join(', ') : 'empty';
+      lines.push(
+        picker.several
+          ? `- ${name}${required ? '*' : ''} — picker that can hold several: ${shown} (add one: type its name and choose it; remove one: its ×)${fixed}`
+          : `- ${name}${required ? '*' : ''} — dropdown: ${shown}${picker.options.length ? `; options: ${list(picker.options)}` : ''} (open it, type to narrow, choose)${fixed}`,
+      );
       continue;
     }
     const value = clean((f as HTMLInputElement | HTMLTextAreaElement).value ?? '');

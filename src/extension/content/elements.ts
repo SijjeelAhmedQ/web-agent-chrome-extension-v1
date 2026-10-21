@@ -138,6 +138,11 @@ export function accessibleName(el: Element): string {
     if (labels.length) return clean(labels.join(' '));
     if (isInput(el) && ['button', 'submit', 'reset'].includes(el.type) && el.value) return clean(el.value);
     if (isInput(el) && el.type === 'image') return clean(el.alt || el.value || el.title) || iconName(el) || 'Submit';
+    // A radio or tick box with its words in the next box over (“◉ | Active”), not in a <label>.
+    if (isInput(el) && (el.type === 'radio' || el.type === 'checkbox')) {
+      const caption = captionRightOf(el);
+      if (caption) return caption;
+    }
     // Older forms lay out label and field in table cells: <td>Take:</td><td><input></td>.
     const cellLabel = tableLabel(el);
     if (cellLabel) return cellLabel;
@@ -234,8 +239,32 @@ export function visualLabelInfo(field: Element): { text: string; required: boole
   if (!best) return { text: '', required: false };
   // The * is often an element of its own beside the words (“To:<span>*</span>”).
   const holder = best.node.parentElement;
-  const around = [holder, holder?.parentElement].map((e) => (e?.textContent ?? '').replace(/\s+/g, ' ').trim()).find((t) => t.length < 60 && t.includes('*'));
+  // Only a * the user can see: a hidden one (“<span class="hide">*</span>”) doesn't count.
+  const around = [holder, holder?.parentElement].map((e) => ((e as HTMLElement | null)?.innerText ?? '').replace(/\s+/g, ' ').trim()).find((t) => t.length < 60 && t.includes('*'));
   return { text: best.text, required: /\*/.test(best.node.textContent ?? '') || !!around };
+}
+
+/** The words just right of a small control on its line (a radio's or tick box's caption). */
+export function captionRightOf(field: Element): string {
+  const box = field.getBoundingClientRect();
+  if (!box.width || !box.height) return '';
+  let best: { text: string; gap: number } | null = null;
+  let scope: Element | null = field.parentElement;
+  for (let depth = 0; scope && depth < 3 && !best; depth++, scope = scope.parentElement) {
+    const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = (node.textContent ?? '').replace(/\s+/g, ' ').trim();
+      if (!text || text.length > 50 || !/\p{L}/u.test(text) || node.parentElement?.closest('button,select,option,textarea,script,style')) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const r = range.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      const overlap = Math.min(r.bottom, box.bottom) - Math.max(r.top, box.top);
+      const gap = r.left - box.right;
+      if (gap >= -2 && gap < 160 && overlap >= Math.min(r.height, box.height) * 0.4 && (!best || gap < best.gap)) best = { text, gap };
+    }
+  }
+  return best?.text.replace(/[:*]\s*$/, '') ?? '';
 }
 
 /** Grid layouts: <div><span>Take</span></div><div><input></div> — a short text box right before the field's box. */
@@ -397,10 +426,19 @@ export interface Root {
  * Walks the document, open shadow roots and same-origin iframes, yielding every element
  * a person could operate. Bounded so huge pages stay fast.
  */
-export function collectInteractive(limitNodes = 20000): { elements: Element[]; frames: string[] } {
+/** Pop-ups showing now (the same kinds the snapshot reports). */
+const OPEN_POPUPS = 'dialog[open],[role=dialog],[role=alertdialog],[aria-modal=true],.modal.show,.modal.in,.ui-dialog';
+
+export function collectInteractive(limitNodes = 150_000): { elements: Element[]; frames: string[] } {
   const found: Element[] = [];
   const frames: string[] = [];
   let visited = 0;
+
+  // Open pop-ups first: a big page (a consult: 35,000 elements) builds them last, and its own
+  // controls would use up the limit before a pop-up's Save is reached.
+  const open = Array.from(document.querySelectorAll(OPEN_POPUPS)).filter((d) => isVisible(d));
+  const popups = open.filter((d) => !open.some((o) => o !== d && o.contains(d)));
+  const done = new Set<Element>();
 
   const visit = (root: Document | ShadowRoot | Element) => {
     const doc = root instanceof Document ? root : (root.ownerDocument ?? document);
@@ -409,7 +447,7 @@ export function collectInteractive(limitNodes = 20000): { elements: Element[]; f
     while (node && visited < limitNodes) {
       visited++;
       const el = node;
-      if (el.id === OVERLAY_HOST_ID) {
+      if (el.id === OVERLAY_HOST_ID || done.has(el)) {
         node = walker.nextSibling() as Element | null;
         // Skip the overlay subtree entirely.
         if (!node) node = walker.nextNode() as Element | null;
@@ -434,6 +472,10 @@ export function collectInteractive(limitNodes = 20000): { elements: Element[]; f
     }
   };
 
+  for (const popup of popups) {
+    visit(popup);
+    done.add(popup);
+  }
   visit(document.body ?? document.documentElement);
   return { elements: found, frames: frames.filter(Boolean) };
 }

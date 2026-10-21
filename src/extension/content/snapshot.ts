@@ -15,7 +15,7 @@ import {
   roleOf,
 } from './elements';
 import { visualRows } from './rows';
-import { formFields } from './form';
+import { formFields, pickerOf, pickerState } from './form';
 import { isAnchor, isButton, isHTML, isInput, isSelect, isTextArea } from './dom';
 
 const clip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
@@ -72,7 +72,15 @@ export function describeElement(el: Element): ElementInfo {
   if (context) info.context = context;
   // A field named by its placeholder (“Surname First Name”) also gets the label the page shows (“Patient Name”).
   if ((isInput(el) && !['button', 'submit', 'reset', 'image', 'checkbox', 'radio', 'hidden'].includes(el.type)) || isTextArea(el) || isSelect(el)) {
-    const seen = visualLabel(el);
+    const picker = isInput(el) ? pickerState(el) : null;
+    if (picker) {
+      const box = pickerOf(el)!;
+      const caption = visualLabel(box) || accessibleName(box);
+      if (caption) info.name = caption;
+      info.value = picker.chosen.join('; ');
+      info.placeholder = picker.several ? 'picker: type a name and choose it; × removes one' : 'dropdown: type to narrow, then choose';
+    }
+    const seen = picker ? '' : visualLabel(el);
     // A field “named” by its mask (“__/__/____”) is called what the page calls it (“Due”).
     if (seen && !/\p{L}/u.test(info.name)) {
       if (info.name && !info.placeholder) info.placeholder = info.name;
@@ -335,9 +343,12 @@ export function snapshot(mode: ReadMode, maxElements: number, maxTextChars: numb
   reads++;
   for (const e of described) if (!firstSeen.has(e.id)) firstSeen.set(e.id, reads);
   const known = (e: ElementInfo) => listedBefore.has(e.id) || firstSeen.get(e.id) === reads;
+  // The pop-up in front is where the user works: all its controls are listed, before the page behind it.
+  const front = frontDialog();
+  const inFront = new Set(front ? described.filter((_, i) => front.contains(elements[i])).map((e) => e.id) : []);
   const order = new Map(described.map((e, i) => [e.id, i]));
   const chosen = [...described]
-    .sort((a, b) => +known(b) - +known(a) || (firstSeen.get(b.id) ?? 0) - (firstSeen.get(a.id) ?? 0) || +b.inViewport - +a.inViewport || (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+    .sort((a, b) => +inFront.has(b.id) - +inFront.has(a.id) || +known(b) - +known(a) || (firstSeen.get(b.id) ?? 0) - (firstSeen.get(a.id) ?? 0) || +b.inViewport - +a.inViewport || (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
     .slice(0, maxElements);
   chosen.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
   const listed = new Set(chosen.map((e) => e.id));
@@ -526,7 +537,7 @@ export function findText(text: string, near: string | undefined, limit: number):
     return next as Element | null;
   };
   let node = walker.firstChild() as Element | null;
-  for (let visited = 0; node && visited < 40000; visited++) {
+  for (let visited = 0; node && visited < 150_000; visited++) {
     // textContent runs table cells together (“STARK03-12-2015”), so this pass is loose;
     // whole words are checked on the rendered text below.
     if (node.id === OVERLAY_HOST_ID || SKIP_TAGS.has(node.tagName) || !norm(node.textContent ?? '').includes(q)) {
