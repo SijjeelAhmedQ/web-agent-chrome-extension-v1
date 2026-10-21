@@ -44,6 +44,8 @@ export interface DialogInfo {
   pdfs?: string[];
   /** For the pop-up in front: its lines as shown — cells side by side, left to right (a result row: test, label, flag). */
   rows?: VisualRow[];
+  /** For the pop-up in front, when it is a form: each field as “- Name* — kind: value”. */
+  form?: string[];
 }
 
 export interface VisualRow {

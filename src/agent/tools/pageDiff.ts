@@ -1,5 +1,5 @@
 import type { PageSnapshot } from '@/shared/types/page';
-import { formatDialogs, formatElement } from './format';
+import { formatDialogs, formatElement, formSection } from './format';
 
 /**
  * Reading the same page again (after closing a pop-up, typing, opening a tab of it…) gives only what
@@ -65,6 +65,7 @@ export function pageDiff(prev: PageMemo, snap: PageSnapshot): string | null {
   if (snap.dialogs?.length) {
     out.push(formatDialogs(snap.dialogs));
     const front = snap.dialogs[0];
+    if (front.form?.length) out.push(formSection(front));
     if (front.fullText) out.push(`All the text of the pop-up “${front.title || 'Pop-up'}”${snap.dialogs.length > 1 ? ' (in front)' : ''}:`, front.fullText);
   } else out.push('No pop-ups are showing.');
   if (!added.length && !changed.length && !gone.length && !newText) {

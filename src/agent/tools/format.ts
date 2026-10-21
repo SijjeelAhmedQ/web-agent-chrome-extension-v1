@@ -37,6 +37,11 @@ function elementLine(e: ElementInfo, sameRowAsAbove: boolean): string {
   return parts.join(' ');
 }
 
+/** The form in the pop-up in front, field by field — read live. */
+export function formSection(d: DialogInfo): string {
+  return [`The form in the pop-up “${d.title || 'Pop-up'}” now (* = required; fill what the user gave, ask only for a required field that is empty and that the user didn't give):`, ...(d.form ?? [])].join('\n');
+}
+
 /** Pop-ups on top of the page, each with the control that closes it — or a note that it has none. */
 export function formatDialogs(dialogs: DialogInfo[]): string {
   const stacked = dialogs.some((d) => d.onTop) && dialogs.some((d) => !d.onTop);
@@ -57,6 +62,7 @@ export function formatSnapshot(s: PageSnapshot, mode: 'overview' | 'content'): s
     lines.push(formatDialogs(s.dialogs));
     // Before the element list, so it is kept when a long page has to be shortened.
     const front = s.dialogs[0];
+    if (front.form?.length) lines.push(formSection(front));
     if (front.fullText) lines.push(`All the text of the pop-up “${front.title || 'Pop-up'}”${s.dialogs.length > 1 ? ' (in front)' : ''}:`, front.fullText);
   }
   else if (s.dialogOpen) lines.push('A dialog is open on top of the page.');

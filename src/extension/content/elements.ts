@@ -197,16 +197,22 @@ function tableLabel(el: Element): string {
  * above it — whatever the markup (labels in other columns, nested boxes, tables). Empty when none.
  */
 export function visualLabel(field: Element): string {
+  return visualLabelInfo(field).text;
+}
+
+/** The label the page shows for a field, and whether it is marked required (“To:*”). */
+export function visualLabelInfo(field: Element): { text: string; required: boolean } {
   const box = field.getBoundingClientRect();
-  if (!box.width || !box.height) return '';
-  let best: { text: string; gap: number } | null = null;
+  if (!box.width || !box.height) return { text: '', required: false };
+  let best: { text: string; gap: number; node: Node } | null = null;
   let scope: Element | null = field.parentElement;
   for (let depth = 0; scope && depth < 5 && !best; depth++, scope = scope.parentElement) {
     const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
     let seen = 0;
     for (let node = walker.nextNode(); node && seen < 80; node = walker.nextNode()) {
       const text = asLabel((node.textContent ?? '').replace(/\s+/g, ' ').trim());
-      if (!text || text.length > 40 || node.parentElement?.closest('button,select,option,textarea,script,style,a')) continue;
+      // A label has words: not “×” or “*”.
+      if (!text || text.length > 40 || !/\p{L}/u.test(text) || node.parentElement?.closest('button,select,option,textarea,script,style,a')) continue;
       seen++;
       const range = document.createRange();
       range.selectNodeContents(node);
@@ -216,16 +222,20 @@ export function visualLabel(field: Element): string {
       // Left of the field, on its line.
       if (r.right <= box.left + 4 && box.left - r.right < 320 && overlap >= Math.min(r.height, box.height) * 0.5) {
         const gap = box.left - r.right;
-        if (!best || gap < best.gap) best = { text, gap };
+        if (!best || gap < best.gap) best = { text, gap, node };
       }
       // Right above it.
       else if (r.bottom <= box.top + 2 && box.top - r.bottom < 24 && r.left < box.right && r.right > box.left - 8) {
         const gap = 400 + (box.top - r.bottom);
-        if (!best || gap < best.gap) best = { text, gap };
+        if (!best || gap < best.gap) best = { text, gap, node };
       }
     }
   }
-  return best?.text ?? '';
+  if (!best) return { text: '', required: false };
+  // The * is often an element of its own beside the words (“To:<span>*</span>”).
+  const holder = best.node.parentElement;
+  const around = [holder, holder?.parentElement].map((e) => (e?.textContent ?? '').replace(/\s+/g, ' ').trim()).find((t) => t.length < 60 && t.includes('*'));
+  return { text: best.text, required: /\*/.test(best.node.textContent ?? '') || !!around };
 }
 
 /** Grid layouts: <div><span>Take</span></div><div><input></div> — a short text box right before the field's box. */

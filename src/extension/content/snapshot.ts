@@ -15,6 +15,7 @@ import {
   roleOf,
 } from './elements';
 import { visualRows } from './rows';
+import { formFields } from './form';
 import { isAnchor, isButton, isHTML, isInput, isSelect, isTextArea } from './dom';
 
 const clip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
@@ -72,7 +73,11 @@ export function describeElement(el: Element): ElementInfo {
   // A field named by its placeholder (“Surname First Name”) also gets the label the page shows (“Patient Name”).
   if ((isInput(el) && !['button', 'submit', 'reset', 'image', 'checkbox', 'radio', 'hidden'].includes(el.type)) || isTextArea(el) || isSelect(el)) {
     const seen = visualLabel(el);
-    if (seen && seen.toLowerCase() !== info.name.toLowerCase().replace(/[:*]\s*$/, '')) info.label = seen;
+    // A field “named” by its mask (“__/__/____”) is called what the page calls it (“Due”).
+    if (seen && !/\p{L}/u.test(info.name)) {
+      if (info.name && !info.placeholder) info.placeholder = info.name;
+      info.name = seen;
+    } else if (seen && seen.toLowerCase() !== info.name.toLowerCase().replace(/[:*]\s*$/, '')) info.label = seen;
   }
   const popup = blockingPopupOf(el);
   if (popup) info.inBlockingPopup = popup;
@@ -216,7 +221,7 @@ export function showingDialogs(): DialogInfo[] {
 }
 
 /** All the text of a pop-up, the text of same-site frames inside it included; other sites' frames by host. */
-function dialogBody(d: Element): Pick<DialogInfo, 'fullText' | 'frames' | 'pdfs' | 'rows'> {
+function dialogBody(d: Element): Pick<DialogInfo, 'fullText' | 'frames' | 'pdfs' | 'rows' | 'form'> {
   // Values in its fields (a record's Subject, Result Date, Folder…) are not in its text: list them first.
   const fields = Array.from(d.querySelectorAll('input:not([type=button]):not([type=submit]):not([type=hidden]):not([type=checkbox]):not([type=radio]),select,textarea'))
     .filter((f) => isVisible(f) && f.closest(DIALOGS) === d)
@@ -252,6 +257,7 @@ function dialogBody(d: Element): Pick<DialogInfo, 'fullText' | 'frames' | 'pdfs'
     ...(frames.filter(Boolean).length ? { frames: frames.filter(Boolean) } : {}),
     ...(pdfs.length ? { pdfs } : {}),
     rows: visualRows(d),
+    form: formFields(d),
   };
 }
 
@@ -366,6 +372,7 @@ export function find(query: string, limit: number): FindResult {
   const q = norm(query);
   const words = q.split(' ').filter((w) => w.length > 1);
   const { elements } = collectInteractive();
+  const front = frontDialog();
   const scored = elements
     .map((el) => {
       const info = describeElement(el);
@@ -384,6 +391,8 @@ export function find(query: string, limit: number): FindResult {
       // Synonyms that come up constantly.
       if (/\bsearch\b/.test(q) && (info.role === 'searchbox' || info.type === 'search' || /search/.test(hay))) score += 4;
       if (info.inViewport) score += 0.5;
+      // The pop-up in front is where the user is working.
+      if (score > 1 && front?.contains(el)) score += 3;
       if (info.disabled) score -= 1;
       return { info, score };
     })
@@ -563,7 +572,11 @@ export function findText(text: string, near: string | undefined, limit: number):
       .filter(isNear)
       .forEach((el, order) => found.push({ el, exact: norm(accessibleName(el)) === q, covered: false, order }));
   }
-  const best = found.some((f) => f.exact) ? found.filter((f) => f.exact) : found;
+  // A pop-up in front: what it holds is what the user means — not the page's control of the same name behind it.
+  const front = frontDialog();
+  const inPopup = front ? found.filter((f) => front.contains(f.el)) : [];
+  const pool = inPopup.length ? inPopup : found;
+  const best = pool.some((f) => f.exact) ? pool.filter((f) => f.exact) : pool;
   best.sort((a, b) => Number(a.covered) - Number(b.covered) || a.order - b.order);
   // Something on top (a search dropdown) hides what is behind it: prefer what can be clicked.
   const onTop = best.filter((f) => !f.covered);
