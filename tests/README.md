@@ -161,6 +161,13 @@ committed, because it holds patient data.
 | `live-cancel-med.mjs go` | Cancels an open, unsaved medication form |
 | `live-open-panel.mjs` | Opens the Web Agent side panel beside the Indici tab (after a reinstall closed it) |
 
+### The whole suite in one command
+
+`bash run-suite.sh` (in `tests/live-indici`, Git Bash) runs, in the side panel, one chat each: cleanup of earlier test
+diagnoses and a recall, then each add alone (medication, task, recall, diagnosis), then all four in one request. The
+agent's questions are answered as a user would (`ANSWERS`). Each run's log is in `tests/indici-live/suite/`. It
+takes about 1.5 hours on Qwen3.8 27B (64k). Change the requests and labels in the script before running it again.
+
 ### The serial flow, start to finish
 
 The transcript of a passing run is in `transcripts/serial-flow-qwen38-64k-2026-10-22.txt`. It took about 28 minutes
