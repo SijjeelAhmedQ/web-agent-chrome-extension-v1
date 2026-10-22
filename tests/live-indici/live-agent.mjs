@@ -18,7 +18,7 @@ const kaggleUrl = kaggleEnv.match(/KAGGLE_URL\s*=\s*(\S+)/)?.[1]?.replace(/\/+$/
 if (!key || (useKaggle && !kaggleUrl)) throw new Error(useKaggle ? 'no KAGGLE_URL / KAGGLE_KEY in the Kaggle env file' : 'no OPENROUTER_KEY in the env file');
 const requests = JSON.parse(process.env.REQUESTS ?? '[]');
 const approve = process.env.APPROVE ? new RegExp(process.env.APPROVE, 'i') : null;
-const restore = JSON.parse(readFileSync("D:/learing AI after Movement in Syed Ammar's Team/web-agent-chrome-extension/knowledge/web-agent-restore-indici.json", 'utf8'));
+const restore = JSON.parse(readFileSync(join(import.meta.dirname, '..', '..', 'knowledge', 'web-agent-restore-indici.json'), 'utf8'));
 const extId = readFileSync(join(DIR, 'ext-id.txt'), 'utf8').trim();
 
 const browser = await puppeteer.connect({ browserWSEndpoint: readFileSync(join(DIR, 'indici-ws.txt'), 'utf8').trim(), defaultViewport: null, protocolTimeout: 1800000 });

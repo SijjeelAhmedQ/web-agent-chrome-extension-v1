@@ -1,25 +1,165 @@
-# Test scripts
+# Testing the Web Agent
 
-Two kinds, both Puppeteer (install once in the folder you run from: `npm i puppeteer`).
+Four ways, from the simplest:
 
-## `e2e-mocks/` — the agent on mock pages, with a scripted model
+| Way | What it checks | Needs |
+|---|---|---|
+| 1. By hand in Chrome | The real extension, the way a user works | Chrome, a model (Kaggle or OpenRouter) |
+| 2. Unit tests | The agent's logic: compaction, checklist, risk rules, parsing… | Node only |
+| 3. Mock e2e suites | The extension on mock pages with a scripted model | Node, Puppeteer |
+| 4. Live runner | The real agent on the Indici training site, unattended | Node, Puppeteer, a model, an Indici login |
 
-- `server.mjs` serves the mock site (`site/`, port 4599) and a mock model (port 4600) that answers each scenario
-  (the first words of the request: “records status”, “form save”, “task form”…).
-- Each `*-e2e.mjs` is a suite: `node formbuttons-e2e.mjs <path to dist>` — prints PASS/FAIL per check.
-- Start the server first: `node server.mjs`.
+## 1. By hand in Chrome
 
-## `live-indici/` — the agent on the real Indici training site (pmstraining.vitonta.com)
+1. Build: `npm install`, then `npm run build`. This creates `dist/`.
+2. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and choose the `dist` folder.
+   After every new build, press the extension's ⟳ reload button.
+3. Open the extension's **Options** page, go to **Advanced → Configuration → Import**, and choose
+   `knowledge/web-agent-restore-indici.json`. This loads the Indici agent, its tools and its knowledge.
+   Import replaces the current setup, so do it before step 4.
+4. Go to **Models** and add a connection:
+   - **Kaggle GPU**: the notebook prints a Server address and a Notebook key. Paste both, choose the model
+     `qwen3.8:27b-q4_K_M`, and set **Context window** to the number the notebook prints (65536 for
+     `web_agent_qwen38long`).
+   - **OpenRouter** (paid, faster): your key, with the model `~deepseek/deepseek-v4-flash-latest`.
+5. Log in to https://pmstraining.vitonta.com, open the extension's side panel and type a request.
 
-Only with the user's leave; writes only as the user allowed (see the runner's `APPROVE`).
+Requests that have been tried (patient Arya STARK):
 
-1. `node indici-browser.mjs <extension copy>` — opens Chrome with the extension; log in by hand there (reCAPTCHA/MFA).
-   Profile: `C:/Users/92313/.webagent-indici-profile`; extension copy: `C:/Users/92313/.webagent-ext`.
-2. After a build: `node live-reinstall.mjs` (the login stays). `node live-keeper.mjs` keeps a blank tab so the window never closes.
-3. `REQUESTS='["…"]' APPROVE='regex' node live-agent.mjs` — the real agent with DeepSeek (key read from
-   `C:/Users/92313/.webagent-openrouter.env`, never printed). Approvals are declined unless their text matches
-   `APPROVE`; `NO_ANSWER=1` only shows the approval card. Log: `agent-run.log`, model calls: `model-calls.json`.
-4. Read-only helpers: `live-do.mjs` (clicks/typing/captures; refuses Save-like buttons), `live-agent-view.mjs`,
-   `live-describe.mjs`, `live-icons.mjs`, `live-find.mjs`, `live-tabs.mjs` — what the content script reads on the live page.
+```text
+goto patients and select arya stark
 
-Paths inside the scripts point at the scratch folder they were written in; adjust `DIR` when moving them.
+go to patients, select Arya Stark, then do these one after another: (1) add a medication: paracetamol 500 mg
+tablet, take 1, frequency TDS, duration 3 days, repeats 1, directions "Take 1 tablet three times daily for pain",
+private to pharmacist "[web agent test]" — save it; (2) add a task: subject "[web agent test] review bloods", due
+next week — save it; (3) add a recall: provider Training DOCTOR, recall group Bloods, description CBC, note
+"[web agent test] recall", recall in 6 months — save it; (4) add the diagnosis Essential hypertension: status
+Probable, onset date 01/10/2026, summary "[web agent test]" — save it
+
+list Arya's medications prescribed today — name, directions, quantity
+show Arya's active tasks — subject and due date
+list all of Arya's recalls, active and completed, with description, due date, priority and provider
+list Arya's diagnoses: the long term ones and the problem list
+edit Arya's task "[web agent test] review bloods": change the priority to Medium
+delete the paracetamol 500 mg tablet prescribed for Arya today — only that one
+complete Arya's task "[web agent test] review bloods"
+review Aqib's inbox results
+```
+
+What to look for:
+
+- **Every save, delete or complete asks you first.** Read the values on the card before you press Save.
+  If a value is wrong, press Cancel. The form on the page is cancelled too.
+- The agent stops and asks when Indici asks something: the NZF interactions pop-up, "this medicine is already
+  in the active list", or "a recall of this group already exists". Answer in the chat; it carries on.
+- A task cannot be deleted in Indici, only completed. A recall's "delete" is its Inactive icon.
+- Tag what you add with "[web agent test]" so it is easy to find and remove.
+
+## 2. Unit tests
+
+```bash
+npm test
+```
+
+## 3. Mock e2e suites (`tests/e2e-mocks/`)
+
+```bash
+cd tests/e2e-mocks
+npm install
+node server.mjs                      # mock site on port 4599, scripted model on port 4600 — leave it running
+node formbuttons-e2e.mjs ../../dist  # in a second terminal; each *-e2e.mjs prints PASS/FAIL per check
+```
+
+The mock model answers by the first words of each request ("records status", "form save", "task form"…).
+
+## 4. Live runner (`tests/live-indici/`)
+
+The real agent and a real model on the Indici training site, with Puppeteer playing the user. Everything it writes
+is saved for real, so run it only on test patients, and keep `APPROVE` narrow.
+
+### Once
+
+```bash
+cd tests/live-indici
+npm install
+```
+
+Keys are read from files at run time and never printed:
+
+```text
+C:/Users/92313/.webagent-kaggle.env       KAGGLE_URL=https://….trycloudflare.com
+                                          KAGGLE_KEY=<the notebook key>
+C:/Users/92313/.webagent-openrouter.env   OPENROUTER_KEY=<your OpenRouter key>
+```
+
+### Each session
+
+```bash
+npm run build                                      # at the repo root, after code changes
+node indici-browser.mjs C:/Users/92313/.webagent-ext   # opens Chrome with the extension — log in by hand there
+```
+
+Leave that terminal open; the window lives as long as it runs. In a second terminal:
+
+```bash
+node live-reinstall.mjs   # after a new build: puts the new dist into the open window; the login stays
+node live-keeper.mjs      # keeps a blank tab, so closing Indici tabs never closes the window
+```
+
+Then open the patient (or let the agent do it) and run requests:
+
+```bash
+PROVIDER=kaggle CTX=65536 REQUEST_MINUTES=150 \
+APPROVE='^(?!.*(Delete|Inactive|Click to cancel|Click “Complete)).*' \
+APPROVE_IF='[["Strength 500 mg", "Take 1 Frequency TDS"], ["Recall Group", "Recall Group Bloods Description CBC"]]' \
+REQUESTS='["go to patients, select Arya Stark, then … (the serial request above)"]' \
+node live-agent.mjs
+```
+
+When the agent stops with a question, answer it in the same chat:
+
+```bash
+KEEP_CHAT=1 PROVIDER=kaggle CTX=65536 APPROVE='…' REQUESTS='["OK"]' node live-agent.mjs
+```
+
+On Windows, run these commands in Git Bash: the `NAME=value command` form does not work in PowerShell or cmd.
+
+| Setting | Meaning |
+|---|---|
+| `REQUESTS` | JSON list of requests, sent one after another in one chat |
+| `PROVIDER=kaggle` | Use the Kaggle notebook. Without it, the runner uses DeepSeek on OpenRouter |
+| `CTX` | The Kaggle notebook's context window (16384, or 65536 for the long notebook) |
+| `MODEL` | Another model name than the default |
+| `APPROVE` | Regex. An approval card is approved only when its text matches. Anything else is declined |
+| `APPROVE_IF` | `[[cardRegex, mustHaveRegex], …]`: a card that matches `cardRegex` but lacks `mustHaveRegex` is declined, as a careful user would |
+| `APPROVE_BUTTON` | On a form's button card (Save / Complete / Reset / Cancel), the button that counts as yes. Default `Save` |
+| `KEEP_CHAT=1` | Continue the last chat, for answering the agent's question |
+| `MAX_STEPS` | Raise the agent's step limit (e.g. 120 for the serial flow) |
+| `REQUEST_MINUTES` | How long to wait for one request (default 20) |
+| `NO_ANSWER=1` | Only show the first approval card, then stop |
+
+The output goes to the terminal. The run log is written to `tests/indici-live/agent-run.log`. Every model call is
+written to `tests/indici-live/model-calls.json`. Screenshots go to `tests/indici-live/captures/`. That folder is not
+committed, because it holds patient data.
+
+### Look at the live page without the agent
+
+| Script | What it does |
+|---|---|
+| `live-table.mjs "<heading or text>"` | Reads a list on the page (e.g. `"Long Term Diagnosis"`) |
+| `live-grep.mjs "<regex>"` | Every line of page text that matches |
+| `live-find.mjs "<regex>"` | Visible elements whose text or title matches |
+| `live-findq.mjs "<words>"` | The agent's `find_element` on the live page |
+| `live-formaround.mjs` | For each Save button: the required fields still empty, and the fields marked wrong |
+| `live-section.mjs Medications "<near>"` | Opens a consult section from the left sidebar and reads its list |
+| `live-press.mjs "<name>" "<context>"` | Presses one control by its exact name. It saves nothing by itself, but it really clicks |
+| `live-shot.mjs out.png` | A screenshot of the Indici tab |
+| `live-close-panels.mjs` | Closes side-panel tabs left open by a stopped run. The agent in them stops |
+| `live-close-extra.mjs` | Closes all Indici tabs but the first |
+| `live-cancel-med.mjs go` | Cancels an open, unsaved medication form |
+
+### The serial flow, start to finish
+
+The transcript of a passing run is in `transcripts/serial-flow-qwen38-64k-2026-10-22.txt`. It took about 28 minutes
+on Qwen3.8 27B with 64k context. The agent asked twice: OK on the NZF pop-up, and "Yes - Add new" when a CBC
+recall already existed. On the 16k notebook the same flow failed: the agent lost its steps as old messages were cut.

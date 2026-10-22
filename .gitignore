@@ -4,3 +4,6 @@ dist
 .DS_Store
 
 __pycache__
+
+# Live test output: browser address, captures, model calls (patient data)
+tests/indici-live/

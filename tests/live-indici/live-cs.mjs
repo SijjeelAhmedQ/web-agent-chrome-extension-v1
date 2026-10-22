@@ -1,9 +1,10 @@
 // Runs the Web Agent's content script (dist/content.js, freshly built) on the live Indici tab, in an
 // isolated world of its own — the page's scripts never see it — and sends it requests like the agent does.
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { connect } from './indici-live.mjs';
 
-const CONTENT = "D:/learing AI after Movement in Syed Ammar's Team/web-agent-chrome-extension/dist/content.js";
+const CONTENT = join(import.meta.dirname, '..', '..', 'dist', 'content.js');
 
 export async function contentScript() {
   const { browser, page } = await connect();

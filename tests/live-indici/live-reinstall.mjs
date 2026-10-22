@@ -1,10 +1,11 @@
 // After a new build: copy dist to the test copy and (re)install it in the logged-in window — the login stays.
 import puppeteer from 'puppeteer';
+import { join } from 'node:path';
 import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-const DIST = "D:/learing AI after Movement in Syed Ammar's Team/web-agent-chrome-extension/dist";
+const DIST = join(import.meta.dirname, '..', '..', 'dist');
 const COPY = 'C:/Users/92313/.webagent-ext';
-const b = await puppeteer.connect({ browserWSEndpoint: readFileSync('../indici-live/indici-ws.txt', 'utf8').trim(), defaultViewport: null });
-const idFile = '../indici-live/ext-id.txt';
+const b = await puppeteer.connect({ browserWSEndpoint: readFileSync(join(import.meta.dirname, '..', 'indici-live', 'indici-ws.txt'), 'utf8').trim(), defaultViewport: null });
+const idFile = join(import.meta.dirname, '..', 'indici-live', 'ext-id.txt');
 const old = existsSync(idFile) ? readFileSync(idFile, 'utf8').trim() : '';
 if (old && old !== 'blhiljoicnofbjihhkpffchgpnpmnddi') await b.uninstallExtension(old).catch((e) => console.log('uninstall:', e.message));
 rmSync(COPY, { recursive: true, force: true });
