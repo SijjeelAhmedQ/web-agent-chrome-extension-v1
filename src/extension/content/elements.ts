@@ -399,14 +399,15 @@ export function contextOf(el: Element): string | undefined {
     const header = table?.querySelector('thead tr, [role=row]:has([role=columnheader])');
     const position = header ? index : index + 1;
     const texts = Array.from(row.querySelectorAll(':scope > td, :scope > th, [role=gridcell], [role=cell]'))
-      .map((c) => clean(c.textContent, 40))
+      .map((c) => clean(c.textContent, 50))
       .filter(Boolean);
-    // The row's wordiest cell names it (“Essential hypertension …”), however long — dates and codes do not.
+    // The row's first cells (a date, a name) and its wordiest one (“Essential hypertension …”), however long:
+    // what the approval names the row by — the medicine's name, not only its date and directions.
     const letters = (t: string) => t.match(/\p{L}/gu)?.length ?? 0;
     const name = texts.reduce((best, t) => (letters(t) > letters(best) ? t : best), '');
-    const cells = texts.filter((t, i) => t === name || (t.length < 40 && i < 3)).slice(0, 3);
-    if (name && !cells.includes(name)) cells[cells.length - 1] = name;
-    const lead = clean(cells.join(' · '), 100);
+    const cells = texts.slice(0, 3);
+    if (name && !cells.includes(name)) cells.push(name);
+    const lead = clean(cells.join(' · '), 160);
     if (index >= 0 && row !== header) return `row ${position}${lead ? ` “${lead}”` : ''}`;
   }
   const form = el.closest('form');
