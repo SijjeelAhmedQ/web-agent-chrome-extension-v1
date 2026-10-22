@@ -29,6 +29,9 @@ export function describeElement(el: Element): ElementInfo {
     tag: el.tagName.toLowerCase(),
     inViewport: inViewport(el),
   };
+  // A pop-up's corner × that its title calls “Close”: named “×”, or it reads as the pop-up's own Close
+  // button (Indici's Special Authority form: its Close button opens the medicine form, its × does not).
+  if (/^close$/i.test(info.name) && cornerX(el)) info.name = '×';
   if (isInput(el)) {
     info.type = el.type;
     if (el.type === 'checkbox' || el.type === 'radio') info.checked = el.checked;
@@ -157,6 +160,13 @@ export const DIALOGS = 'dialog[open],[role=dialog],[role=alertdialog],[aria-moda
 
 const CLOSE_NAME = /^(×|✕|✖|╳|x|close|cancel|dismiss|close dialog|close window)$/i;
 const CLOSE_CLASS = /(^|\s)(close|btn-close|ui-dialog-titlebar-close|modal-close)(\s|$)/i;
+
+/** A corner × (only “×” or an icon on it, in a pop-up's header or with a close class) — not a button that says “Close”. */
+function cornerX(el: Element): boolean {
+  const text = ((el as HTMLElement).innerText ?? el.textContent ?? '').trim();
+  const cls = typeof el.className === 'string' ? el.className : '';
+  return /^(×|✕|✖|╳|x)?$/i.test(text) && (CLOSE_CLASS.test(cls) || !!el.closest('.modal-header,.ui-dialog-titlebar'));
+}
 
 /** The × / Close / Cancel control of a dialog, if it has one. */
 function closeControl(dialog: Element): Element | null {
