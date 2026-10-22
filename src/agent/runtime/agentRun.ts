@@ -18,7 +18,7 @@ import { buildToolset, sitesFor, toolSpecs } from '../tools/registry';
 import { ElementMemory, type AgentTool, type ApprovalRequest, type ToolContext, type ToolOutcome } from '../tools/types';
 import { APPROVED_DONE, budgetFor, clipToolOutput, compactMessages, estimateTokens } from './context';
 import type { ApprovalAnswer, ApprovalPrompt, RunEvent } from './events';
-import { asksUser, followUpOf, historyForModel } from './followUp';
+import { asksUser, followUpOf, historyForModel, withoutStoppedList } from './followUp';
 import { Checklist, checklistTool } from './checklist';
 import { changedSomething, namedIn, pageState, undoTool, wrongRowClick, type ClickRecord } from './clickGuard';
 
@@ -283,7 +283,7 @@ export class AgentRun {
       this.throwIfCancelled();
 
       if (!response.toolCalls.length) {
-        const answer = response.content.trim() || 'Done.';
+        const answer = withoutStoppedList(response.content.trim()) || 'Done.';
         // A reply cut off by the context limit, or narration of a next step, is not a final answer.
         const cutOff = response.finishReason === 'length';
         if ((cutOff || soundsUnfinished(answer)) && nudges < 3 && !checkedAnswer) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Checklist, checklistTool } from './runtime/checklist';
-import { followUpOf, rememberedAnswer } from './runtime/followUp';
+import { followUpOf, rememberedAnswer, withoutStoppedList } from './runtime/followUp';
 import type { ToolContext } from './tools/types';
 
 const ctx = {} as ToolContext;
@@ -62,6 +62,12 @@ describe('the checklist for a request with several things to do', () => {
     const asked = rememberedAnswer('2 recalls of CBC already exist. Which button should I press?', [], items);
     const f = followUpOf([{ role: 'user', content: 'add a recall …' }, { role: 'assistant', content: asked }], 'Yes - Add new');
     expect(f?.checklist).toEqual(items);
+  });
+
+  it('drops a “where I stopped” list the model copied into its answer, keeping its question', () => {
+    const copied = 'The duplicate diagnosis pop-up is open — Yes or No?\n\n[Where I stopped — steps already done in this task:\n1. Reading the page\nChecklist:\n☐ Add diagnosis]';
+    expect(withoutStoppedList(copied)).toBe('The duplicate diagnosis pop-up is open — Yes or No?');
+    expect(withoutStoppedList('Saved.')).toBe('Saved.');
   });
 
   it('takes items sent as one string, one per line', () => {

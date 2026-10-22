@@ -30,6 +30,15 @@ export function rememberedAnswer(answer: string, steps: StepRecord[], checklist:
   return `${answer}\n\n${STOPPED}\n${[...lines, ...(list.length ? ['Checklist:', ...list] : [])].join('\n')}]`;
 }
 
+/**
+ * A model's answer without a “Where I stopped” list it wrote itself, copying the earlier answers it saw —
+ * the runtime adds the real one; a copied one hides the question the answer ends with.
+ */
+export function withoutStoppedList(answer: string): string {
+  const at = answer.indexOf(STOPPED);
+  return at < 0 ? answer : answer.slice(0, at).trim();
+}
+
 export interface FollowUp {
   /** What the model is sent in place of the bare reply. */
   request: string;
