@@ -12,6 +12,11 @@ export class Checklist {
   items: ChecklistItem[];
   /** Items whose tick was held back once because the page didn't show what they quote. */
   asked = new Set<number>();
+  /** Something the user approved was done: it belongs to the item in hand. */
+  markSaved(): void {
+    const item = this.items.find((i) => !i.done);
+    if (item) item.saved = true;
+  }
 
   constructor(items: ChecklistItem[] = []) {
     this.items = items.map((i) => ({ ...i }));
@@ -58,6 +63,11 @@ export class Checklist {
 
 const norm = (s: string) => s.toLowerCase().replace(/[“”"'‘’]/g, '').replace(/\s+/g, ' ').trim();
 
+/** An item that changes something on the site — it is done only by saving (or deleting…) something. */
+const WRITES = /\b(add|save|create|edit|change|update|delete|remove|complete|inactivate|cancel|book|send|prescribe)\b/i;
+/** A tick's note saying the item was not done, because it was there already. */
+const NOT_DONE = /\b(already|exist|skipp|not added|not saved|not done|nothing to)/i;
+
 /** The words an item quotes (“[web agent test] serial recall”) — a few words, not a single short name. */
 const quotedIn = (text: string) => [...text.matchAll(/["“]([^"“”]{6,120})["”]/g)].map((m) => m[1].trim()).filter((q) => /\p{L}/u.test(q));
 
@@ -96,6 +106,14 @@ export function checklistTool(list: Checklist, onChange: (done: number | null) =
         const item = list.items[a.done - 1];
         if (!item) return { output: list.size ? `There is no item ${a.done}. The checklist:\n${list.format()}` : 'There is no checklist yet. Make one with items first.', note: 'No such task' };
         if (item.done) return { output: `Item ${a.done} is already ticked — don't do it again.\n${list.format()}`, note: 'Already ticked' };
+        // An item that changes something (add, save, delete…) with nothing saved since the last tick: the record
+        // on the page is an older one that looks the same. Ticked only as “already there — not added”.
+        if (WRITES.test(item.text) && !item.saved && !NOT_DONE.test(a.note ?? '')) {
+          return {
+            output: `Not ticked: nothing was saved for item ${a.done} — no save or other change was done since the last item. A record already on the page from before this task is not yours, even with the same words. Do the item now. If it truly was there before and must not be added again, tell the user so, and call task_list with done: ${a.done} and a note like "already there — not added".`,
+            note: 'Nothing saved for it yet',
+          };
+        }
         // The user's own words for it (a note, a subject) shown nowhere on the page: it may not have been
         // saved — an old record that looks alike is no proof. Asked once; a second tick is taken as checked.
         if (!list.asked.has(a.done)) {

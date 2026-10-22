@@ -609,6 +609,10 @@ export class AgentRun {
           if (tool.name === 'type') await this.inFront(ctx, () => tool.execute({ ...(args as object), submit: false }, ctx)).catch(() => undefined);
           const clicked = await this.inFront(ctx, () => byName.get('click')!.execute({ id: answer, name: picked?.label ?? '', double: false }, ctx)).catch((err: unknown) => ({ output: `Couldn't press it: ${err instanceof Error ? err.message : String(err)}` }) as ToolOutcome);
           finish({ status: 'done', note: `You chose “${picked?.label ?? 'another button'}”`, ...(dev ? { result: clicked.output } : {}) });
+          if (this.checklist.size) {
+            this.checklist.markSaved();
+            this.updateTask({ checklist: this.checklist.items.map((i) => ({ ...i })) });
+          }
           return `The user chose “${picked?.label}” instead of “${String((args as { name?: unknown; text?: unknown }).name ?? (args as { text?: unknown }).text ?? '')}”, and it was pressed: ${clicked.output}
 Don't press any other of the form's buttons. Read the page and tell the user what happened.`;
         }
@@ -655,6 +659,11 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
       // done and forgotten, it looks for the record again and deletes another.
       if (!approvalNeeded) return outcome.output;
       if (form && !/^Not saved/.test(outcome.note ?? '')) this.savedForms.add(form);
+      // The checklist's item in hand now has a change of its own to show for it.
+      if (!/^Not saved/.test(outcome.note ?? '') && this.checklist.size) {
+        this.checklist.markSaved();
+        this.updateTask({ checklist: this.checklist.items.map((i) => ({ ...i })) });
+      }
       // A form's button: which one, and the form's first values say what it saved.
       const what = approvalNeeded.choices
         ? `${step.label}${approvalNeeded.fields?.length ? ` — ${approvalNeeded.fields.slice(0, 4).map((f) => `${f.label}: ${f.value}`).join('; ')}` : ''}`

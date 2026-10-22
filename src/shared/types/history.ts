@@ -22,6 +22,8 @@ export interface ChecklistItem {
   text: string;
   done: boolean;
   note?: string;
+  /** Something the user approved (a save, a delete…) was done for it — what lets an add be ticked. */
+  saved?: boolean;
 }
 
 export interface TaskRecord {

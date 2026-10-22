@@ -32,14 +32,36 @@ describe('the checklist for a request with several things to do', () => {
     const shows = new Set(['[web agent test] serial - review bloods']);
     const page = { browser: { send: async (r: { text: string }) => ({ found: shows.has(r.text) }) } } as unknown as ToolContext;
     const list = new Checklist([
-      { text: 'Add recall: group Bloods, note "[web agent test] serial recall" — save', done: false },
-      { text: 'Add task: subject “[web agent test] serial - review bloods” — save', done: false },
+      { text: 'Add recall: group Bloods, note "[web agent test] serial recall" — save', done: false, saved: true },
+      { text: 'Add task: subject “[web agent test] serial - review bloods” — save', done: false, saved: true },
     ]);
     const tool = checklistTool(list, () => undefined);
     expect((await tool.execute(tool.schema.parse({ done: 1 }), page)).output).toMatch(/^Not ticked yet: the page doesn't show “\[web agent test\] serial recall”/);
     expect(list.pending()).toEqual([1, 2]);
     expect((await tool.execute(tool.schema.parse({ done: 1 }), page)).output).toContain('☑ 1.');
     expect((await tool.execute(tool.schema.parse({ done: 2 }), page)).output).toContain('☑ 2.');
+  });
+
+  it('ticks an add only when something was saved for it, or the note says it was there already', async () => {
+    const list = new Checklist([
+      { text: 'Add diagnosis Essential hypertension, summary "[web agent test] serial 3" — save', done: false },
+      { text: 'Add recall: Bloods / CBC — save', done: false },
+      { text: 'List the long term diagnoses', done: false },
+    ]);
+    const tool = checklistTool(list, () => undefined);
+    // An older record with the same words is on the page: no proof without a save of its own.
+    expect((await tool.execute(tool.schema.parse({ done: 1 }), ctx)).output).toMatch(/^Not ticked: nothing was saved for item 1/);
+    list.markSaved();
+    expect((await tool.execute(tool.schema.parse({ done: 1 }), ctx)).output).toContain('☑ 1.');
+    expect((await tool.execute(tool.schema.parse({ done: 2, note: 'already there — not added' }), ctx)).output).toContain('☑ 2.');
+    expect((await tool.execute(tool.schema.parse({ done: 3 }), ctx)).output).toContain('☑ 3.'); // reads nothing to save
+  });
+
+  it('remembers across a question that the item in hand was saved', () => {
+    const items = [{ text: 'Add recall: Bloods / CBC — save', done: false, saved: true }];
+    const asked = rememberedAnswer('2 recalls of CBC already exist. Which button should I press?', [], items);
+    const f = followUpOf([{ role: 'user', content: 'add a recall …' }, { role: 'assistant', content: asked }], 'Yes - Add new');
+    expect(f?.checklist).toEqual(items);
   });
 
   it('takes items sent as one string, one per line', () => {

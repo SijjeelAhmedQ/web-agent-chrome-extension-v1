@@ -8,6 +8,8 @@ import type { ChatMessage } from '../llm/types';
  */
 
 const STOPPED = '[Where I stopped — steps already done in this task:';
+/** An item something was saved for before the question — its save is not done again after the reply. */
+const SAVED = ' ⟪saved, not ticked yet⟫';
 
 /** Polite offers at the end of an answer are not questions the task is waiting on. */
 const OFFER = /\b(is there anything|anything else|something else|let me know|else (can|could|should) i|help (you )?with|(would|do) you (like|want) me to|you'?d like me to|shall i|want me to|need (any|more|further))\b[^?]*\?/gi;
@@ -24,7 +26,7 @@ export function rememberedAnswer(answer: string, steps: StepRecord[], checklist:
   if (!done.length && !checklist.length) return answer;
   const lines = done.map((s, i) => `${i + 1}. ${s.label}${s.note ? ` → ${s.note}` : ''}`);
   // The checklist goes along, so the reply carries on with the same items ticked.
-  const list = checklist.map((c) => `${c.done ? '☑' : '☐'} ${c.text}${c.note ? ` ⟨${c.note}⟩` : ''}`);
+  const list = checklist.map((c) => `${c.done ? '☑' : '☐'} ${c.text}${c.note ? ` ⟨${c.note}⟩` : ''}${c.saved && !c.done ? SAVED : ''}`);
   return `${answer}\n\n${STOPPED}\n${[...lines, ...(list.length ? ['Checklist:', ...list] : [])].join('\n')}]`;
 }
 
@@ -66,8 +68,8 @@ export function followUpOf(history: ChatMessage[], reply: string): FollowUp | nu
   const block = last.content.slice(at + STOPPED.length).replace(/\]\s*$/, '').split('\n');
   const doneSteps = block.map((l) => l.match(/^\d+\. (.*?)(?: → .*)?$/)?.[1]?.trim() ?? '').filter(Boolean);
   const checklist = block.flatMap((l): ChecklistItem[] => {
-    const m = l.match(/^([☑☐]) (.*?)(?: ⟨(.*)⟩)?$/);
-    return m ? [{ text: m[2].trim(), done: m[1] === '☑', ...(m[3] ? { note: m[3] } : {}) }] : [];
+    const m = l.match(/^([☑☐]) (.*?)(?: ⟨(.*)⟩)?( ⟪saved, not ticked yet⟫)?$/);
+    return m ? [{ text: m[2].trim(), done: m[1] === '☑', ...(m[3] ? { note: m[3] } : {}), ...(m[4] ? { saved: true } : {}) }] : [];
   });
   const request = [
     `My reply to your question: “${reply.trim()}”`,
