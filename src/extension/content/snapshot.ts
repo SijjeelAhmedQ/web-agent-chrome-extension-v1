@@ -188,7 +188,8 @@ function dialogTitle(dialog: Element): string {
   const byId = labelled ? labelled.split(/\s+/).map((id) => dialog.ownerDocument.getElementById(id)?.textContent ?? '').join(' ') : '';
   // Its own heading — not one of a pop-up opened inside it.
   const heading = Array.from(dialog.querySelectorAll('.modal-title,.ui-dialog-title,[class*="title"],h1,h2,h3,h4,legend,b,strong')).find((h) => h.closest(DIALOGS) === dialog)?.textContent ?? '';
-  const first = ((dialog as HTMLElement).innerText ?? '').split('\n').find((l) => l.trim()) ?? '';
+  // Its first line of text — not its corner × (“× Please add name of specialist…”).
+  const first = ((dialog as HTMLElement).innerText ?? '').split('\n').find((l) => l.trim() && !/^[×✕✖╳]$/.test(l.trim())) ?? '';
   return clip((byId || dialog.getAttribute('aria-label') || heading || first).replace(/\s+/g, ' ').trim(), 90);
 }
 

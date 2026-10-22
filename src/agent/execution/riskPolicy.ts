@@ -33,6 +33,8 @@ const RULES: Rule[] = [
 
 /** “Yes” / “OK” in a confirm pop-up: it does what the pop-up asks (“complete the selected task?”). */
 const CONFIRMS = /^(yes|ok|okay|confirm|continue|proceed|yes,? .{0,30})$/i;
+/** A pop-up warning before something goes on — what saying yes to it accepts. */
+const WARNING = /\b(do you want to continue|want to proceed|will not be (funded|saved|sent|claimed)|not be funded)\b/i;
 
 const BUTTONISH = new Set(['button', 'clickable', 'menuitem', 'option', 'gridcell', 'image']);
 
@@ -45,6 +47,8 @@ export function classifyClick(info: ElementRisk): RiskVerdict {
 
   if ((BUTTONISH.has(info.role) || isSubmit) && CONFIRMS.test(name) && info.dialogText) {
     for (const rule of RULES) if (rule.pattern.test(info.dialogText)) return { consequential: true, consequence: rule.consequence };
+    // A warning to go past (“… will not be funded. Do you want to continue?”): the user's call, not the agent's.
+    if (WARNING.test(info.dialogText)) return { consequential: true, consequence: 'go on past the warning in this pop-up' };
   }
   if (BUTTONISH.has(info.role) || isLink || isSubmit) {
     for (const rule of candidates) {

@@ -116,11 +116,18 @@ async function approvalFor(
         : action,
     detail: choices
       ? `The form is filled${info.formValues?.length ? ' — check the details' : ''}. “${info.name}” will ${verdict.consequence} on ${site}; pick what to do.`
-      : `This will ${verdict.consequence} on ${site}.${kind !== 'type' && info.formValues?.length ? ' Check the details:' : ''}`,
+      : `${popupSays(info)}This will ${verdict.consequence} on ${site}.${kind !== 'type' && info.formValues?.length ? ' Check the details:' : ''}`,
     confirmLabel: kind === 'type' ? 'Allow' : 'Confirm',
     ...(kind !== 'type' && info.formValues?.length ? { fields: info.formValues } : {}),
     ...(choices ? { choices, target: elementId } : {}),
   };
+}
+
+/** A pop-up's Yes/OK: what the pop-up asks, so the user knows what the yes is to. */
+function popupSays(info: { name: string; dialogText?: string }): string {
+  if (!info.dialogText || !/^(yes|ok|okay|confirm|continue|proceed)\b/i.test(info.name.trim())) return '';
+  const text = info.dialogText.replace(/^[×✕✖]\s*/, '').replace(/\s*\b(Yes|No|OK|Cancel)\b(\s+\b(Yes|No|OK|Cancel)\b)*\s*$/, '').trim();
+  return text ? `The pop-up says: “${text}” ` : '';
 }
 
 const readPage: AgentTool<{ mode: 'overview' | 'content'; full: boolean }> = {

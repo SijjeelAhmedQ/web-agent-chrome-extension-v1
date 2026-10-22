@@ -114,7 +114,8 @@ try {
     const turn = await panel.$eval('.turn:last-child', (e) => e.innerText);
     say(`--- ${Math.round((Date.now() - t0) / 1000)}s ---\n${turn}`);
     const asked = turn.trim().slice(-800);
-    const reply = /\?\s*$/.test(asked) && answered < 12 ? answers.find(([question]) => new RegExp(question, 'i').test(asked)) : null;
+    // A question near the end, though the answer may close with a note after it.
+    const reply = /\?/.test(asked.slice(-300)) && answered < 12 ?answers.find(([question]) => new RegExp(question, 'i').test(asked)) : null;
     if (reply) {
       answered++;
       queue.unshift(reply[1]);

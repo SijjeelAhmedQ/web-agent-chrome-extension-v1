@@ -56,6 +56,9 @@ describe('risk policy', () => {
     expect(classifyClick(risk({ name: 'File' })).consequential).toBe(true);
     expect(classifyClick(risk({ name: 'Yes', dialogText: 'Are you sure you want to complete the selected task(s)? Yes No' })).consequence).toBe('complete or file a record');
     expect(classifyClick(risk({ name: 'Yes', dialogText: 'Do you want to see more results? Yes No' })).consequential).toBe(false);
+    // A warning to go past is the user's call (Indici: a prescription that will not be funded).
+    expect(classifyClick(risk({ name: 'Yes', dialogText: '× Please add name of specialist and date of recommendation. Do you want to continue? The prescription will not be funded. Yes No' })).consequence).toBe('go on past the warning in this pop-up');
+    expect(classifyClick(risk({ name: 'Yes', dialogText: 'This medicine is already in the active medicines list. Are you sure you want to add it again? Yes No' })).consequential).toBe(false);
     expect(classifyClick(risk({ name: 'Profile' })).consequential).toBe(false);
     expect(classifyClick(risk({ name: 'Inactive', role: 'image', tag: 'img' })).consequence).toBe('cancel or deactivate a record');
     expect(classifyClick(risk({ name: 'Click to cancel recall' })).consequential).toBe(true);
