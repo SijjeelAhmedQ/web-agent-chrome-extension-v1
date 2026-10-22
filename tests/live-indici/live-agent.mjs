@@ -61,7 +61,13 @@ try {
   await panel.reload();
   await panel.waitForSelector('#composer-input');
   await sleep(800);
-  for (const request of requests) {
+  // ANSWERS='[["reason to view", "follow up"], ["NZF", "OK"]]': when the agent stops with a question that matches,
+  // the answer is sent in the same chat, as the user would — a whole flow with its questions in one run.
+  const answers = JSON.parse(process.env.ANSWERS ?? '[]');
+  const queue = [...requests];
+  let answered = 0;
+  while (queue.length) {
+    const request = queue.shift();
     say(`\n>>> ${request}`);
     const before = await panel.$$eval('.turn', (x) => x.length);
     await panel.$eval('#composer-input', (el) => el.focus());
@@ -105,7 +111,14 @@ try {
       await sleep(1000);
     }
     await sleep(600);
-    say(`--- ${Math.round((Date.now() - t0) / 1000)}s ---\n${await panel.$eval('.turn:last-child', (e) => e.innerText)}`);
+    const turn = await panel.$eval('.turn:last-child', (e) => e.innerText);
+    say(`--- ${Math.round((Date.now() - t0) / 1000)}s ---\n${turn}`);
+    const asked = turn.trim().slice(-800);
+    const reply = /\?\s*$/.test(asked) && answered < 12 ? answers.find(([question]) => new RegExp(question, 'i').test(asked)) : null;
+    if (reply) {
+      answered++;
+      queue.unshift(reply[1]);
+    }
   }
   await panel.screenshot({ path: join(DIR, 'captures', 'agent-panel.png'), fullPage: true }).catch(() => {});
   await site.screenshot({ path: join(DIR, 'captures', 'agent-site.png') }).catch(() => {});

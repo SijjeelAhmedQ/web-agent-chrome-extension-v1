@@ -134,6 +134,8 @@ On Windows, run these commands in Git Bash: the `NAME=value command` form does n
 | `APPROVE_IF` | `[[cardRegex, mustHaveRegex], …]`: a card that matches `cardRegex` but lacks `mustHaveRegex` is declined, as a careful user would |
 | `APPROVE_BUTTON` | On a form's button card (Save / Complete / Reset / Cancel), the button that counts as yes. Default `Save` |
 | `KEEP_CHAT=1` | Continue the last chat, for answering the agent's question |
+| `ANSWERS` | `[[questionRegex, answer], …]`: when the agent stops with a question that matches, the answer is sent in the same chat — a whole flow with its questions in one run |
+| `PANEL=side` | Drive the extension's real side panel beside the site (open it with the toolbar icon, or `node live-open-panel.mjs`) instead of a tab of its own |
 | `MAX_STEPS` | Raise the agent's step limit (e.g. 120 for the serial flow) |
 | `REQUEST_MINUTES` | How long to wait for one request (default 20) |
 | `NO_ANSWER=1` | Only show the first approval card, then stop |
@@ -157,6 +159,7 @@ committed, because it holds patient data.
 | `live-close-panels.mjs` | Closes side-panel tabs left open by a stopped run. The agent in them stops |
 | `live-close-extra.mjs` | Closes all Indici tabs but the first |
 | `live-cancel-med.mjs go` | Cancels an open, unsaved medication form |
+| `live-open-panel.mjs` | Opens the Web Agent side panel beside the Indici tab (after a reinstall closed it) |
 
 ### The serial flow, start to finish
 
