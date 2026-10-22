@@ -72,7 +72,7 @@ export function checklistTool(list: Checklist, onChange: (done: number | null) =
   return {
     name: 'task_list',
     description:
-      'Your checklist for a request with several separate things to do (e.g. two medications and two diagnoses). First call it with items: one item per thing, each with all the details the user gave for it, in the user’s order. Then do the items one at a time, and right after finishing one, call it with done: <its number> (and a short note, e.g. "added"). Not needed for a single task.',
+      'Your checklist for a request with several separate things to do (e.g. two medications and two diagnoses). First call it with items: one item per thing, each with all the details the user gave for it, in the user’s order. Then do the items one at a time, and right after finishing one, call it with done: <its number> (and a short note, e.g. "added"). Tick an add only on proof of the one you added now (a success message, or a new entry with today’s date and time) — not an older record that looks the same. Not needed for a single task.',
     schema: z.object({
       items: itemList.optional().describe('The items, each with its details — only when making the list'),
       done: z.coerce.number().int().positive().optional().describe('The number of the item you just finished'),

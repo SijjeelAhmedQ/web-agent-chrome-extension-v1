@@ -2,11 +2,12 @@
 // The user logs in there once, by hand (reCAPTCHA / MFA); other scripts connect to this same browser
 // through the address written to indici-ws.txt — no password is ever stored or typed by a script.
 import puppeteer from 'puppeteer';
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const EXT = process.argv[2];
 const DIR = join(import.meta.dirname, '..', 'indici-live');
+mkdirSync(DIR, { recursive: true });
 // Extensions installed through the browser's own channel (not a command-line flag) can be reinstalled
 // after each build without closing the window — the login stays.
 const browser = await puppeteer.launch({

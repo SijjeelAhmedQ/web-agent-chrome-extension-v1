@@ -930,6 +930,7 @@ function verifyPrompt(page: string): string {
   return [
     'Before you finish, check your answer against the page as it is right now (below).',
     '- For every action you said you did (selected, saved, added, created, scheduled…), find the evidence on this page or in an earlier tool result. A success message you did not see in a tool result is not evidence.',
+    '- A record that was already there before you started (an older one with the same name or words — check its date and time) is not evidence that yours was added. If you cannot tell yours from an older one, say so and ask the user where to check.',
     '- Report details (names, IDs, numbers, dates) only exactly as they appear here or in earlier tool results. Never construct or guess them.',
     '- If the page does not confirm something, do it now with your tools — search, go to the next page, click — or tell the user plainly that it did not happen.',
     'If everything in your answer is confirmed, reply with exactly: CONFIRMED',
