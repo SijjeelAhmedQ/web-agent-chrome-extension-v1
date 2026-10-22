@@ -18,6 +18,8 @@ const kaggleUrl = kaggleEnv.match(/KAGGLE_URL\s*=\s*(\S+)/)?.[1]?.replace(/\/+$/
 if (!key || (useKaggle && !kaggleUrl)) throw new Error(useKaggle ? 'no KAGGLE_URL / KAGGLE_KEY in the Kaggle env file' : 'no OPENROUTER_KEY in the env file');
 const requests = JSON.parse(process.env.REQUESTS ?? '[]');
 const approve = process.env.APPROVE ? new RegExp(process.env.APPROVE, 'i') : null;
+// PANEL=side: drive the extension's real side panel beside the site, instead of a tab of its own.
+const sidePanel = process.env.PANEL === 'side';
 const restore = JSON.parse(readFileSync(join(import.meta.dirname, '..', '..', 'knowledge', 'web-agent-restore-indici.json'), 'utf8'));
 const extId = readFileSync(join(DIR, 'ext-id.txt'), 'utf8').trim();
 
@@ -27,8 +29,15 @@ const say = (s) => { console.log(s); log.push(s); };
 let panel;
 try {
   const site = (await browser.pages()).filter((p) => /vitonta\.com/.test(p.url())).at(-1);
-  panel = await browser.newPage();
-  await panel.setViewport({ width: 460, height: 1000 });
+  if (sidePanel) {
+    // The extension's own side panel, beside the site — opened by the user with the extension's icon.
+    const target = browser.targets().find((t) => t.url().startsWith(`chrome-extension://${extId}/sidepanel.html`));
+    if (!target) throw new Error('No side panel open — click the Web Agent icon in the toolbar to open it beside the site, then run again.');
+    panel = target.type() === 'page' ? await target.page() : await target.asPage();
+  } else {
+    panel = await browser.newPage();
+    await panel.setViewport({ width: 460, height: 1000 });
+  }
   // Every model call, as sent and as answered — to see what the model saw (the key header is not kept).
   const calls = [];
   panel.on('response', async (res) => {
@@ -38,7 +47,7 @@ try {
       writeFileSync(join(DIR, 'model-calls.json'), JSON.stringify(calls, null, 1));
     } catch {}
   });
-  await panel.goto(`chrome-extension://${extId}/sidepanel.html`);
+  if (!sidePanel) await panel.goto(`chrome-extension://${extId}/sidepanel.html`);
   const provider = useKaggle
     ? { id: 'p', name: 'Kaggle GPU', kind: 'openai', preset: 'kaggle', baseUrl: `${kaggleUrl}/vllm/v1`, apiKey: key, keyHeader: 'X-CareFlow-Key', timeoutMs: 600000, contextWindow: Number(process.env.CTX ?? 16384), defaultModel: process.env.MODEL ?? 'qwen3.8:27b-q4_K_M', createdAt: 1 }
     : { id: 'p', name: 'OpenRouter', kind: 'openai', preset: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', apiKey: key, timeoutMs: 300000, defaultModel: process.env.MODEL ?? '~deepseek/deepseek-v4-flash-latest', createdAt: 1 };
@@ -98,10 +107,10 @@ try {
     await sleep(600);
     say(`--- ${Math.round((Date.now() - t0) / 1000)}s ---\n${await panel.$eval('.turn:last-child', (e) => e.innerText)}`);
   }
-  await panel.screenshot({ path: join(DIR, 'captures', 'agent-panel.png'), fullPage: true });
-  await site.screenshot({ path: join(DIR, 'captures', 'agent-site.png') });
+  await panel.screenshot({ path: join(DIR, 'captures', 'agent-panel.png'), fullPage: true }).catch(() => {});
+  await site.screenshot({ path: join(DIR, 'captures', 'agent-site.png') }).catch(() => {});
 } finally {
   writeFileSync(join(DIR, 'agent-run.log'), log.join('\n'));
-  if (panel && !process.env.KEEP_PANEL) await panel.close().catch(() => {});
+  if (panel && !sidePanel && !process.env.KEEP_PANEL) await panel.close().catch(() => {});
   browser.disconnect();
 }

@@ -65,6 +65,8 @@ export class AgentRun {
   private approval: { id: string; resolve: (answer: ApprovalAnswer | 'gone') => void } | null = null;
   /** Approvals the user declined in this task (by their title). */
   private readonly declined = new Set<string>();
+  /** Forms saved in this task, by the values they held — the same values saved again would be a duplicate. */
+  private readonly savedForms = new Set<string>();
   /** How often each exact page action changed nothing in this task — to break loops. */
   private readonly repeats = new Map<string, number>();
   /** How often each exact action ran in this task. */
@@ -566,6 +568,13 @@ export class AgentRun {
       }
 
       const approvalNeeded = await this.inFront(ctx, () => this.needsApproval(tool, args, ctx, step.label));
+      // The same form, with the same values, saved earlier in this task: a second save is a duplicate (a task
+      // added again to “check” it was added). Not asked — the model is told to look, or to ask the user.
+      const form = approvalNeeded?.fields?.length ? formKey(approvalNeeded.fields) : null;
+      if (form && this.savedForms.has(form)) {
+        finish({ status: 'skipped', note: 'Already saved — not again' });
+        return `Not pressed: earlier in this task you already saved a form with these same values (${approvalNeeded!.fields!.slice(0, 3).map((f) => `${f.label}: ${f.value}`).join('; ')}). Saving it again would add a duplicate. Close this form without saving. To check the first one, look where the site shows what was added (your site knowledge says where); if it isn't there, tell the user it was saved but you can't see it, and ask where to look.`;
+      }
       if (approvalNeeded && this.declined.has(approvalNeeded.title)) {
         // The model ignored “don't try again”: no second prompt — the task stops here.
         finish({ status: 'skipped', note: 'You declined this — stopping' });
@@ -645,6 +654,7 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
       // What the user let it do stays in the model's memory when older steps are cut to fit — or, a delete
       // done and forgotten, it looks for the record again and deletes another.
       if (!approvalNeeded) return outcome.output;
+      if (form && !/^Not saved/.test(outcome.note ?? '')) this.savedForms.add(form);
       // A form's button: which one, and the form's first values say what it saved.
       const what = approvalNeeded.choices
         ? `${step.label}${approvalNeeded.fields?.length ? ` — ${approvalNeeded.fields.slice(0, 4).map((f) => `${f.label}: ${f.value}`).join('; ')}` : ''}`
@@ -879,6 +889,13 @@ export function declinedAnswer(title: string): string {
 
 const NOT_FINISHED_PROMPT = 'Not finished yet:';
 /** Tools that only look at the page; this many in a row without an action is searching in circles. */
+/** A filled form by its values, whatever order they were read in. */
+export const formKey = (fields: { label: string; value: string }[]) =>
+  fields
+    .map((f) => `${f.label.trim().toLowerCase()}=${f.value.trim().toLowerCase()}`)
+    .sort()
+    .join('\n');
+
 const LOOK_TOOLS = new Set(['read_page', 'find_element', 'scroll', 'wait', 'hover', 'read_table']);
 const MAX_LOOKS = 8;
 const CUT_OFF_PROMPT = 'Your last reply was cut off because the conversation got long. Continue the task: call the next tool now, and keep any text short.';

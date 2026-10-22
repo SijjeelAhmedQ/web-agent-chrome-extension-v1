@@ -6,7 +6,7 @@ import { classifyClick, classifySubmit, classifyTyping } from './execution/riskP
 import { extractTextToolCalls, parseArguments, stripThinking } from './llm/parse';
 import { buildSystemPrompt } from './planner/systemPrompt';
 import { APPROVED_DONE, budgetFor, compactMessages, estimateTokens, shrinkSnapshot } from './runtime/context';
-import { namedIn, quotesIn, talksAboutPage } from './runtime/agentRun';
+import { formKey, namedIn, quotesIn, talksAboutPage } from './runtime/agentRun';
 import { formatElement, formatSnapshot } from './tools/format';
 import { buildToolset, toolSpecs } from './tools/registry';
 import type { ChatMessage } from './llm/types';
@@ -240,6 +240,11 @@ describe('prompt and context', () => {
     expect(msgs[2].content).toMatch(/^Take: the first box\. Quantity: don't type it\./);
     expect(msgs[2].content).not.toMatch(/trimmed|removed/);
     expect(msgs[3].content).toMatch(/removed to fit|trimmed/);
+  });
+  it('knows a form saved again with the same values, in any order', () => {
+    const a = formKey([{ label: 'Subject / Progress', value: '[web agent test] review bloods' }, { label: 'Due', value: '29/10/2026' }]);
+    expect(formKey([{ label: 'Due', value: '29/10/2026' }, { label: 'Subject / Progress ', value: '[Web Agent Test] review bloods' }])).toBe(a);
+    expect(formKey([{ label: 'Subject / Progress', value: '[web agent test] review bloods' }, { label: 'Due', value: '30/10/2026' }])).not.toBe(a);
   });
   it('estimates more tokens for digits', () => {
     expect(estimateTokens('2026-10-15')).toBeGreaterThan(estimateTokens('abcdefghij'));

@@ -344,9 +344,28 @@
 
 .approval-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 12px;
+}
+
+/* A form's own buttons (Cancel · Reset · Save · Complete): two to a row, each as wide as its column,
+   so four of them fit a narrow side panel. */
+.approval-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.approval-choices .ant-btn {
+  width: 100%;
+  min-width: 0;
+}
+
+.approval-choices .ant-btn > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 
@@ -757,8 +776,9 @@
 }
 
 .approval-field dt {
+  max-width: 42vw;
   color: var(--text-muted);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .approval-field dd {
