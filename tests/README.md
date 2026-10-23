@@ -21,7 +21,15 @@ Four ways, from the simplest:
    - **Kaggle GPU**: the notebook prints a Server address and a Notebook key. Paste both, choose the model
      `qwen3.8:27b-q4_K_M`, and set **Context window** to the number the notebook prints (65536 for
      `web_agent_qwen38long`).
-   - **OpenRouter** (paid, faster): your key, with the model `~deepseek/deepseek-v4-flash-latest`.
+   - **OpenRouter** (paid, faster): your key. Its list offers `google/gemini-3.8-flash`, `anthropic/claude-haiku-5.5`
+     and `typesafe/jev-router`. **Thinking** (on every connection): Off, Low or High — Low suits Flash and Haiku.
+6. Optional, on the agent (Agents → the agent → Model): a **Decision model**, e.g. Jev Router, decides each next
+   step; the agent's own model (e.g. Gemini Flash) reads the request first, double-checks and writes the answer.
+   The activity shows "Deciding the next step · Jev Router". You still approve every save, delete and complete.
+   Jev Router chooses its own model per request (it often picked Claude Opus: about $0.004–0.04 a step, against
+   about $0.003 for Flash and $0.001 for Haiku).
+
+A stopped or failed task shows **Resume**: it carries on from where it stopped. A finished task shows **Run again**.
 5. Log in to https://pmstraining.vitonta.com, open the extension's side panel and type a request.
 
 Requests that have been tried (patient Arya STARK):
@@ -55,10 +63,11 @@ What to look for:
 - A task cannot be deleted in Indici, only completed. A recall's "delete" is its Inactive icon.
 - Tag what you add with "[web agent test]" so it is easy to find and remove.
 
-## 2. Unit tests
+## 2. Unit tests and types
 
 ```bash
 npm test
+npm run typecheck   # not `tsc --noEmit -p .` — the root tsconfig only points at the others, so that checks nothing
 ```
 
 ## 3. Mock e2e suites (`tests/e2e-mocks/`)
@@ -71,6 +80,8 @@ node formbuttons-e2e.mjs ../../dist  # in a second terminal; each *-e2e.mjs prin
 ```
 
 The mock model answers by the first words of each request ("records status", "form save", "task form"…).
+`resume-e2e.mjs` checks Resume. `openrouter-smoke.mjs ../../dist` runs real models on OpenRouter on the mock Add Task
+page (`WORKER`, `DECIDER`, `THINKING` choose them) and prints which model took each step and what it cost.
 
 ## 4. Live runner (`tests/live-indici/`)
 
