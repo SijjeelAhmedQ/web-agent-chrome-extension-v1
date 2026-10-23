@@ -59,6 +59,12 @@ try {
   const flat = r.answer.replace(/\n/g, ' ');
   check('a pick from the list before searching is sent back to search first', /FIRST Not done: this page has a search form \(a “Search” button\)/.test(flat) && /Search first/.test(r.answer), (flat.match(/FIRST (.*?) SECOND/) ?? [])[1] ?? flat.slice(-300));
   check('after searching, the same pick goes through', /SECOND Clicked “Arya STARK”/.test(flat) && /Opened in a new tab/.test(r.answer), (flat.match(/SECOND (.*)$/) ?? [])[1] ?? '');
+  // Two patients with the same name: the agent picks one by a date of birth the user never gave — not clicked.
+  await page.goto('http://localhost:4599/indici-search-twins.html');
+  await page.bringToFront();
+  const t = await ask('pick early Arya Stark');
+  const twin = t.answer.replace(/\n/g, ' ');
+  check('two patients of the same name: no pick the user did not make — ask which', /SECOND Not clicked: “Arya STARK” is on 2 rows/.test(twin) && !/Opened in a new tab/.test(t.answer), (twin.match(/SECOND (.*)$/) ?? [])[1] ?? twin.slice(-300));
 } catch (err) {
   console.error('E2E error:', err);
   results.push(false);

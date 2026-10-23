@@ -437,7 +437,7 @@ const clickText: AgentTool<ClickTextArgs> = {
     }
     if (res.total > 1) {
       return {
-        output: `“${a.text}” appears ${res.total} times:\n${res.matches.map(formatElement).join('\n')}\nCall click_text again with near (other text from the right row), or click one of these ids with its name.`,
+        output: `“${a.text}” appears ${res.total} times:\n${res.matches.map(formatElement).join('\n')}\nIf the user said which one (a date of birth, an ID), call click_text again with near (that text from the right row), or click its id. If the user didn't say, don't choose: ask the user which one, listing them.`,
         note: `${res.total} matches — not clicked`,
       };
     }

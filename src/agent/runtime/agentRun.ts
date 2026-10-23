@@ -99,6 +99,8 @@ export class AgentRun {
   private lastClick: ClickRecord | null = null;
   /** The request this run works on (and the earlier one, when it is the reply to a question). */
   private taskText = '';
+  /** This message answers the agent's question (“the first one”): the user may have picked among several. */
+  private replying = false;
   /** The items of a request with several things to do, ticked off as the agent goes. */
   private checklist = new Checklist();
   /** The site knowledge in the prompt — values written there count as the user's. */
@@ -210,6 +212,7 @@ export class AgentRun {
     if (this.checklist.size) this.updateTask({ checklist: this.checklist.items.map((i) => ({ ...i })) });
     toolset.tools.push(checklistTool(this.checklist, (done) => this.checklistChanged(done)));
     this.taskText = followUp ? `${followUp.task}\n${request}` : request;
+    this.replying = !!followUp;
     // Back from a wrong click — for agents that click.
     if (toolset.tools.some((t) => t.name === 'click' || t.name === 'click_text')) {
       toolset.tools.push(
@@ -498,6 +501,15 @@ export class AgentRun {
         return `Not typed: “${popup}” is a pop-up that can’t be closed, and the user hasn’t told you in this message what to enter. Don’t make it up and don’t reuse an answer from earlier in the chat. Stop now and ask the user what to enter in “${popup}”. When they reply, type exactly their reply.`;
       }
     }
+    // The record the user named is on several rows (two patients “Arya STARK”) and the agent picks one by
+    // something the user never said (a date of birth from an earlier chat): the user picks, not the agent.
+    if ((tool.name === 'click_text' || tool.name === 'click') && !this.replying) {
+      const several = await this.inFront(ctx, () => this.severalNamed(tool.name, args, ctx));
+      if (several) {
+        finish({ status: 'skipped', note: 'Several match — asking you' });
+        return `Not clicked: “${several.name}” is on ${several.rows.length} rows of this list:\n${several.rows.map((r) => `- ${r}`).join('\n')}\nThe user didn't say which one. Don't choose — not the first one, and not by anything from an earlier chat. Ask the user which one to open, listing each row (name, date of birth, NHI or what the row shows).`;
+      }
+    }
     // An icon (book, edit, pay, print…) in the row of the record the user named, when they asked to open the record.
     if (tool.name === 'click') {
       const target = ctx.elements.get(Number((args as { id?: unknown }).id));
@@ -702,6 +714,36 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
       unseen.push(quote);
     }
     return unseen;
+  }
+
+  /**
+   * The rows of a list that carry what a click names — when the user named it, it is on more than one row,
+   * and nothing the user said tells which (a date of birth or NHI the user gave picks one). Null otherwise.
+   */
+  private async severalNamed(toolName: string, args: unknown, ctx: ToolContext): Promise<{ name: string; rows: string[] } | null> {
+    let name = '';
+    let picks: string[] = [];
+    if (toolName === 'click_text') {
+      const a = args as { text?: unknown; near?: unknown };
+      name = String(a.text ?? '').trim();
+      picks = [String(a.near ?? '').trim()].filter(Boolean);
+    } else {
+      const el = ctx.elements.get(Number((args as { id?: unknown }).id));
+      if (!el?.context || !/^row /.test(el.context)) return null;
+      name = el.name.trim();
+      picks = (el.context.match(/“(.*)”/)?.[1] ?? '').split(' · ').map((c) => c.trim()).filter((c) => c && c.toLowerCase() !== name.toLowerCase());
+    }
+    if (!name || !namedIn(this.taskText, name)) return null;
+    if (picks.some((p) => namedIn(this.taskText, p))) return null;
+    const res = await ctx.browser.send({ kind: 'findText', text: name, limit: 8 }).catch(() => null);
+    const rows = [
+      ...new Set(
+        (res?.matches ?? [])
+          .filter((m) => /^row /.test(m.context ?? '') && m.name.trim().toLowerCase() === name.toLowerCase())
+          .map((m) => m.context!.replace(/^row \d+ /, '')),
+      ),
+    ];
+    return rows.length > 1 ? { name, rows } : null;
   }
 
   private async popupsLeft(ctx: ToolContext, asking: boolean): Promise<string> {
