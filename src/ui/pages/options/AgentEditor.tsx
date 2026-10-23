@@ -224,6 +224,40 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
                   )}
                 </div>
                 <div>
+                  <FieldLabel hint="Optional">Decision model</FieldLabel>
+                  <div className="row-gap">
+                    <Select
+                      style={{ flex: 1 }}
+                      value={draft.decision ? (draft.decision.providerId ?? '__default') : '__off'}
+                      onChange={(v) => set({ decision: v === '__off' ? null : { providerId: v === '__default' ? null : v, model: draft.decision?.model ?? '' } })}
+                      options={[
+                        { value: '__off', label: 'Off' },
+                        { value: '__default', label: `Default${providers.length ? ` — ${(providers.find((p) => p.id === settings.defaultProviderId) ?? providers[0])?.name}` : ''}` },
+                        ...providers.map((p) => ({ value: p.id, label: p.name })),
+                      ]}
+                      aria-label="Decision model connection"
+                    />
+                    {draft.decision && (
+                      <AutoComplete
+                        style={{ flex: 1 }}
+                        value={draft.decision.model}
+                        onChange={(v) => set({ decision: { ...draft.decision!, model: v } })}
+                        options={(() => {
+                          const p = providers.find((x) => x.id === draft.decision!.providerId) ?? provider;
+                          return (p ? presetById(p.preset).models ?? [] : []).map((m) => ({ value: m.id, label: `${m.label} — ${m.id}` }));
+                        })()}
+                        filterOption={(input, option) => (option?.value ?? '').toLowerCase().includes(input.toLowerCase())}
+                        placeholder={(providers.find((x) => x.id === draft.decision!.providerId) ?? provider)?.defaultModel || 'Model name'}
+                        allowClear
+                        aria-label="Decision model"
+                      />
+                    )}
+                  </div>
+                  <div className="field-help">
+                    Decides each next step (“Deciding the next step”) — what to click, type or open. The model above reads your request first, double-checks the result and writes the answer. Off: the model above does everything. You still approve every save, delete and complete. For example Gemini Flash above and Jev Router here, or the same model in both.
+                  </div>
+                </div>
+                <div>
                   <FieldLabel hint={draft.temperature.toFixed(1)}>Creativity</FieldLabel>
                   <Slider min={0} max={1} step={0.1} value={draft.temperature} onChange={(v) => set({ temperature: v })} marks={{ 0: 'Precise', 1: 'Creative' }} tooltip={{ open: false }} />
                   <div className="field-help">Low values make browsing more reliable.</div>

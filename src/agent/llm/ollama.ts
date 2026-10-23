@@ -1,4 +1,5 @@
 import type { ProviderConfig } from '@/shared/types/config';
+import { thinkingOf } from '@/shared/utils';
 import { AgentError } from '@/shared/utils/errors';
 import { joinUrl, requestJson } from './http';
 import { extractTextToolCalls, parseArguments, stripThinking } from './parse';
@@ -57,7 +58,9 @@ export class OllamaClient implements LlmClient {
       options: { temperature: req.temperature, num_ctx: this.provider.contextWindow || DEFAULT_CONTEXT_WINDOW },
       ...(req.tools.length ? { tools: req.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })) } : {}),
     };
-    if (this.provider.skipThinking) body.think = false;
+    // Ollama thinks or doesn't — low and high both turn it on.
+    const level = thinkingOf(this.provider);
+    if (level) body.think = level !== 'off';
 
     const send = () =>
       requestJson<OllamaResponse>(joinUrl(this.base(), 'api/chat'), {

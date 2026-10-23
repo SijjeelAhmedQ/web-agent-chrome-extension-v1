@@ -6,7 +6,7 @@ import { classifyClick, classifySubmit, classifyTyping } from './execution/riskP
 import { extractTextToolCalls, parseArguments, stripThinking } from './llm/parse';
 import { buildSystemPrompt } from './planner/systemPrompt';
 import { APPROVED_DONE, budgetFor, compactMessages, estimateTokens, shrinkSnapshot } from './runtime/context';
-import { formKey, namedIn, quotesIn, talksAboutPage } from './runtime/agentRun';
+import { formKey, namedIn, quotesIn, reasoningFor, talksAboutPage } from './runtime/agentRun';
 import { formatElement, formatSnapshot } from './tools/format';
 import { buildToolset, toolSpecs } from './tools/registry';
 import type { ChatMessage } from './llm/types';
@@ -248,6 +248,18 @@ describe('prompt and context', () => {
     const a = formKey([{ label: 'Subject / Progress', value: '[web agent test] review bloods' }, { label: 'Due', value: '29/10/2026' }]);
     expect(formKey([{ label: 'Due', value: '29/10/2026' }, { label: 'Subject / Progress ', value: '[Web Agent Test] review bloods' }])).toBe(a);
     expect(formKey([{ label: 'Subject / Progress', value: '[web agent test] review bloods' }, { label: 'Due', value: '30/10/2026' }])).not.toBe(a);
+  });
+  it('hands each model back only its own reasoning', () => {
+    const msgs: ChatMessage[] = [
+      { role: 'user', content: 'open arya stark' },
+      { role: 'assistant', content: '', toolCalls: [{ id: 'a', name: 'read_page', arguments: {} }], reasoning: [{ sig: 'flash' }], reasoningBy: 'google/gemini-3.8-flash' },
+      { role: 'tool', toolName: 'read_page', toolCallId: 'a', content: 'Page' },
+      { role: 'assistant', content: '', toolCalls: [{ id: 'b', name: 'click', arguments: {} }], reasoning: [{ sig: 'jev' }], reasoningBy: 'typesafe/jev-router' },
+    ];
+    const forJev = reasoningFor(msgs, 'typesafe/jev-router');
+    expect((forJev[1] as { reasoning?: unknown }).reasoning).toBeUndefined();
+    expect((forJev[3] as { reasoning?: unknown }).reasoning).toEqual([{ sig: 'jev' }]);
+    expect((msgs[1] as { reasoning?: unknown }).reasoning).toEqual([{ sig: 'flash' }]); // the conversation itself is kept whole
   });
   it('estimates more tokens for digits', () => {
     expect(estimateTokens('2026-10-15')).toBeGreaterThan(estimateTokens('abcdefghij'));

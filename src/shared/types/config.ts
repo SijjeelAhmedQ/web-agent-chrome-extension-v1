@@ -12,6 +12,9 @@ export type TextSize = 'default' | 'large';
  * context window can be set. */
 export type ProviderKind = 'openai' | 'anthropic' | 'ollama';
 
+/** A reasoning model's thinking before it answers. */
+export type ThinkingLevel = 'off' | 'low' | 'high';
+
 export interface ProviderConfig {
   id: string;
   name: string;
@@ -21,7 +24,9 @@ export interface ProviderConfig {
   baseUrl: string;
   apiKey: string;
   defaultModel: string;
-  /** Ask reasoning models to answer without a thinking phase (`reasoning_effort: "none"`). Much faster on local models. */
+  /** How much a reasoning model thinks before it answers: off is fastest. Unset → the model's own default. */
+  thinking?: ThinkingLevel;
+  /** @deprecated Read as `thinking: 'off'` — kept so older setups and backups keep their speed. */
   skipThinking?: boolean;
   /** Context window in tokens. Ollama: sent as `num_ctx`. Others: used to trim long tasks to fit. */
   contextWindow?: number;
@@ -68,6 +73,11 @@ export interface AgentConfig {
   providerId: string | null;
   /** Empty → the connection's default model. */
   model: string;
+  /**
+   * The decision model: it decides each next step (after a tool's result). The model above reads the
+   * request first, double-checks and writes the answer. The user still approves every save. Unset → off.
+   */
+  decision?: { providerId: string | null; model: string } | null;
   temperature: number;
   maxSteps: number;
   /** Before reporting that something was done, re-read the page and check the claim (default on). */

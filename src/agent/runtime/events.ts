@@ -21,5 +21,6 @@ export type ApprovalAnswer = boolean | number;
 export type RunEvent =
   | { type: 'task'; task: TaskRecord }
   | { type: 'step'; taskId: string; step: StepRecord }
-  | { type: 'thinking'; taskId: string; active: boolean }
+  /** `by`: the decision model deciding this step, when it isn't the agent's own. */
+  | { type: 'thinking'; taskId: string; active: boolean; by?: string }
   | { type: 'approval'; taskId: string; prompt: ApprovalPrompt | null };

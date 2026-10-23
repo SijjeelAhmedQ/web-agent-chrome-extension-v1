@@ -20,6 +20,8 @@ export interface Turn {
   agentId: string;
   task: TaskRecord | null;
   thinking: boolean;
+  /** The decision model deciding the step now, when it isn't the agent's own model. */
+  thinkingBy?: string;
   approval: ApprovalPrompt | null;
   /** Team turns: the members working on it. */
   members?: MemberState[];
@@ -91,9 +93,11 @@ export const chatSlice = createSlice({
       if (i >= 0) steps[i] = action.payload.step;
       else steps.push(action.payload.step);
     },
-    thinking(state, action: PayloadAction<{ taskId: string; active: boolean }>) {
+    thinking(state, action: PayloadAction<{ taskId: string; active: boolean; by?: string }>) {
       const turn = turnFor(state, action.payload.taskId);
-      if (turn) turn.thinking = action.payload.active;
+      if (!turn) return;
+      turn.thinking = action.payload.active;
+      turn.thinkingBy = action.payload.active ? action.payload.by : undefined;
     },
     approval(state, action: PayloadAction<{ taskId: string; prompt: ApprovalPrompt | null }>) {
       const turn = turnFor(state, action.payload.taskId);

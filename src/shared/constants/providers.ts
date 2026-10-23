@@ -1,4 +1,4 @@
-import type { ProviderKind } from '../types/config';
+import type { ProviderKind, ThinkingLevel } from '../types/config';
 
 /** A model a preset's server is known to offer. */
 export interface ModelOption {
@@ -17,8 +17,8 @@ export interface ProviderPreset {
   model: string;
   needsKey: boolean;
   local: boolean;
-  /** Default for “Skip thinking”. */
-  skipThinking?: boolean;
+  /** The thinking a new connection starts with. */
+  thinking?: ThinkingLevel;
   hint: string;
   keyUrl?: string;
   keyHeader?: string;
@@ -47,6 +47,13 @@ export const KAGGLE_MODELS: ModelOption[] = [
   { id: 'hf.co/unsloth/medgemma-4b-it-GGUF:Q4_K_M', label: 'MedGemma 4B', note: 'Medical knowledge. Can’t use tools — reads the page and answers, but can’t click or type.', tools: false },
 ];
 
+/** Fast models on OpenRouter for the agent, and Jev Router for its decisions (see each agent's Decision model). */
+export const OPENROUTER_MODELS: ModelOption[] = [
+  { id: 'google/gemini-3.8-flash', label: 'Gemini 3.8 Flash', note: 'Fast, with tools. Thinking Low suits most steps.', tools: true },
+  { id: 'anthropic/claude-haiku-5.5', label: 'Claude Haiku 5.5', note: 'Fast, follows workflows closely. Thinking Low suits most steps.', tools: true },
+  { id: 'typesafe/jev-router', label: 'Jev Router', note: 'Picks a model and its thinking for each request — use it as an agent’s Decision model. Its price varies by request.', tools: true },
+];
+
 /** Starting points for a new connection. Every field stays editable. */
 export const PROVIDER_PRESETS: ProviderPreset[] = [
   {
@@ -57,7 +64,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     model: 'qwen3.5:4b',
     needsKey: false,
     local: true,
-    skipThinking: true,
+    thinking: 'off',
     models: OLLAMA_MODELS,
     hint: 'Runs on this computer. Use a model that supports tool calling (Qwen 3, Llama 3.1+, Mistral).',
   },
@@ -69,7 +76,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     model: 'qwen3.5:4b',
     needsKey: false,
     local: true,
-    skipThinking: true,
+    thinking: 'off',
     hint: 'The CareFlow FastAPI bridge, forwarding to Ollama. For its vLLM or OpenRouter routes, use “Other (OpenAI-compatible)” with /vllm/v1 or /openrouter/api/v1.',
   },
   {
@@ -92,9 +99,11 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     label: 'OpenRouter',
     kind: 'openai',
     baseUrl: 'https://openrouter.ai/api/v1',
-    model: 'qwen/qwen3-30b-a3b',
+    model: 'google/gemini-3.8-flash',
     needsKey: true,
     local: false,
+    thinking: 'low',
+    models: OPENROUTER_MODELS,
     hint: 'One key for hundreds of models. Choose one that supports tools.',
     keyUrl: 'https://openrouter.ai/keys',
   },

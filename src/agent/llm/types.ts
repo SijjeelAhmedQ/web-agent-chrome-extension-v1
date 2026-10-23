@@ -16,7 +16,7 @@ export interface ToolCall {
 export type ChatMessage =
   | { role: 'system'; content: string }
   | { role: 'user'; content: string }
-  | { role: 'assistant'; content: string; toolCalls?: ToolCall[] }
+  | { role: 'assistant'; content: string; toolCalls?: ToolCall[]; reasoning?: unknown; reasoningBy?: string }
   | { role: 'tool'; content: string; toolCallId: string; toolName: string };
 
 export interface ToolSpec {
@@ -38,6 +38,11 @@ export interface ChatResponse {
   toolCalls: ToolCall[];
   finishReason?: string;
   usage?: { inputTokens?: number; outputTokens?: number };
+  /**
+   * The model's reasoning as the provider sent it (OpenRouter's reasoning_details, Anthropic's thinking
+   * blocks): sent back with this turn, or models that think while calling tools (Gemini 3, Claude) refuse.
+   */
+  reasoning?: unknown;
 }
 
 export interface LlmClient {

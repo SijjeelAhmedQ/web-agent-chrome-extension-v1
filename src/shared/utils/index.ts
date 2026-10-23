@@ -1,3 +1,5 @@
+import type { ThinkingLevel } from '@/shared/types/config';
+
 export const uid = (prefix = ''): string =>
   `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 
@@ -89,3 +91,7 @@ export function formatRelative(ts: number, now = Date.now()): string {
 }
 
 export const isExtensionContext = (): boolean => typeof chrome !== 'undefined' && !!chrome.runtime?.id;
+
+/** The thinking a connection asks for — an older setup's “Skip thinking” is off; unset is the model's own. */
+export const thinkingOf = (p: { thinking?: ThinkingLevel; skipThinking?: boolean }): ThinkingLevel | undefined =>
+  p.thinking ?? (p.skipThinking ? 'off' : undefined);

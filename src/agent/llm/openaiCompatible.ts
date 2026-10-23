@@ -1,4 +1,5 @@
 import type { ProviderConfig } from '@/shared/types/config';
+import { thinkingOf } from '@/shared/utils';
 import { AgentError } from '@/shared/utils/errors';
 import { joinUrl, requestJson } from './http';
 import { extractTextToolCalls, parseArguments, stripThinking } from './parse';
@@ -10,6 +11,7 @@ interface OpenAIMessage {
   tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[];
   tool_call_id?: string;
   name?: string;
+  reasoning_details?: unknown;
 }
 
 interface OpenAIResponse {
@@ -17,6 +19,7 @@ interface OpenAIResponse {
     message?: {
       content?: string | null;
       reasoning_content?: string;
+      reasoning_details?: unknown[];
       tool_calls?: { id?: string; function?: { name?: string; arguments?: unknown } }[];
     };
     finish_reason?: string;
@@ -35,6 +38,8 @@ function toWire(messages: ChatMessage[]): OpenAIMessage[] {
           ...(m.toolCalls?.length
             ? { tool_calls: m.toolCalls.map((c) => ({ id: c.id, type: 'function' as const, function: { name: c.name, arguments: JSON.stringify(c.arguments) } })) }
             : {}),
+          // The model's reasoning goes back as it came (Gemini 3's thought signatures; OpenRouter only).
+          ...(m.reasoning ? { reasoning_details: m.reasoning } : {}),
         };
       case 'tool':
         return { role: 'tool', content: m.content, tool_call_id: m.toolCallId, name: m.toolName };
@@ -42,6 +47,18 @@ function toWire(messages: ChatMessage[]): OpenAIMessage[] {
         return { role: m.role, content: m.content };
     }
   });
+}
+
+/**
+ * The thinking setting as each server takes it: OpenRouter's `reasoning`, the Kaggle notebook's chat template
+ * switch (thinking stays off there unless turned on), everyone else's `reasoning_effort`. Unset → nothing sent.
+ */
+export function thinkingFields(provider: ProviderConfig): Record<string, unknown> {
+  const level = thinkingOf(provider);
+  if (!level) return {};
+  if (/openrouter\.ai/.test(provider.baseUrl)) return { reasoning: { effort: level === 'off' ? 'none' : level } };
+  if (provider.preset === 'kaggle') return level === 'off' ? {} : { chat_template_kwargs: { enable_thinking: true } };
+  return { reasoning_effort: level === 'off' ? 'none' : level };
 }
 
 const isLocal = (url: string) => /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:|\/|$)/.test(url);
@@ -74,7 +91,7 @@ export class OpenAICompatibleClient implements LlmClient {
         ? { tools: req.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })), tool_choice: 'auto' }
         : {}),
     };
-    if (this.provider.skipThinking) body.reasoning_effort = 'none';
+    Object.assign(body, thinkingFields(this.provider));
     const send = () =>
       requestJson<OpenAIResponse>(joinUrl(this.provider.baseUrl, 'chat/completions'), {
         method: 'POST',
@@ -87,9 +104,10 @@ export class OpenAICompatibleClient implements LlmClient {
     try {
       data = await send();
     } catch (err) {
-      // Servers that don't know reasoning_effort reject it — retry once without.
-      if (body.reasoning_effort && err instanceof AgentError && /reasoning/i.test(err.detail ?? '')) {
-        delete body.reasoning_effort;
+      // Servers that don't know the thinking setting reject it — retry once without.
+      const fields = ['reasoning_effort', 'reasoning', 'chat_template_kwargs'].filter((k) => k in body);
+      if (fields.length && err instanceof AgentError && /reasoning|thinking|chat_template/i.test(err.detail ?? '')) {
+        for (const k of fields) delete body[k];
         data = await send();
       } else throw err;
     }
@@ -116,6 +134,7 @@ export class OpenAICompatibleClient implements LlmClient {
       toolCalls,
       finishReason: choice.finish_reason,
       usage: { inputTokens: data.usage?.prompt_tokens, outputTokens: data.usage?.completion_tokens },
+      ...(choice.message.reasoning_details?.length ? { reasoning: choice.message.reasoning_details } : {}),
     };
   }
 

@@ -65,6 +65,24 @@ describe('OpenAI-compatible adapter', () => {
     expect(res.toolCalls[0]).toMatchObject({ id: 'z', name: 'click', arguments: { id: '4' } });
   });
 
+  it('sends the thinking level each server understands, and hands OpenRouter’s reasoning back', async () => {
+    const reasoning = [{ type: 'reasoning.encrypted', data: 'sig' }];
+    const fetchMock = mockFetch({ choices: [{ message: { content: '', reasoning_details: reasoning, tool_calls: [{ id: 'z', function: { name: 'click', arguments: '{}' } }] } }] });
+    const router = provider({ preset: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', thinking: 'low' });
+    const res = await createClient(router).chat({ model: 'google/gemini-3.8-flash', messages: conversation, tools, temperature: 0 });
+    expect(JSON.parse(fetchMock.mock.calls[0][1]!.body as string).reasoning).toEqual({ effort: 'low' });
+    expect(res.reasoning).toEqual(reasoning);
+    // The next turn carries it back with the tool call it came with.
+    await createClient(router).chat({ model: 'm', messages: [...conversation.slice(0, 2), { role: 'assistant', content: '', toolCalls: [{ id: 'z', name: 'click', arguments: {} }], reasoning }], tools, temperature: 0 });
+    expect(JSON.parse(fetchMock.mock.calls[1][1]!.body as string).messages[2].reasoning_details).toEqual(reasoning);
+    await createClient(provider({ thinking: 'high' })).chat({ model: 'm', messages: conversation, tools, temperature: 0 });
+    expect(JSON.parse(fetchMock.mock.calls[2][1]!.body as string).reasoning_effort).toBe('high');
+    await createClient(provider({ skipThinking: true })).chat({ model: 'm', messages: conversation, tools, temperature: 0 });
+    expect(JSON.parse(fetchMock.mock.calls[3][1]!.body as string).reasoning_effort).toBe('none'); // an older setup's Skip thinking
+    await createClient(provider({ preset: 'kaggle', thinking: 'low' })).chat({ model: 'm', messages: conversation, tools, temperature: 0 });
+    expect(JSON.parse(fetchMock.mock.calls[4][1]!.body as string).chat_template_kwargs).toEqual({ enable_thinking: true });
+  });
+
   it('tries again when the connection drops for a moment or the server is busy', async () => {
     RETRY_DELAYS_MS.splice(0, RETRY_DELAYS_MS.length, 0, 0);
     const ok = new Response(JSON.stringify({ choices: [{ message: { content: 'hi' } }] }));
@@ -97,5 +115,19 @@ describe('Anthropic adapter', () => {
     expect(body.messages[2].content[0]).toEqual({ type: 'tool_result', tool_use_id: 'c1', content: 'Clicked.' });
     expect(body.tools[0]).toHaveProperty('input_schema');
     expect(res).toMatchObject({ content: 'ok', toolCalls: [{ id: 't1', name: 'click', arguments: { id: 2 } }] });
+  });
+
+  it('thinks within a budget and hands its thinking back with the tool turn', async () => {
+    const thought = { type: 'thinking', thinking: 'Click it.', signature: 'sig' };
+    const fetchMock = mockFetch({ content: [thought, { type: 'tool_use', id: 't1', name: 'click', input: {} }], stop_reason: 'tool_use' });
+    const claude = provider({ kind: 'anthropic', baseUrl: 'https://api.anthropic.com', apiKey: 'k', thinking: 'low' });
+    const res = await createClient(claude).chat({ model: 'claude-haiku-5-5', messages: conversation, tools, temperature: 0.2 });
+    const body = JSON.parse(fetchMock.mock.calls[0][1]!.body as string);
+    expect(body.thinking).toEqual({ type: 'enabled', budget_tokens: 1024 });
+    expect(body.max_tokens).toBeGreaterThan(1024);
+    expect(body.temperature).toBeUndefined();
+    expect(res.reasoning).toEqual([thought]);
+    await createClient(claude).chat({ model: 'm', messages: [...conversation.slice(0, 2), { role: 'assistant', content: '', toolCalls: [{ id: 't1', name: 'click', arguments: {} }], reasoning: res.reasoning }], tools, temperature: 0 });
+    expect(JSON.parse(fetchMock.mock.calls[1][1]!.body as string).messages[1].content[0]).toEqual(thought);
   });
 });

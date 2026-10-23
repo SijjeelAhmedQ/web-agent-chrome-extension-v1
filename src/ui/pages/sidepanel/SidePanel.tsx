@@ -24,7 +24,7 @@ export function SidePanel() {
   const turns = useAppSelector((s) => s.chat.turns);
   const activeAgentId = useAppSelector((s) => s.chat.activeAgentId);
   const tab = useActiveTab();
-  const { send, stop, respond, running } = useAgentRunner(tab);
+  const { send, resume, stop, respond, running } = useAgentRunner(tab);
   const [view, setView] = useState<'chat' | 'history'>('chat');
   const composer = useRef<ComposerHandle>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -148,7 +148,7 @@ export function SidePanel() {
       {providers.length > 0 && <RuntimeBar agent={agent} config={config} url={tab.url} />}
 
       {view === 'history' ? (
-        <HistoryView onBack={() => setView('chat')} onRunAgain={onSend} />
+        <HistoryView onBack={() => setView('chat')} onRunAgain={onSend} onResume={(task) => { setView('chat'); void resume(task); }} busy={running} />
       ) : (
         <main className="chat" ref={scroller}>
           {turns.length === 0 ? (
@@ -181,6 +181,7 @@ export function SidePanel() {
                   busy={running}
                   onRespond={respond}
                   onRetry={onSend}
+                  onResume={(task) => void resume(task)}
                 />
               ))}
             </div>

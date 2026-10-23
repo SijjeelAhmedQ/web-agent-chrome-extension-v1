@@ -1,12 +1,12 @@
-import { App, AutoComplete, Button, Dropdown, Input, InputNumber, Modal, Switch, Tooltip } from 'antd';
+import { App, AutoComplete, Button, Dropdown, Input, InputNumber, Modal, Segmented, Tooltip } from 'antd';
 import { DEFAULT_CONTEXT_WINDOW } from '@/agent/llm/ollama';
 import { CheckCircle2, ExternalLink, Laptop, MoreHorizontal, Plus, RefreshCw, Star, Trash2, XCircle, Zap } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/agent/llm';
 import { KAGGLE_CONTEXT_WINDOW, PROVIDER_PRESETS, presetById, withApiPath, type ProviderPreset } from '@/shared/constants/providers';
 import { speechBase } from '@/shared/voice/speech';
-import type { ProviderConfig } from '@/shared/types/config';
-import { uid } from '@/shared/utils';
+import type { ProviderConfig, ThinkingLevel } from '@/shared/types/config';
+import { thinkingOf, uid } from '@/shared/utils';
 import { toAgentError } from '@/shared/utils/errors';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { configActions } from '@/store/configSlice';
@@ -60,7 +60,7 @@ export function ModelsPage() {
         baseUrl: preset.baseUrl,
         apiKey: '',
         defaultModel: preset.model,
-        skipThinking: preset.skipThinking ?? false,
+        ...(preset.thinking ? { thinking: preset.thinking } : {}),
         ...(preset.keyHeader ? { keyHeader: preset.keyHeader } : {}),
         ...(preset.timeoutMs ? { timeoutMs: preset.timeoutMs } : {}),
         ...(preset.kind === 'ollama' ? { contextWindow: DEFAULT_CONTEXT_WINDOW } : preset.id === 'kaggle' ? { contextWindow: KAGGLE_CONTEXT_WINDOW } : {}),
@@ -385,15 +385,26 @@ function ProviderEditor({ value, onClose, onSave }: { value: { provider: Provide
             />
           </div>
         )}
-        {draft.kind !== 'anthropic' && (
-          <div className="setting-row bare">
-            <div className="setting-text">
-              <div className="setting-label">Skip thinking</div>
-              <div className="setting-desc">Asks reasoning models (Qwen 3, DeepSeek…) to answer directly. Often 5× faster on local models. Turn off if the server rejects it.</div>
+        <div className="setting-row bare stacked">
+          <div className="setting-text">
+            <div className="setting-label">Thinking</div>
+            <div className="setting-desc">
+              How much a reasoning model (Gemini, Claude, Qwen 3, DeepSeek…) thinks before each step. Off and Low are much faster; High is for hard pages. Model default leaves it to the model.
             </div>
-            <Switch checked={!!draft.skipThinking} onChange={(v) => set({ skipThinking: v })} aria-label="Skip thinking" />
           </div>
-        )}
+          <Segmented
+            size="small"
+            value={thinkingOf(draft) ?? 'default'}
+            onChange={(v) => set({ thinking: v === 'default' ? undefined : (v as ThinkingLevel), skipThinking: undefined })}
+            options={[
+              { label: 'Model default', value: 'default' },
+              { label: 'Off', value: 'off' },
+              { label: 'Low', value: 'low' },
+              { label: 'High', value: 'high' },
+            ]}
+            aria-label="Thinking"
+          />
+        </div>
         {test.status === 'ok' && (
           <div className="test-banner ok" role="status">
             <CheckCircle2 size={16} /> {test.message}

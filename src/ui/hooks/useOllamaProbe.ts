@@ -18,7 +18,7 @@ export function ollamaProvider(model: string): ProviderConfig {
     baseUrl: preset.baseUrl,
     apiKey: '',
     defaultModel: model,
-    skipThinking: true,
+    thinking: 'off',
     contextWindow: DEFAULT_CONTEXT_WINDOW,
     createdAt: Date.now(),
   };

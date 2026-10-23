@@ -23,7 +23,12 @@ export function estimateTokens(text: string): number {
 }
 
 // A step's call (its arguments) is sent too: counted, or a long task runs past the model's context unseen.
-const tokensOf = (m: ChatMessage) => estimateTokens(m.content) + 4 + (m.role === 'assistant' && m.toolCalls?.length ? estimateTokens(JSON.stringify(m.toolCalls)) : 0);
+// So is its reasoning, sent back with it (a thinking model's signatures).
+const tokensOf = (m: ChatMessage) =>
+  estimateTokens(m.content) +
+  4 +
+  (m.role === 'assistant' && m.toolCalls?.length ? estimateTokens(JSON.stringify(m.toolCalls)) : 0) +
+  (m.role === 'assistant' && m.reasoning ? Math.ceil(JSON.stringify(m.reasoning).length / 4) : 0);
 const size = (messages: ChatMessage[]) => messages.reduce((n, m) => n + tokensOf(m), 0);
 
 /**

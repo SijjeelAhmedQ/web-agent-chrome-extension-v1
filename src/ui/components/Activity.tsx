@@ -82,11 +82,13 @@ function StepRow({ step, developer }: { step: StepRecord; developer: boolean }) 
 interface ActivityProps {
   task: TaskRecord | null;
   thinking: boolean;
+  /** The decision model deciding the step now (e.g. “Jev Router”), when it isn't the agent's own model. */
+  thinkingBy?: string;
   developer: boolean;
   defaultExpanded: boolean;
 }
 
-export const ActivityCard = memo(function ActivityCard({ task, thinking, developer, defaultExpanded }: ActivityProps) {
+export const ActivityCard = memo(function ActivityCard({ task, thinking, thinkingBy, developer, defaultExpanded }: ActivityProps) {
   const status = task?.status ?? 'running';
   const running = status === 'running';
   const steps = task?.steps ?? [];
@@ -107,7 +109,7 @@ export const ActivityCard = memo(function ActivityCard({ task, thinking, develop
   const duration = task?.endedAt ? formatDuration(task.endedAt - task.startedAt) : null;
   const meta = [steps.length ? `${steps.length} step${steps.length === 1 ? '' : 's'}` : null, duration].filter(Boolean).join(' · ');
   const title = running ? 'Working on your request' : status === 'done' ? 'Completed' : status === 'cancelled' ? 'Stopped' : "Couldn't finish";
-  const thinkingLabel = steps.length === 0 ? 'Understanding your request' : 'Deciding the next step';
+  const thinkingLabel = steps.length === 0 ? 'Understanding your request' : `Deciding the next step${thinkingBy ? ` · ${thinkingBy}` : ''}`;
   const waiting = steps.some((s) => s.status === 'waiting');
   // The steps as text — each step, how it went, and what it found — to paste into a message or a report.
   const copySteps = () => {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { AgentRun } from '@/agent/runtime/agentRun';
 import type { ApprovalAnswer, RunEvent } from '@/agent/runtime/events';
-import { rememberedAnswer } from '@/agent/runtime/followUp';
+import { RESUME_REQUEST, rememberedAnswer, resumeMemory } from '@/agent/runtime/followUp';
 import { TeamRun, type TeamEvent } from '@/agent/runtime/teamRun';
 import { getItem, setItem } from '@/shared/storage/kv';
 import type { TaskRecord } from '@/shared/types/history';
@@ -52,7 +52,7 @@ export function useAgentRunner(tab: ActiveTab) {
   }, [dispatch, store]);
 
   const send = useCallback(
-    async (request: string) => {
+    async (request: string, resume?: TaskRecord) => {
       const text = request.trim();
       const state = store.getState();
       if (!text || state.chat.running) return;
@@ -75,14 +75,16 @@ export function useAgentRunner(tab: ActiveTab) {
             dispatch(chatActions.stepUpdated({ taskId: event.taskId, step: event.step }));
             break;
           case 'thinking':
-            dispatch(chatActions.thinking({ taskId: event.taskId, active: event.active }));
+            dispatch(chatActions.thinking({ taskId: event.taskId, active: event.active, by: event.by }));
             break;
           case 'approval':
             dispatch(chatActions.approval({ taskId: event.taskId, prompt: event.prompt }));
             break;
         }
       };
-      const base = { request: text, agent, config, windowId: tab.windowId, tabId: tab.id, history: state.chat.memory };
+      // Resume: the stopped task and what it did go along, so this message carries it on.
+      const carried = resume ? resumeMemory(resume) : [];
+      const base = { request: text, agent, config, windowId: tab.windowId, tabId: tab.id, history: [...state.chat.memory, ...carried] };
       const run = agent.team?.memberIds.length
         ? new TeamRun({
             ...base,
@@ -99,7 +101,7 @@ export function useAgentRunner(tab: ActiveTab) {
         dispatch(
           chatActions.endTurn({
             turnId,
-            remember: task.status === 'done' && task.result ? [{ role: 'user', content: text }, { role: 'assistant', content: rememberedAnswer(task.result, task.steps, task.checklist) }] : undefined,
+            remember: task.status === 'done' && task.result ? [...carried, { role: 'user', content: text }, { role: 'assistant', content: rememberedAnswer(task.result, task.steps, task.checklist) }] : undefined,
           }),
         );
       } catch (err) {
@@ -112,10 +114,12 @@ export function useAgentRunner(tab: ActiveTab) {
     [dispatch, store, tab],
   );
 
+  /** Carries a stopped or failed task on from where it stopped. */
+  const resume = useCallback((task: TaskRecord) => send(RESUME_REQUEST, task), [send]);
   const stop = useCallback(() => runRef.current?.cancel(), []);
   const respond = useCallback((approvalId: string, approved: ApprovalAnswer) => runRef.current?.respond(approvalId, approved), []);
 
-  return { send, stop, respond, running };
+  return { send, resume, stop, respond, running };
 }
 
 function failedTask(request: string, agentId: string, agentName: string, tab: ActiveTab, code: string, message: string, detail?: string): TaskRecord {

@@ -12,7 +12,18 @@ import { openConfiguration } from '../../utils/navigation';
 
 type Filter = 'all' | 'done' | 'failed' | 'cancelled';
 
-export function HistoryView({ onBack, onRunAgain }: { onBack: () => void; onRunAgain: (request: string) => void }) {
+export function HistoryView({
+  onBack,
+  onRunAgain,
+  onResume,
+  busy,
+}: {
+  onBack: () => void;
+  onRunAgain: (request: string) => void;
+  /** Carries a stopped or failed task on from where it stopped. */
+  onResume: (task: TaskRecord) => void;
+  busy: boolean;
+}) {
   const tasks = useAppSelector((s) => s.history.tasks);
   const saveHistory = useAppSelector((s) => s.config.config.settings.saveHistory);
   const developer = useAppSelector((s) => s.config.config.settings.developerMode);
@@ -47,7 +58,13 @@ export function HistoryView({ onBack, onRunAgain }: { onBack: () => void; onRunA
           )}
           {live.error && live.status !== 'done' && <div className="notice quiet">{live.error}</div>}
           <div className="detail-actions">
-            <Button onClick={() => onRunAgain(live.request)}>Run again</Button>
+            {live.status === 'cancelled' || live.status === 'failed' ? (
+              <Button disabled={busy} onClick={() => onResume(live)}>
+                Resume
+              </Button>
+            ) : (
+              <Button onClick={() => onRunAgain(live.request)}>Run again</Button>
+            )}
           </div>
         </div>
       </div>

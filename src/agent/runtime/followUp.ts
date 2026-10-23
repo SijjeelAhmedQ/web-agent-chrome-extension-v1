@@ -22,12 +22,32 @@ export function asksUser(answer: string): boolean {
 /** The answer as remembered for the next turn: when it asks the user something, with the steps done so far. */
 export function rememberedAnswer(answer: string, steps: StepRecord[], checklist: ChecklistItem[] = []): string {
   if (!asksUser(answer)) return answer;
+  return withStoppedList(answer, steps, checklist, false);
+}
+
+/** The answer with the steps done so far (and the checklist) — the list a reply carries on from. */
+function withStoppedList(answer: string, steps: StepRecord[], checklist: ChecklistItem[], always: boolean): string {
   const done = steps.filter((s) => s.status === 'done' && s.tool !== 'verify' && s.tool !== 'task_list').slice(-15);
-  if (!done.length && !checklist.length) return answer;
+  if (!done.length && !checklist.length && !always) return answer;
   const lines = done.map((s, i) => `${i + 1}. ${s.label}${s.note ? ` → ${s.note}` : ''}`);
   // The checklist goes along, so the reply carries on with the same items ticked.
   const list = checklist.map((c) => `${c.done ? '☑' : '☐'} ${c.text}${c.note ? ` ⟨${c.note}⟩` : ''}${c.saved && !c.done ? SAVED : ''}`);
   return `${answer}\n\n${STOPPED}\n${[...lines, ...(list.length ? ['Checklist:', ...list] : [])].join('\n')}]`;
+}
+
+/** What Resume sends: a reply that carries a stopped or failed task on from where it stopped. */
+export const RESUME_REQUEST = 'Resume — carry on from where you stopped.';
+
+/**
+ * A stopped or failed task, as remembered for Resume: its request, and an answer listing what was done —
+ * so “Resume” reads as a reply to it and the task carries on instead of starting again.
+ */
+export function resumeMemory(task: { request: string; steps: StepRecord[]; checklist?: ChecklistItem[]; error?: string }): ChatMessage[] {
+  const why = task.error ? ` (${task.error.replace(/\.$/, '')})` : '';
+  return [
+    { role: 'user', content: task.request },
+    { role: 'assistant', content: withStoppedList(`I stopped before finishing${why}. Shall I carry on from here?`, task.steps, task.checklist ?? [], true) },
+  ];
 }
 
 /**

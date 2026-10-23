@@ -1,9 +1,9 @@
 import { Button, Tooltip } from 'antd';
-import { AlertCircle, Check, CheckSquare, Copy, RotateCcw, Square } from 'lucide-react';
+import { AlertCircle, Check, CheckSquare, Copy, Play, RotateCcw, Square } from 'lucide-react';
 import { memo, useState } from 'react';
 import { errorTitle, recoveryFor, type ErrorCode } from '@/shared/utils/errors';
 import type { AgentConfig } from '@/shared/types/config';
-import type { ChecklistItem } from '@/shared/types/history';
+import type { ChecklistItem, TaskRecord } from '@/shared/types/history';
 import type { ApprovalAnswer } from '@/agent/runtime/events';
 import type { Turn } from '@/store/chatSlice';
 import { ActivityCard } from '../../components/Activity';
@@ -25,6 +25,8 @@ interface Props {
   busy: boolean;
   onRespond: (approvalId: string, approved: ApprovalAnswer) => void;
   onRetry: (request: string) => void;
+  /** Carries a stopped or failed task on from where it stopped. */
+  onResume: (task: TaskRecord) => void;
 }
 
 function CopyButton({ text, label = 'Copy answer' }: { text: string; label?: string }) {
@@ -71,9 +73,12 @@ function ChecklistView({ items }: { items: ChecklistItem[] }) {
   );
 }
 
-export const TurnView = memo(function TurnView({ turn, agent, agents, showAgent, developer, expandActivity, isLast, busy, onRespond, onRetry }: Props) {
+export const TurnView = memo(function TurnView({ turn, agent, agents, showAgent, developer, expandActivity, isLast, busy, onRespond, onRetry, onResume }: Props) {
   const task = turn.task;
   const status = task?.status ?? 'running';
+  // A stopped or failed task is resumed — carried on from where it stopped; a finished one is run again.
+  const resumable = !!task && (status === 'cancelled' || status === 'failed');
+  const didSteps = !!task?.steps.some((s) => s.status === 'done');
   const code = (task?.errorCode ?? 'unknown') as ErrorCode;
 
   return (
@@ -82,11 +87,19 @@ export const TurnView = memo(function TurnView({ turn, agent, agents, showAgent,
         <div className="bubble">{turn.request}</div>
         <div className="request-actions">
           <CopyButton text={turn.request} label="Copy request" />
-          <Tooltip title={busy ? 'Wait until the agent is done' : 'Run again'} mouseEnterDelay={0.3}>
-            <button type="button" className="icon-btn small" aria-label="Run this request again" disabled={busy} onClick={() => onRetry(turn.request)}>
-              <RotateCcw size={14} />
-            </button>
-          </Tooltip>
+          {resumable ? (
+            <Tooltip title={busy ? 'Wait until the agent is done' : 'Resume'} mouseEnterDelay={0.3}>
+              <button type="button" className="icon-btn small" aria-label="Resume this task from where it stopped" disabled={busy} onClick={() => onResume(task!)}>
+                <Play size={14} />
+              </button>
+            </Tooltip>
+          ) : (
+            <Tooltip title={busy ? 'Wait until the agent is done' : 'Run again'} mouseEnterDelay={0.3}>
+              <button type="button" className="icon-btn small" aria-label="Run this request again" disabled={busy} onClick={() => onRetry(turn.request)}>
+                <RotateCcw size={14} />
+              </button>
+            </Tooltip>
+          )}
         </div>
       </div>
 
@@ -98,7 +111,7 @@ export const TurnView = memo(function TurnView({ turn, agent, agents, showAgent,
           </div>
         )}
 
-        <ActivityCard task={task} thinking={turn.thinking} developer={developer} defaultExpanded={expandActivity} />
+        <ActivityCard task={task} thinking={turn.thinking} thinkingBy={turn.thinkingBy} developer={developer} defaultExpanded={expandActivity} />
 
         {task?.checklist && task.checklist.length > 0 && <ChecklistView items={task.checklist} />}
 
@@ -125,11 +138,16 @@ export const TurnView = memo(function TurnView({ turn, agent, agents, showAgent,
               <div className="notice-actions">
                 {recoveryFor(code).map((action) =>
                   action === 'retry' ? (
-                    isLast && (
+                    isLast &&
+                    (didSteps ? (
+                      <Button key={action} size="small" icon={<Play size={13} />} disabled={busy} onClick={() => onResume(task!)}>
+                        Resume
+                      </Button>
+                    ) : (
                       <Button key={action} size="small" icon={<RotateCcw size={13} />} onClick={() => onRetry(turn.request)}>
                         Try again
                       </Button>
-                    )
+                    ))
                   ) : action === 'open-models' ? (
                     <Button key={action} size="small" type={code === 'no_model' ? 'primary' : 'default'} onClick={() => void openConfiguration('/models')}>
                       {code === 'no_model' ? 'Connect a model' : 'Check model settings'}
@@ -148,9 +166,9 @@ export const TurnView = memo(function TurnView({ turn, agent, agents, showAgent,
         {status === 'cancelled' && (
           <div className="notice quiet">
             <span>{task?.error?.startsWith('Interrupted') ? task.error : 'Stopped. You’re in control.'}</span>
-            {isLast && (
-              <button type="button" className="link-btn" onClick={() => onRetry(turn.request)}>
-                Run again
+            {isLast && task && (
+              <button type="button" className="link-btn" disabled={busy} onClick={() => onResume(task)}>
+                Resume
               </button>
             )}
           </div>

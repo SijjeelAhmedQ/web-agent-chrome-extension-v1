@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Checklist, checklistTool } from './runtime/checklist';
-import { followUpOf, rememberedAnswer, withoutStoppedList } from './runtime/followUp';
+import { followUpOf, RESUME_REQUEST, rememberedAnswer, resumeMemory, withoutStoppedList } from './runtime/followUp';
 import type { ToolContext } from './tools/types';
 
 const ctx = {} as ToolContext;
@@ -68,6 +68,22 @@ describe('the checklist for a request with several things to do', () => {
     const copied = 'The duplicate diagnosis pop-up is open — Yes or No?\n\n[Where I stopped — steps already done in this task:\n1. Reading the page\nChecklist:\n☐ Add diagnosis]';
     expect(withoutStoppedList(copied)).toBe('The duplicate diagnosis pop-up is open — Yes or No?');
     expect(withoutStoppedList('Saved.')).toBe('Saved.');
+  });
+
+  it('resumes a stopped task from where it stopped, with its steps and checklist', () => {
+    const items = [{ text: 'Add medication: paracetamol 500 mg tablet — save', done: true, note: 'saved' }, { text: 'Add task: review bloods — save', done: false }];
+    const steps = [
+      { id: 's1', label: 'Clicking “Medications”', status: 'done' as const, tool: 'click', startedAt: 0 },
+      { id: 's2', label: 'Clicking “Save”', status: 'skipped' as const, tool: 'click', startedAt: 0 },
+    ];
+    const memory = resumeMemory({ request: 'add a medication and a task for Arya', steps, checklist: items, error: 'You stopped this task.' });
+    const f = followUpOf(memory, RESUME_REQUEST);
+    expect(f?.task).toBe('add a medication and a task for Arya');
+    expect(f?.doneSteps).toEqual(['Clicking “Medications”']);
+    expect(f?.checklist).toEqual(items);
+    expect(f?.request).toContain('Carry on with the task');
+    // Nothing done yet: still a resume of the same task, not a new one called “Resume…”.
+    expect(followUpOf(resumeMemory({ request: 'open arya stark', steps: [] }), RESUME_REQUEST)?.task).toBe('open arya stark');
   });
 
   it('takes items sent as one string, one per line', () => {

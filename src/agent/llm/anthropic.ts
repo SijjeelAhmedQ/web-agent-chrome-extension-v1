@@ -1,4 +1,5 @@
 import type { ProviderConfig } from '@/shared/types/config';
+import { thinkingOf } from '@/shared/utils';
 import { AgentError } from '@/shared/utils/errors';
 import { joinUrl, requestJson } from './http';
 import type { ChatMessage, ChatRequest, ChatResponse, LlmClient } from './types';
@@ -6,7 +7,9 @@ import type { ChatMessage, ChatRequest, ChatResponse, LlmClient } from './types'
 type Block =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
-  | { type: 'tool_result'; tool_use_id: string; content: string };
+  | { type: 'tool_result'; tool_use_id: string; content: string }
+  | { type: 'thinking'; thinking: string; signature: string }
+  | { type: 'redacted_thinking'; data: string };
 
 interface WireMessage {
   role: 'user' | 'assistant';
@@ -34,7 +37,8 @@ function toWire(messages: ChatMessage[]): { system: string; messages: WireMessag
     if (m.role === 'user') push('user', [{ type: 'text', text: m.content || ' ' }]);
     else if (m.role === 'tool') push('user', [{ type: 'tool_result', tool_use_id: m.toolCallId, content: m.content }]);
     else {
-      const blocks: Block[] = [];
+      // Its thinking first, as it came: Claude refuses a tool turn whose thinking was dropped.
+      const blocks: Block[] = Array.isArray(m.reasoning) ? [...(m.reasoning as Block[])] : [];
       if (m.content) blocks.push({ type: 'text', text: m.content });
       for (const c of m.toolCalls ?? []) blocks.push({ type: 'tool_use', id: c.id, name: c.name, input: c.arguments });
       push('assistant', blocks.length ? blocks : [{ type: 'text', text: ' ' }]);
@@ -63,15 +67,18 @@ export class AnthropicClient implements LlmClient {
 
   async chat(req: ChatRequest): Promise<ChatResponse> {
     const { system, messages } = toWire(req.messages);
+    // Thinking: a budget of tokens before the answer; with it on, Claude takes no temperature.
+    const level = thinkingOf(this.provider);
+    const budget = level === 'low' ? 1024 : level === 'high' ? 8192 : 0;
     const data = await requestJson<AnthropicResponse>(joinUrl(this.base(), 'v1/messages'), {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify({
         model: req.model,
-        max_tokens: 4096,
+        max_tokens: 4096 + budget,
         system,
         messages,
-        temperature: req.temperature,
+        ...(budget ? { thinking: { type: 'enabled', budget_tokens: budget } } : { temperature: req.temperature }),
         ...(req.tools.length ? { tools: req.tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters })) } : {}),
       }),
       signal: req.signal,
@@ -89,6 +96,9 @@ export class AnthropicClient implements LlmClient {
         .map((b) => ({ id: b.id, name: b.name, arguments: b.input ?? {} })),
       finishReason: data.stop_reason,
       usage: { inputTokens: data.usage?.input_tokens, outputTokens: data.usage?.output_tokens },
+      ...(blocks.some((b) => b.type === 'thinking' || b.type === 'redacted_thinking')
+        ? { reasoning: blocks.filter((b) => b.type === 'thinking' || b.type === 'redacted_thinking') }
+        : {}),
     };
   }
 

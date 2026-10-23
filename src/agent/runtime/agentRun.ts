@@ -54,6 +54,15 @@ export function resolveProvider(agent: AgentConfig, config: AppConfig, url = '')
   return { provider, model };
 }
 
+/** An agent's decision model — it decides each next step: its connection (the default one when unset) and model. Null when off. */
+export function resolveDecision(agent: AgentConfig, config: AppConfig): { provider: ProviderConfig; model: string; label: string } | null {
+  const d = agent.decision;
+  if (!d) return null;
+  const provider = config.providers.find((p) => p.id === d.providerId) ?? config.providers.find((p) => p.id === config.settings.defaultProviderId) ?? config.providers[0];
+  const model = d.model.trim() || provider?.defaultModel.trim() || '';
+  return provider && model ? { provider, model, label: knownModel(model)?.label ?? model } : null;
+}
+
 /**
  * One task: the observe → decide → act loop. Runs in the side panel. The model chooses
  * every tool; this class enforces site rules and approvals, reports progress and keeps the
@@ -205,6 +214,10 @@ export class AgentRun {
     const url = tab?.url ?? '';
     const { provider, model } = resolveProvider(agent, config, url);
     const client = createClient(provider);
+    // The decision model, when the agent has one, decides each next step; the agent's own model reads the
+    // request first, double-checks and writes the answer.
+    const decision = resolveDecision(agent, config);
+    const decider = decision ? { client: createClient(decision.provider), model: decision.model, label: decision.label } : null;
     const toolset = buildToolset(agent, config, url);
     // A reply to the question the last answer asked: carry on from there, don't start over.
     const followUp = followUpOf(this.options.history, request);
@@ -270,14 +283,36 @@ export class AgentRun {
     let pageNudged = false;
     let popupsChecked = false;
     let quotesChecked = false;
+    let lastModel = model;
     for (let step = 0; step < this.stepLimit(agent.maxSteps); step++) {
       this.throwIfCancelled();
-      this.emit({ type: 'thinking', taskId: this.id, active: true });
+      // “Deciding the next step” — after a tool's result — is the decision model's. Understanding the request
+      // (the first step) and the runtime's own prompts (the double-check, “not finished yet”) are the agent's model's.
+      const deciding = !!decider && step > 0 && messages.at(-1)?.role === 'tool';
+      const [c, m] = deciding ? [decider!.client, decider!.model] : [client, model];
+      this.emit({ type: 'thinking', taskId: this.id, active: true, ...(deciding ? { by: decider!.label } : {}) });
       let response;
       try {
         // The checklist is shown again before every step: early steps may have been dropped to fit.
         messages[0] = { role: 'system', content: this.checklist.size ? `${system}\n\n${this.checklist.section()}` : system };
-        response = await client.chat({ model, messages: compactMessages(messages, budget), tools: specs, temperature: agent.temperature, signal: this.abort.signal });
+        response = await c.chat({ model: m, messages: reasoningFor(compactMessages(messages, budget), m), tools: specs, temperature: agent.temperature, signal: this.abort.signal });
+        lastModel = m;
+        // The decision model decided to answer now: the agent's model writes the answer — without tools, so
+        // the decision (stop here, ask the user) stays the decision model's.
+        if (deciding && !response.toolCalls.length) {
+          this.emit({ type: 'thinking', taskId: this.id, active: true });
+          const ask: ChatMessage = { role: 'user', content: `${ANSWER_PROMPT}\n\nThe draft:\n${response.content.trim() || '(none)'}` };
+          const written = await client
+            .chat({ model, messages: [...reasoningFor(compactMessages(messages, budget), model), ask], tools: [], temperature: agent.temperature, signal: this.abort.signal })
+            .catch((err: unknown) => {
+              if (this.abort.signal.aborted || isAbort(err)) throw err;
+              return null; // the decision model's own answer stands
+            });
+          if (written?.content.trim()) {
+            response = { ...written, toolCalls: [] };
+            lastModel = model;
+          }
+        }
       } catch (err) {
         if (step === 0 && lacksToolSupport(err)) return this.answerWithoutTools(client, model, ctx);
         throw err;
@@ -354,7 +389,7 @@ export class AgentRun {
         }
         return answer;
       }
-      messages.push({ role: 'assistant', content: response.content, toolCalls: response.toolCalls });
+      messages.push({ role: 'assistant', content: response.content, toolCalls: response.toolCalls, ...(response.reasoning ? { reasoning: response.reasoning, reasoningBy: lastModel } : {}) });
 
       for (const call of response.toolCalls) {
         this.throwIfCancelled();
@@ -940,6 +975,14 @@ export function declinedAnswer(title: string): string {
 
 const NOT_FINISHED_PROMPT = 'Not finished yet:';
 /** Tools that only look at the page; this many in a row without an action is searching in circles. */
+/** To the agent's model, when the decision model has decided to answer: it writes the answer, it takes no step. */
+const ANSWER_PROMPT =
+  'The steps are done for now: write the answer for the user, from what the steps above found. Don’t take another step. Keep what the draft below decided — what was done, and any question it asks the user — and write it clearly. Only the answer, nothing about this note.';
+
+/** A model gets back only its own reasoning: another model's thought signatures would be refused. */
+export const reasoningFor = (messages: ChatMessage[], model: string): ChatMessage[] =>
+  messages.map((m) => (m.role === 'assistant' && m.reasoning && m.reasoningBy !== model ? { ...m, reasoning: undefined } : m));
+
 /** A filled form by its values, whatever order they were read in. */
 export const formKey = (fields: { label: string; value: string }[]) =>
   fields
