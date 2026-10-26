@@ -46,6 +46,8 @@ export function classifyClick(info: ElementRisk): RiskVerdict {
   const isSubmit = info.type === 'submit' || (info.tag === 'button' && info.type === 'submit');
   // Long names are usually cards or rows of content, not commands: only the strongest rules apply.
   const candidates = name.length > 60 ? RULES.slice(0, 3) : RULES;
+  // Leaving a form saves nothing — even when its Cancel is a submit button (a <button> in a <form> is one).
+  if (/^(cancel|close|back|no|×|✕)$/i.test(name)) return { consequential: false };
 
   if ((BUTTONISH.has(info.role) || isSubmit) && CONFIRMS.test(name) && info.dialogText) {
     for (const rule of RULES) if (rule.pattern.test(info.dialogText)) return { consequential: true, consequence: rule.consequence };

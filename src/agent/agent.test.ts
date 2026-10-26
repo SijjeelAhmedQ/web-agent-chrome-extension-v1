@@ -57,6 +57,8 @@ describe('risk policy', () => {
     expect(classifyClick(risk({ name: 'Yes', dialogText: 'Are you sure you want to complete the selected task(s)? Yes No' })).consequence).toBe('complete or file a record');
     expect(classifyClick(risk({ name: 'Yes', dialogText: 'Do you want to see more results? Yes No' })).consequential).toBe(false);
     expect(classifyClick(risk({ name: 'Create' })).consequence).toBe('save or submit changes');
+    // A form's Cancel saves nothing, though it is a submit button beside Save.
+    expect(classifyClick(risk({ name: 'Cancel', tag: 'button', type: 'submit', formSubmitLabels: ['Cancel', 'Save', 'Repeat'] })).consequential).toBe(false);
     // A log of filing is no filing.
     expect(classifyClick(risk({ name: 'AI file audit' })).consequential).toBe(false);
     expect(classifyClick(risk({ name: 'File All Normal 3' })).consequence).toBe('complete or file a record');
