@@ -12,8 +12,10 @@ export async function connect() {
   const pages = await browser.pages();
   // The newest Indici tab (a consult opens in a tab of its own).
   const indici = pages.filter((p) => /vitonta\.com/.test(p.url()));
-  // A consult tab when there is one (it is where the work happens), else the newest Indici tab.
-  const page = indici.filter((p) => /accordionslider/.test(p.url())).at(-1) ?? indici.at(-1) ?? pages[0];
+  // TAB=<regex> picks a tab by its address (TAB=inbox-app for the Smart Inbox); else a consult tab when
+  // there is one (it is where the work happens), else the newest Indici tab.
+  const wanted = process.env.TAB ? pages.filter((p) => new RegExp(process.env.TAB, 'i').test(p.url())).at(-1) : undefined;
+  const page = wanted ?? indici.filter((p) => /accordionslider/.test(p.url())).at(-1) ?? indici.at(-1) ?? pages[0];
   await page.bringToFront();
   return { browser, page };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { judge, shownRows, statusRows, statusSummary } from './tools/recordStatus';
+import { columnRows, judge, shownRows, statusRows, statusSummary } from './tools/recordStatus';
 import { tableOutput } from './tools/browserTools';
 
 const rules = { label: 'Status', normal: ['Normal'], emptyIsNormal: true };
@@ -69,6 +69,25 @@ describe('a record’s results by their Status column', () => {
     // “test result normal”: HbA1c Normal Abnormal + Blood Test Status (empty) — abnormal, though one row says Normal.
     expect(statusSummary([{ text: 'Fields — Subject: test result normal', rows: [row(['HbA1c', 'Normal', 'Abnormal']), row(['Blood Test', 'Status'])] }], rules)).toContain('ABNORMAL — HbA1c: Abnormal');
   });
+
+  it('decides a record shown in the page without a flag column by its colour in the list', () => {
+    const row = (cells: string[]) => ({ cells, red: cells.map(() => false) });
+    // The Smart Inbox: TEST | CURRENT only, the patient's details around it.
+    const rows = [row(['Provider', 'Result Date', 'Observation Date']), row(['TEST', 'CURRENT (21/10/2026)']), row(['HbA1c', 'Normal']), row(['Blood Test', 'Status'])];
+    const out = statusSummary(
+      [
+        { text: 'Arya STARK', rows, listItem: { text: 'Testing 21/10/2026', red: true }, who: 'Arya STARK' },
+        { text: 'Arya STARK', rows, listItem: { text: 'Test 21/10/2026', red: false }, who: 'Arya STARK' },
+        { text: 'Arya STARK', rows: [row(['TEST', 'CURRENT', 'PREVIOUS', 'STATUS', 'TREND']), row(['CBC', '12', '—', 'HIGH', '—'])], listItem: { text: 'Bloods 20/10/2026', red: false } },
+      ],
+      rules,
+      true,
+    );
+    expect(out).toContain('Record 1 (Testing 21/10/2026 — Arya STARK): ABNORMAL — no Status column; in the list it is in red');
+    expect(out).toContain('Record 2 (Test 21/10/2026 — Arya STARK): NORMAL — no Status column');
+    expect(out).toContain('Record 3 (Bloods 20/10/2026): ABNORMAL — CBC: HIGH');
+    expect(out).toContain('Totals: 3 records — 2 abnormal, 1 normal');
+  });
 });
 
 describe('a list read with its rows’ colours', () => {
@@ -85,5 +104,27 @@ describe('a list read with its rows’ colours', () => {
     });
     expect(out).toContain('1. — | 21-10-2026 | ChCh02 | Testing | — | — — in red');
     expect(out).toContain('By colour: 2 in red, 1 in grey.');
+  });
+});
+
+describe('a flag column under its heading (Smart Inbox: TEST | CURRENT | PREVIOUS | STATUS | TREND)', () => {
+  const rows = [
+    { cells: ['Provider', 'Result Date', 'Observation Date'], red: [] },
+    { cells: ['Usman .', '07/10/2026', '07/10/2026'], red: [] },
+    { cells: ['Test', 'Current (07/10/2026)', 'Previous', 'Status', 'Trend'], red: [] },
+    { cells: ['CBC', '12', '—', 'HIGH', '—'], red: [] },
+    { cells: ['HbA1c', '41', '40', 'Normal', '—'], red: [] },
+    { cells: ['Sodium', '140', '—', '—', '—'], red: [] },
+    { cells: ['Lab', 'CBC', 'Ordering Provider :', '-'], red: [] },
+  ];
+  it('takes the flag from that column; a dash is an empty flag', () => {
+    expect(columnRows(rows, 'Status')).toEqual([
+      { test: 'CBC', status: 'HIGH' },
+      { test: 'HbA1c', status: 'Normal' },
+      { test: 'Sodium', status: '' },
+    ]);
+    const summary = statusSummary([{ text: 'CBC 12 HIGH', rows }], rules);
+    expect(summary).toContain('ABNORMAL — CBC: HIGH');
+    expect(summary).toContain('Totals: 1 record — 1 abnormal, 0 normal.');
   });
 });

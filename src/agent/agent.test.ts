@@ -334,6 +334,7 @@ describe('unfinished replies', () => {
     expect(soundsUnfinished('Added Panadol 500 mg, twice daily for 10 days.')).toBe(false);
     expect(soundsUnfinished('Done. Let me know if you need anything else.')).toBe(false);
     expect(soundsUnfinished('| Laptop | Price |\n|---|---|\n| Aero 14 | $649 |')).toBe(false);
+    expect(soundsUnfinished('Arya has 1 record.\n* **Test** — 21/10/2026\n  * **Status**: Filed')).toBe(false);
   });
 });
 

@@ -101,7 +101,11 @@ async function approvalFor(
   } catch {
     return null; // the action itself will report the problem
   }
-  const verdict = kind === 'click' ? classifyClick(info) : kind === 'submit' ? classifySubmit(info) : classifyTyping(info);
+  let verdict = kind === 'click' ? classifyClick(info) : kind === 'submit' ? classifySubmit(info) : classifyTyping(info);
+  // A control this site's setup lists as changing a record the moment it is clicked (a tick box that saves itself).
+  if (!verdict.consequential && kind === 'click' && (ctx.askBefore ?? []).map(norm).includes(norm(info.name ?? ''))) {
+    verdict = { consequential: true, consequence: 'change the record right away' };
+  }
   if (!verdict.consequential) return null;
   const site = siteOf(await pageUrl(ctx)) || 'this site';
   // A pop-up form with its own finishing buttons (Complete · Save · Reset · Cancel): the user picks one.
@@ -774,7 +778,7 @@ export function recordsOutput(records: string[], next: string, close: string, bu
   const shared = records.length >= 3 ? new Set([...counts].filter(([, n]) => n >= Math.ceil(records.length * 0.6)).map(([l]) => l)) : new Set<string>();
   const common = [...shared].join('\n');
   const own = lines.map((ls) => ls.filter((l) => !shared.has(l)).join('\n'));
-  const head = `Read ${records.length} record${records.length === 1 ? '' : 's'} one after another with “${next}”, then closed the viewer with “${close}”. Nothing was typed or saved.`;
+  const head = `Read ${records.length} record${records.length === 1 ? '' : 's'} one after another with “${next}”${close ? `, then closed the viewer with “${close}”` : ''}. Nothing was typed or saved.`;
   const tail = `These are all ${records.length} records of the list, first to last. Answer from them — don't read them again.`;
   const per = Math.max(250, Math.floor((budget - head.length - tail.length - common.length - records.length * 20) / Math.max(1, records.length)));
   return [
@@ -853,66 +857,127 @@ async function popupText(ctx: ToolContext, shown?: { rows?: VisualRow[] }): Prom
  * steps. This opens the first record and goes through the viewer with its "Next" button by itself,
  * keeping each record's text, then closes the viewer — one step; the model reads them all at once.
  */
-const readRecords: AgentTool<{ first: string; near: string; next: string; close: string; max: number; status_label: string; normal_values: string; empty_is_normal: boolean }> = {
+const readRecords: AgentTool<{ first: string; near: string; next: string; close: string; max: number; area: string; status_label: string; normal_values: string; empty_is_normal: boolean }> = {
   name: 'read_records',
   description:
     'Read a list of records in one go — an inbox, a list of results — instead of opening them one by one: it opens the first record (clicks its text), presses the record viewer\'s "Next" button until the last record, keeps every record\'s text (and its fields), then closes the viewer. It types nothing and saves nothing. Then answer from what it returns.',
   schema: z.object({
-    first: str(z.string().min(1)).describe('The text to click to open the first record of the list, e.g. its Subject'),
+    first: z.coerce
+      .string()
+      .optional()
+      .default('')
+      .describe('The text to click to open the first record of the list, e.g. its Subject. With area: leave it empty to start from the record showing now'),
     near: z.coerce.string().optional().default('').describe('Other text from the same row, if the first text appears more than once'),
     next: z.coerce.string().optional().default('Next').describe('The viewer button that opens the next record'),
     close: z.coerce.string().optional().default('Cancel').describe('The viewer button that closes it without saving'),
-    max: z.coerce.number().int().min(1).max(50).optional().default(30).describe('At most this many records'),
+    max: z.coerce.number().int().min(1).max(100).optional().default(30).describe('At most this many records (50 in a pop-up, 100 in the page)'),
+    area: z.coerce
+      .string()
+      .optional()
+      .default('')
+      .describe('When the record opens in the page itself, not in a pop-up: text that is always in the record’s part of the page (the site’s knowledge names it, e.g. "Diagnostic Comment"). Then "Next" is pressed in the page and nothing is closed'),
     status_label: z.coerce.string().optional().default('').describe('The word before each result’s flag in a record (e.g. "Status"), when the site’s knowledge names one: the tool then works out each record’s normal and abnormal results and counts them'),
     normal_values: z.coerce.string().optional().default('Normal').describe('Flags that mean normal, comma-separated'),
     empty_is_normal: bool(false).describe('An empty flag counts as normal (when the site’s knowledge says so)'),
   }),
   risk: 'action',
   touchesPage: true,
-  label: (a) => `Reading the records one after another, from ${quote(a.first)}`,
+  label: (a) => `Reading the records one after another, from ${a.first.trim() ? quote(a.first) : 'the one showing'}`,
   async execute(a, ctx) {
     // The same list read again in this task: its records are in the conversation already.
-    const key = `${(await ctx.browser.currentTab().catch(() => null))?.url ?? ''}|${a.first.trim().toLowerCase()}`;
+    const inPage = !!a.area.trim();
+    if (!a.first.trim() && !inPage) return { output: 'Say which record to open first: first = its text in the list (e.g. its Subject).', note: 'No first record given' };
+    const start = a.first.trim() || (await ctx.browser.send({ kind: 'areaText', anchor: a.area, next: a.next }).catch(() => null))?.text.slice(0, 300) || a.area;
+    const key = `${(await ctx.browser.currentTab().catch(() => null))?.url ?? ''}|${start.trim().toLowerCase()}`;
     const before = ctx.recordsRead?.get(key);
     if (before) {
       return { output: `You already read this list in this task — all ${before} records, in the read_records result above. Don't read it again: answer from that result.`, note: 'Already read — not again' };
     }
-    const opened = await clickText.execute({ text: a.first, near: a.near, double: false }, ctx);
-    if (/Text not found|not clicked/.test(opened.note ?? '')) return opened;
+    if (a.first.trim()) {
+      const opened = await clickText.execute({ text: a.first, near: a.near, double: false }, ctx);
+      if (/Text not found|not clicked/.test(opened.note ?? '')) return opened;
+      // A link to another page (“Go to Consult for …”) is not a record of the list.
+      if (/new tab|new page/i.test(opened.note ?? '')) {
+        return {
+          output: `${opened.output}\nThat was not a record of the list: “${a.first}” opened another page. Go back to the list (close that tab if it is a new one), then call read_records again — with area, first empty starts from the record showing; or first = the record's own text in the list.`,
+          note: 'Opened another page — not a record',
+        };
+      }
+    }
     const records: string[] = [];
     const rowsOf: VisualRow[][] = [];
+    const itemsOf: ({ text: string; red: boolean } | null)[] = [];
+    // Whose record — the first line of a record shown in the page is its patient (or its owner).
+    const whoOf: string[] = [];
+    // The record now: in its pop-up, or — a record shown in the page — in the part of the page `area` names.
+    let nextInPage: number | null = null;
+    const recordText = async (shown: { rows?: VisualRow[]; item?: { text: string; red: boolean } | null }): Promise<string> => {
+      if (!inPage) return popupText(ctx, shown);
+      const res = await ctx.browser.send({ kind: 'areaText', anchor: a.area, next: a.next }).catch(() => null);
+      shown.rows = res?.rows;
+      shown.item = res?.listItem ?? null;
+      nextInPage = res?.nextId ?? null;
+      return res?.text ?? '';
+    };
     let last = '';
     for (let i = 0; i < a.max; i++) {
-      const shown: { rows?: VisualRow[] } = {};
-      let text = await popupText(ctx, shown);
+      const shown: { rows?: VisualRow[]; item?: { text: string; red: boolean } | null } = {};
+      let text = await recordText(shown);
       // The next record may take a moment to load.
       for (let tries = 0; tries < 12 && (!text || text === last); tries++) {
         await sleep(300);
-        text = await popupText(ctx, shown);
+        text = await recordText(shown);
       }
       if (!text || text === last) break;
-      records.push(text);
-      rowsOf.push(shown.rows ?? []);
+      // In the page, the rest catches up a moment later (the list's selection, the results table): read it again.
+      if (inPage) {
+        await sleep(400);
+        text = (await recordText(shown)) || text;
+      }
       last = text;
-      if (i === a.max - 1) break;
-      const next = await ctx.browser.send({ kind: 'popupControl', name: a.next }).catch(() => null);
+      // Its entry in the list, which may say what the record doesn't (red: abnormal).
+      records.push(shown.item ? `In the list: ${shown.item.text}${shown.item.red ? ' (in red)' : ''}\n${text}` : text);
+      rowsOf.push(shown.rows ?? []);
+      itemsOf.push(shown.item ?? null);
+      whoOf.push(inPage ? (text.split('\n').find((l) => l.trim()) ?? '').trim().slice(0, 60) : '');
+      if (i === Math.min(a.max, inPage ? 100 : 50) - 1) break;
+      const next = inPage ? { id: nextInPage, disabled: false } : await ctx.browser.send({ kind: 'popupControl', name: a.next }).catch(() => null);
       if (!next?.id || next.disabled) break;
       await ctx.browser.send({ kind: 'click', id: next.id, highlight: false }).catch(() => undefined);
     }
-    const close = await ctx.browser.send({ kind: 'popupControl', name: a.close }).catch(() => null);
-    if (close?.id) await ctx.browser.send({ kind: 'click', id: close.id, highlight: false }).catch(() => undefined);
-    else await ctx.browser.send({ kind: 'key', key: 'Escape' }).catch(() => undefined);
+    // Stopped at the limit in the page: the next record is opened, for a call that reads on from it.
+    let more = false;
+    if (inPage && records.length >= Math.min(a.max, 100) && nextInPage) {
+      await ctx.browser.send({ kind: 'click', id: nextInPage, highlight: false }).catch(() => undefined);
+      more = true;
+    }
+    if (!inPage) {
+      const close = await ctx.browser.send({ kind: 'popupControl', name: a.close }).catch(() => null);
+      if (close?.id) await ctx.browser.send({ kind: 'click', id: close.id, highlight: false }).catch(() => undefined);
+      else await ctx.browser.send({ kind: 'key', key: 'Escape' }).catch(() => undefined);
+    }
     if (!records.length) {
-      return { output: `Clicked “${a.first}”, but no record viewer (pop-up) opened. Read the page to see what it did.`, note: 'No record viewer opened' };
+      return {
+        output: inPage
+          ? `${a.first.trim() ? `Clicked “${a.first}”, but no` : 'No'} record with “${a.area}” showed on the page. Read the page to see what it did.`
+          : `Clicked “${a.first}”, but no record viewer (pop-up) opened. Read the page to see what it did.`,
+        note: 'No record viewer opened',
+      };
     }
     (ctx.recordsRead ??= new Map()).set(key, records.length);
     const rules = a.status_label.trim()
       ? { label: a.status_label.trim(), normal: a.normal_values.split(',').map((v) => v.trim()).filter(Boolean), emptyIsNormal: a.empty_is_normal }
       : null;
-    const summary = rules ? statusSummary(records.map((text, i) => ({ text, rows: rowsOf[i] })), rules) : '';
+    const summary = rules ? statusSummary(records.map((text, i) => ({ text, rows: rowsOf[i], listItem: itemsOf[i], who: whoOf[i] })), rules, inPage) : '';
     const budget = (ctx.overviewTextChars ? 7_000 : 18_000) - summary.length;
     return {
-      output: [summary, recordsOutput(records, a.next, a.close, Math.max(3_000, budget))].filter(Boolean).join('\n\n'),
+      output: [
+        summary,
+        more ? `Stopped at ${records.length} records; there are more. The next one is open now: to read on, call read_records again with first empty and the same area.` : '',
+        recordsOutput(records, a.next, inPage ? '' : a.close, Math.max(3_000, budget)),
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
       note: `${records.length} record${records.length === 1 ? '' : 's'} read`,
     };
   },

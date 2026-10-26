@@ -1,11 +1,15 @@
 import { z } from 'zod';
 import type { SiteProfile } from '@/shared/types/config';
 import { formatEntry, searchKnowledge } from '../planner/siteKnowledge';
-import type { AgentTool } from './types';
+import type { AgentTool, ToolContext } from './types';
 
-/** Looks up the site's knowledge base — for entries that didn't fit in the prompt. */
-export function knowledgeTool(sites: SiteProfile[]): AgentTool<{ topic: string }> {
-  const names = sites.map((s) => s.name).join(', ');
+/**
+ * Looks up the site's knowledge base — for entries that didn't fit in the prompt. `here` gives the site
+ * profiles of the tab the agent is on now: a task that moved to another site (Indici → its Smart Inbox, in a
+ * new tab) looks that site up first.
+ */
+export function knowledgeTool(sites: SiteProfile[], here?: (ctx: ToolContext) => Promise<SiteProfile[]>): AgentTool<{ topic: string }> {
+  const names = sites.map((s) => s.name).join(', ') || 'the sites you set up';
   return {
     name: 'site_knowledge',
     description: `Look up what the user has taught you about ${names}: how its menus, pages and controls work, and step-by-step workflows. Use it before guessing how to do something on this site.`,
@@ -14,7 +18,10 @@ export function knowledgeTool(sites: SiteProfile[]): AgentTool<{ topic: string }
     touchesPage: false,
     label: (a) => `Checking what I know about “${a.topic}”`,
     async execute(a, ctx) {
-      const found = searchKnowledge(sites, a.topic);
+      const now = here ? await here(ctx).catch(() => []) : [];
+      const moved = now.filter((s) => !sites.some((t) => t.id === s.id));
+      const fromHere = moved.length ? searchKnowledge(moved, a.topic) : [];
+      const found = fromHere.length ? fromHere : searchKnowledge(sites, a.topic);
       if (!found.length) return { output: `Nothing in the ${names} knowledge base about “${a.topic}”. Work it out from the page.`, note: 'Nothing saved about this' };
       // A small context (a slow local model): the best entry in full, the others by name — a page of
       // workflows would push out the steps the task is on.

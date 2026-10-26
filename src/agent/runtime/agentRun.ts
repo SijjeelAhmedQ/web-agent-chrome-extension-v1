@@ -250,6 +250,7 @@ export class AgentRun {
       elements: new ElementMemory(),
       skills: toolset.onDemandSkills,
       neverClick: toolset.sites.flatMap((s) => s.neverClick ?? []),
+      askBefore: toolset.sites.flatMap((s) => s.askBefore ?? []),
       // A small context is also a slow model's: every token of a page read is time.
       ...((contextWindowOf(provider) ?? Infinity) <= 32_768 ? { overviewTextChars: 3_000 } : {}),
     };
@@ -677,6 +678,14 @@ export class AgentRun {
         return blocked.output;
       }
 
+      // The rules of the site the tab is on now — a task that opened another site (Indici's Smart Inbox) follows its rules there.
+      if (tool.touchesPage) {
+        const here = sitesFor(this.options.config, (await ctx.browser.currentTab().catch(() => null))?.url ?? '');
+        if (here.length) {
+          ctx.neverClick = [...new Set([...(ctx.neverClick ?? []), ...here.flatMap((s) => s.neverClick ?? [])])];
+          ctx.askBefore = [...new Set([...(ctx.askBefore ?? []), ...here.flatMap((s) => s.askBefore ?? [])])];
+        }
+      }
       const approvalNeeded = await this.inFront(ctx, () => this.needsApproval(tool, args, ctx, step.label));
       // The same form, with the same values, saved earlier in this task: a second save is a duplicate (a task
       // added again to “check” it was added). Not asked — the model is told to look, or to ask the user.
@@ -1110,7 +1119,9 @@ export function soundsUnfinished(answer: string): boolean {
   if (!text) return false;
   const tail = text.slice(-260);
   const promisesMore = /(^|[.!?]\s+|\n)\s*(now,?\s+|next,?\s+|so\s+)?(let me(?! know)|let's|i('|’)ll(?! be happy)|i will(?! be happy)|i need to|i'm going to|i am going to|i should now)\b/i.test(tail);
-  const stopsMidSentence = text.length > 20 && !/[.!?)"”'’`*|…:\]]$/.test(text);
+  // A list's last item needs no full stop.
+  const lastLine = text.split('\n').at(-1)!.trim();
+  const stopsMidSentence = text.length > 20 && !/[.!?)"”'’`*|…:\]]$/.test(text) && !/^([-*•]|\d+[.)])\s/.test(lastLine);
   return promisesMore || stopsMidSentence;
 }
 

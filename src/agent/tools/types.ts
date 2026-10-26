@@ -42,6 +42,8 @@ export interface ToolContext {
   skills: SkillConfig[];
   /** Names of buttons the agent may never click on this site (from its site setup). */
   neverClick?: string[];
+  /** Names of controls that change a record the moment they are clicked: the user approves them first. */
+  askBefore?: string[];
   /** PDFs already read in this task, by address → their text (or why there is none). */
   pdfTexts?: Map<string, string>;
   /** Lists read with read_records in this task (page and first record → how many records). */

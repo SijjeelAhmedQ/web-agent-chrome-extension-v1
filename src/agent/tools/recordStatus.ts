@@ -73,6 +73,33 @@ export function shownRows(rows: VisualRow[]): StatusRow[] {
   return out;
 }
 
+/**
+ * The result rows of a record whose flag is a column of its own, under a heading row that names it —
+ * “TEST | CURRENT | PREVIOUS | STATUS | TREND” — the flag is that column's cell; “—” is an empty flag.
+ */
+export function columnRows(rows: VisualRow[], label: string): StatusRow[] {
+  const out: StatusRow[] = [];
+  let column = -1;
+  let width = 0;
+  for (const { cells } of rows) {
+    const at = cells.findIndex((c) => same(c, label));
+    if (at > 0) {
+      column = at;
+      width = cells.length;
+      continue;
+    }
+    if (column < 0) continue;
+    // The table ends where the rows stop lining up with its heading.
+    if (cells.length !== width || !/\p{L}{2}/u.test(cells[0])) {
+      if (out.length) column = -1;
+      continue;
+    }
+    const flag = cells[column].trim();
+    out.push({ test: cells[0].trim(), status: /^[—–-]?$/.test(flag) ? '' : flag });
+  }
+  return out;
+}
+
 export type Verdict = 'abnormal' | 'normal' | 'unclear' | 'none';
 
 export function judge(rows: StatusRow[], rules: StatusRules): { verdict: Verdict; abnormal: StatusRow[]; normal: StatusRow[]; blank: StatusRow[] } {
@@ -96,16 +123,23 @@ function recordName(text: string): string {
 }
 
 /** Each record's verdict and the totals, for the top of read_records' result. */
-export function statusSummary(records: { text: string; rows?: VisualRow[] }[], rules: StatusRules): string {
+export function statusSummary(records: { text: string; rows?: VisualRow[]; listItem?: { text: string; red: boolean } | null; who?: string }[], rules: StatusRules, inPage = false): string {
   const counts: Record<Verdict, number> = { abnormal: 0, normal: 0, unclear: 0, none: 0 };
-  const lines = records.map(({ text, rows }, i) => {
-    // The rows as shown when there are any (the flag is the right-hand cell); else the label in the text.
-    const shown = rows?.length ? shownRows(rows) : [];
-    const { verdict, abnormal, normal, blank } = judge(shown.length ? shown : statusRows(text, rules.label), rules);
-    counts[verdict]++;
-    const name = recordName(text);
+  const lines = records.map(({ text, rows, listItem, who }, i) => {
+    // A flag column under its heading; else the rows as shown (the flag is the right-hand cell); else the label in the text.
+    // A record shown in the page has the patient's details around it: only a flag column counts there, and
+    // without one the colour of its entry in the list — red is abnormal — decides.
+    const byColumn = rows?.length ? columnRows(rows, rules.label) : [];
+    const name = [recordName(text) || listItem?.text.trim() || '', who?.trim()].filter(Boolean).join(' — ');
     const head = `Record ${i + 1}${name ? ` (${name})` : ''}:`;
-    if (verdict === 'none') return `${head} no result rows — a PDF, scan or letter: decide it from its text below.`;
+    if (inPage && !byColumn.length && listItem) {
+      counts[listItem.red ? 'abnormal' : 'normal']++;
+      return `${head} ${listItem.red ? 'ABNORMAL' : 'NORMAL'} — no ${rules.label} column; in the list it is ${listItem.red ? 'in red' : 'in the usual colour'}`;
+    }
+    const shown = byColumn.length || inPage ? byColumn : rows?.length ? shownRows(rows) : [];
+    const { verdict, abnormal, normal, blank } = judge(shown.length || inPage ? shown : statusRows(text, rules.label), rules);
+    counts[verdict]++;
+    if (verdict === 'none') return inPage ? `${head} no ${rules.label} column — decide it as the site's knowledge says, from its text below.` : `${head} no result rows — a PDF, scan or letter: decide it from its text below.`;
     const parts = [
       abnormal.length ? `ABNORMAL — ${abnormal.map((r) => `${r.test}: ${r.status}`).join('; ')}` : verdict === 'normal' ? 'NORMAL' : 'UNCLEAR',
       normal.length ? `${normal.length} normal (${normal.map((r) => r.test).join(', ')})` : '',

@@ -41,6 +41,47 @@
       "skillIds": [],
       "createdAt": 1792493958545,
       "updatedAt": 1792493958545
+    },
+    {
+      "id": "agent-smart-inbox",
+      "name": "indici smart inbox agent",
+      "description": "Works in Indici’s Smart AI Inbox: finds, reads and summarises inbox records; files, comments and acts only when asked.",
+      "avatar": {
+        "icon": "Sparkles",
+        "color": "#7c3aed"
+      },
+      "instructions": "You work in Indici’s Smart AI Inbox for a clinic’s staff.\nRead records from the page and decide normal and abnormal by the site’s rule — never by your own reading of values.\nChange nothing on your own: file, comment, tick boxes, texts, emails, tasks, recalls and allergies only when the user asked, and the user approves each.\nAnswer briefly; for summaries give the totals first, then each patient.",
+      "providerId": null,
+      "model": "",
+      "temperature": 0.2,
+      "maxSteps": 60,
+      "confirmation": "smart",
+      "toolIds": [
+        "read_page",
+        "find_element",
+        "scroll",
+        "wait",
+        "click",
+        "type",
+        "clear",
+        "select_option",
+        "click_text",
+        "hover",
+        "open_menu",
+        "press_key",
+        "navigate",
+        "go_back",
+        "go_forward",
+        "list_tabs",
+        "open_tab",
+        "switch_tab",
+        "close_tab",
+        "read_table",
+        "read_records"
+      ],
+      "skillIds": [],
+      "createdAt": 1792999777295,
+      "updatedAt": 1792999777295
     }
   ],
   "sites": [
@@ -307,10 +348,168 @@
           "enabled": true,
           "createdAt": 1792661636992,
           "updatedAt": 1792671502142
+        },
+        {
+          "id": "kb_open_smart_inbox",
+          "kind": "workflow",
+          "title": "Open the Smart AI Inbox",
+          "content": "1. On Indici's Inbox (the Inbox panel of the dashboard, or Mailbox › Inbox), click the icon \"Open AI Assisted Inbox\" (✦, at the left end of the bar with Copied, Quick File, Flagged and All).\n2. The Smart AI Inbox opens in a new tab (inbox-app-dev.vitonta.com), signed in already — carry on there.\n3. Before working in it, look up \"Smart AI Inbox\" in the site knowledge: it has its own page and rules.",
+          "trigger": "open the smart inbox",
+          "enabled": true,
+          "createdAt": 1792999777295,
+          "updatedAt": 1792999777295
         }
       ],
       "createdAt": 1792493958545,
-      "updatedAt": 1792493958545
+      "updatedAt": 1792999777295
+    },
+    {
+      "id": "site-smart-inbox",
+      "name": "indici smart inbox",
+      "description": "Indici’s Smart AI Inbox (inbox-app-dev.vitonta.com): inbox records by patient — search, read, summarise, file, comment.",
+      "color": "#7c3aed",
+      "sites": [
+        "inbox-app-dev.vitonta.com"
+      ],
+      "enabled": true,
+      "providerId": null,
+      "model": "",
+      "agentIds": [
+        "agent-smart-inbox"
+      ],
+      "skillIds": [],
+      "disabledSkillIds": [],
+      "customToolIds": [],
+      "disabledToolIds": [],
+      "neverClick": [],
+      "askBefore": [
+        "Opt Out",
+        "Opt In",
+        "Confidential",
+        "Do not show on Portal",
+        "Inactive",
+        "Mark as Primary",
+        "Call"
+      ],
+      "knowledge": [
+        {
+          "id": "kb_smart_0",
+          "kind": "rule",
+          "title": "Smart AI Inbox — what it is and what changes it",
+          "content": "Indici's AI-assisted inbox, in a tab of its own (inbox-app-dev.vitonta.com), signed in with the Indici login. It holds inbox records (lab, radiology, discharge, referrals) from the last year, grouped by patient.\n- Reading is safe, but the app itself marks a record read when it is shown — opening records changes their read state.\n- These change records: File, Unfile, File All Normal, File All, Save diagnostic comment, the tick boxes Do not show on Portal, Confidential and Inactive, Opt Out / Opt In, and the Save or Send of the Actions forms (text, email, task, recall, allergy). Do them only when the user asked; the user approves each one. Never file or change a record on your own.\n- Several patients match the user's words: never pick one — list them (name, NHI, age) and ask which.",
+          "enabled": true,
+          "createdAt": 1792999777295,
+          "updatedAt": 1792999777295
+        },
+        {
+          "id": "kb_smart_1",
+          "kind": "page",
+          "title": "Smart AI Inbox page",
+          "content": "- Top bar (search): Patient Name, NHI, Date of birth (DD/MM/YYYY), Phone, Date range (from, to), dropdowns \"Message Subject (All)\", \"Status (All)\" (Normal, Abnormal), \"File (All)\" (Filed, Unfiled), \"Category (All)\" (Lab, Rad, Discharge, Referrals), \"Providers (All)\", \"Sender (All)\", \"AI (All)\" (AI-Autofile); then Reset, Search, \"Refresh inbox\" (it refreshes every 60 s), \"Pin search controls\", \"Collapse search controls\".\n- Second bar: \"Latest Received\" (the sort: Patient Name A–Z, or Newest incoming record first), \"Saved\" (saved filters), \"Save Search Criteria\", and the counts \"Normal: N\", \"Abnormal: N\", \"Unfiled Records: N\".\n- Left: the patients, newest first — each a button with the name (with \". Abnormal\" when the patient has abnormal results, e.g. \"Arya STARK. Abnormal\"), NHI, age and latest subject; beside it \"Pin patient\", \"Inbox scope for <name>\" and \"Expand test records\". An opened patient lists its records under it as buttons \"<subject> <date>\" — red text is an abnormal record. \"Load more\" at the bottom shows more patients.\n- Right: the open patient — name, NHI, DOB, ethnicity, GP, email, phone (its menu: Call, Send Text), address; \"Go to Consult for <name>\" (opens the patient's consult in Indici); tick boxes Do not show on Portal, Confidential, Inactive; Opt Out (Opt In when opted out), Clinical Summary, Actions, File (Unfile on a filed record), \"File All Normal <n>\", \"File All <n>\"; tabs \"Open result: <subject>\" for the patient's unfiled records.\n- The open record: \"Diagnostic Comment\" box with \"Save diagnostic comment\"; Provider, Result Date, Observation Date; the results table TEST | CURRENT (date) | PREVIOUS | STATUS | TREND (some records have only TEST and CURRENT; a referral or document shows \"Document — Original report\", or \"No document attachment\"); at the bottom its category (LAB, RAD, REFERRALS…), Ordering Provider, Laboratory, Lab Order Number, \"n / m\" and Previous / Next.\n- Next goes through the patient's records, and from the last one on to the next patient's first record.\n- \"Open AI actions\" (✦, bottom right): the patient's pending AI actions for its unfiled results.",
+          "enabled": true,
+          "createdAt": 1792999777295,
+          "updatedAt": 1792999777295
+        },
+        {
+          "id": "kb_smart_2",
+          "kind": "workflow",
+          "title": "Find records — search and filters",
+          "content": "1. Type what the user gave: Patient Name, NHI, Date of birth (DD/MM/YYYY) or Phone; change the Date range only if the user gave dates.\n2. A dropdown (Status, File, Category, Message Subject, Providers, Sender, AI): click it, then click the option (\"Abnormal\", \"Unfiled\", \"Lab\"…). Set only those the user named.\n3. Click \"Search\", then read the patient list. \"Reset\" clears every filter.\n4. The counts Normal / Abnormal / Unfiled Records are at the top; say them when the user asks how many.",
+          "trigger": "find arya stark’s unfiled abnormal lab results",
+          "enabled": true,
+          "createdAt": 1792999777295,
+          "updatedAt": 1792999777295
+        },
+        {
+          "id": "kb_smart_3",
+          "kind": "workflow",
+          "title": "Open a patient and a record",
+          "content": "1. Click the patient's name in the list (e.g. \"Arya STARK. Abnormal\" or \"Mic MOUSE\") — search by name first if it isn't in the list. Several patients with that name: ask which (name, NHI, age).\n2. Its records show under it and the first opens on the right. Open another with its \"<subject> <date>\" button in the list or its \"Open result: <subject>\" tab; or go through them with Previous / Next.\n3. The list starts with the default scope (unfiled). For all of a patient's records, filed ones too: \"Inbox scope for <name>\" → \"Show all for this patient\" (or \"Show all filed for this patient\"); \"Show Default\" goes back.\n4. Read the record from the page: who, which test, its values and STATUS (rule \"Normal and abnormal\").",
+          "trigger": "open arya stark’s results in the smart inbox",
+          "enabled": true,
+          "createdAt": 1792999777295,
+          "updatedAt": 1792999777295
+        },
+        {
+          "id": "kb_smart_4",
+          "kind": "rule",
+          "title": "Normal and abnormal (Smart AI Inbox)",
+          "content": "Decide it as in Indici, from each test's flag — never from your own reading of the values:\n- The flag is the STATUS column of the results table. A record is abnormal when any test's flag is not normal (HIGH, LOW, Abnormal, Critical…). \"Normal\", or an empty flag (\"—\"), is normal.\n- A record without a STATUS column (only TEST and CURRENT), or a document: its colour in the patient's list decides — red is abnormal, the usual colour normal — or the Status filter (Abnormal / Normal) it shows under.\n- A patient is abnormal when any of its records is (\"<name>. Abnormal\" in the list).",
+          "enabled": true,
+          "createdAt": 1792999777295,
+          "updatedAt": 1792999777295
+        },
+        {
+          "id": "kb_smart_5",
+          "kind": "workflow",
+          "title": "Summarise records — one patient, a list, or the whole inbox",
+          "content": "1. Narrow the list first (workflow \"Find records\"): one patient → type the name and Search (and \"Inbox scope for <name>\" → \"Show all for this patient\" when the user wants filed ones too); only abnormal → Status \"Abnormal\"; only normal → Status \"Normal\"; only unfiled → File \"Unfiled\". Normal and abnormal both, or the user didn't say → Status at All. Check each dropdown shows what you chose, then click Search. The counts at the top (\"Normal: N\", \"Abnormal: N\") are how many the list holds.\n2. After Search the first patient in the list is open, with its first record (\"1 / n\" at the bottom). Read them all in one step with read_records: first empty (it starts from the record showing), area \"Go to Consult\", next \"Next\", status_label \"Status\", normal_values \"Normal\", empty_is_normal true, max 100. If the record showing is not \"1 / n\", give first = the patient's first record button in the list (\"<subject> <date>\"). Never give a patient's name or \"Go to Consult\" as first — that opens the consult in Indici. When it says there are more, call it again the same way (first empty) until it has read them all — as many as the count at the top.\n3. For one patient, use only that patient's records (each record line names its patient). Answer from read_records' verdicts: the totals (how many records, normal and abnormal), then per patient — name (NHI) and each record: subject, date, category, and its abnormal tests with value and flag; normal records in one line each. Asked for abnormal (or normal) only: list only those, and say how many of the others were among them. Only what the records show. (Reading marks them read in the app.)",
+          "trigger": "summarise all abnormal inbox records",
+          "enabled": true,
+          "createdAt": 1792999777295,
+          "updatedAt": 1793002025557
+        },
+        {
+          "id": "kb_smart_6",
+          "kind": "workflow",
+          "title": "File records",
+          "content": "- \"File\": the open record. \"Unfile\": a record already filed. \"File All Normal <n>\": the patient's n unfiled normal records. \"File All <n>\": all n unfiled records of the patient.\n1. Open the patient (and the record, for File). Tell the user what will be filed — how many records, and whether any is abnormal — then click the button; the user approves it.\n2. Never use \"File All\" when an abnormal record is among them unless the user said so.\n3. Check it: the record now shows \"Unfile\", and the counts on the buttons went down. Tell the user.",
+          "trigger": "file arya stark’s normal results",
+          "enabled": true,
+          "createdAt": 1792999777295,
+          "updatedAt": 1792999777295
+        },
+        {
+          "id": "kb_smart_7",
+          "kind": "workflow",
+          "title": "Add a diagnostic comment",
+          "content": "1. Open the record. Type the user's words, exactly, into \"Diagnostic Comment\" — never words of your own.\n2. Click \"Save diagnostic comment\"; the user approves it. Read the page to check it is there, then tell the user.",
+          "trigger": "add the comment \"repeat in 3 months\" to arya’s HbA1c result",
+          "enabled": true,
+          "createdAt": 1792999777295,
+          "updatedAt": 1792999777295
+        },
+        {
+          "id": "kb_smart_8",
+          "kind": "workflow",
+          "title": "Patient tick boxes and opt-out",
+          "content": "- \"Do not show on Portal\", \"Confidential\", \"Inactive\" are tick boxes that save the moment they are clicked; \"Opt Out\" (or \"Opt In\") changes the patient's opt-out straight away.\n- Click one only when the user asked for that change on that patient; the user approves it. Read the page after to check it changed, and tell the user.",
+          "trigger": "mark arya stark confidential in the smart inbox",
+          "enabled": true,
+          "createdAt": 1792999777295,
+          "updatedAt": 1792999777295
+        },
+        {
+          "id": "kb_smart_9",
+          "kind": "workflow",
+          "title": "Actions — text, email, task, recall, allergy, AI audit",
+          "content": "\"Actions\" (or the phone number's menu: Call, Send Text) opens these; each opens a pop-up form for the open patient:\n- Send Text: Select Template, SMS Date, SMS Time, Cell Number (fixed).\n- Send Email: Template — copy current & replace, Subject*, Email*.\n- Create Task (Add Task): Location, To*, Start*, Due In, Due*, Start Time, End Time, Patient (fixed), Type, Subject / Progress*.\n- Create Recall (Add Recall): Provider*, Recall Group*, Description* (fills after the Recall Group), Notes, Priority, Recall In*, Due Date*, Actual Recall Date (fixed), Cycle.\n- Create Allergy (Add Allergy/Adverse Reaction): Find Medicine*, Reaction, Onset Date*, Date of Entry, Comments.\n- AI file audit: the patient's AI Auto-File audit log — read only.\nFill only what the user gave; ask for a required (*) field that is still empty, by its name on the form; leave filled fields as they are. Then its Save or Send — the user approves it. Cancel closes a form without saving.",
+          "trigger": "create a task for arya from the smart inbox to review her bloods",
+          "enabled": true,
+          "createdAt": 1792999777295,
+          "updatedAt": 1792999777295
+        },
+        {
+          "id": "kb_smart_10",
+          "kind": "page",
+          "title": "Clinical Summary",
+          "content": "\"Clinical Summary\" opens a pop-up with tabs Clinical Notes, Medications, Diagnosis and Allergies; Date From / Date To (the last six months to start), Search, Reset, and \"Back to List\". It only shows — nothing in it saves. Read the tab the user asks about (it may say \"Loading…\" for a moment).",
+          "enabled": true,
+          "createdAt": 1792999777295,
+          "updatedAt": 1792999777295
+        },
+        {
+          "id": "kb_smart_11",
+          "kind": "workflow",
+          "title": "Saved searches",
+          "content": "- \"Saved\" opens \"Saved Search Filters\": each saved filter with its values, and Mark as Primary, Apply, Delete. Apply sets those filters (\"Applied: <name>\" shows by the Saved button). Mark as Primary and Delete change the saved filters — only when the user asks; the user approves.\n- \"Save Search Criteria\" saves the current filters under a name: ask the user for the name.",
+          "enabled": true,
+          "createdAt": 1792999777295,
+          "updatedAt": 1792999777295
+        }
+      ],
+      "createdAt": 1792999777295,
+      "updatedAt": 1792999777295
     }
   ]
 }

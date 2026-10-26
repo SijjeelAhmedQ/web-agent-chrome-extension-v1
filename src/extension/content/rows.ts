@@ -1,5 +1,5 @@
 import type { TableResult, VisualRow } from '@/shared/types/page';
-import { isVisible } from './elements';
+import { accessibleName, idFor, isVisible } from './elements';
 
 /**
  * Rows as the user sees them — what sits side by side on one line, left to right — whatever the
@@ -109,6 +109,66 @@ function tableUnder(want: string, tables: Element[], scope: Element | Document):
     if (next && tables.includes(next)) return next;
   }
   return undefined;
+}
+
+/**
+ * A record shown in the page itself (not a pop-up): the smallest part of the page that holds both `anchor`
+ * (something always in the record area, e.g. “Diagnostic Comment”) and the `next` button — its text and
+ * rows. Null when either isn't on the page. With `next` disabled or missing, `nextId` is null.
+ */
+export function areaText(anchor: string, next: string): { text: string; rows: VisualRow[]; nextId: number | null; listItem: { text: string; red: boolean } | null } | null {
+  const want = anchor.trim().toLowerCase();
+  const nextName = next.trim().toLowerCase();
+  const named = (e: Element) => [accessibleName(e), e.getAttribute('placeholder') ?? '', e.children.length === 0 ? e.textContent ?? '' : ''].join(' ').toLowerCase();
+  const anchorEl = Array.from(document.querySelectorAll('body *')).find((e) => isVisible(e) && named(e).includes(want));
+  const nextEl = Array.from(document.querySelectorAll('button,[role=button],a')).find((e) => isVisible(e) && accessibleName(e).trim().toLowerCase() === nextName);
+  if (!anchorEl) return null;
+  let area: Element | null = anchorEl;
+  while (area && nextEl && !area.contains(nextEl)) area = area.parentElement;
+  area ??= anchorEl.parentElement;
+  if (!area) return null;
+  const disabled = !nextEl || (nextEl as HTMLButtonElement).disabled || nextEl.getAttribute('aria-disabled') === 'true';
+  // A results table's cells as the table has them: a test's name over two lines (its units, its range)
+  // doesn't line up on screen with its flag.
+  const tableRows = Array.from(area.querySelectorAll('table'))
+    .filter((t) => isVisible(t))
+    .flatMap((t) => Array.from(t.rows))
+    .map((r) => {
+      const cells = Array.from(r.cells);
+      return { cells: cells.map((c) => (c.innerText ?? '').replace(/\s+/g, ' ').trim()), red: cells.map((c) => colourName(getComputedStyle(c.querySelector('*') ?? c).color) === 'red') };
+    })
+    .filter((r) => r.cells.some(Boolean));
+  return {
+    text: ((area as HTMLElement).innerText ?? '').replace(/\n{3,}/g, '\n\n').trim().slice(0, 12_000),
+    rows: tableRows.length ? tableRows : visualRows(area),
+    nextId: disabled ? null : idFor(nextEl!),
+    listItem: chosenItem(area),
+  };
+}
+
+/**
+ * The list entry of the record showing — the one marked selected, outside the record — and whether any of
+ * its text is red: a list that shows abnormal records in red says so there, not in the record.
+ */
+function chosenItem(area: Element): { text: string; red: boolean } | null {
+  // Selected first: “active” also marks menus and tabs. A selected patient holds its selected record: the
+  // innermost one is the record’s — and a record listed under its patient comes after it.
+  const item = ['[aria-selected=true],[aria-current=true],[class*=selected i]', '[class*=active i]:not([class*=inactive i])']
+    .map((sel) =>
+      Array.from(document.querySelectorAll(sel)).filter((e) => {
+        if (area.contains(e) || e.contains(area) || !isVisible(e) || !e.matches('button,[role=button],[role=option],[role=row],li,tr')) return false;
+        const t = (e as HTMLElement).innerText?.trim() ?? '';
+        return t.length > 0 && t.length < 160;
+      }),
+    )
+    .map((found) => found.filter((e) => !found.some((inner) => inner !== e && e.contains(inner))))
+    .find((found) => found.length)?.at(-1);
+  if (!item) return null;
+  const texts = [item, ...Array.from(item.querySelectorAll('*'))].filter((e) => Array.from(e.childNodes).some((n) => n.nodeType === Node.TEXT_NODE && n.textContent?.trim()));
+  return {
+    text: ((item as HTMLElement).innerText ?? '').replace(/\s+/g, ' ').trim(),
+    red: texts.some((e) => colourName(getComputedStyle(e).color) === 'red'),
+  };
 }
 
 /** A list on the page (or in the pop-up in front): its rows, and each row's text colour when they differ. */

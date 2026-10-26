@@ -157,6 +157,8 @@ export interface SiteProfile {
   disabledToolIds: string[];
   /** Buttons and links the agent may never click here (exact names, e.g. “Pharmac”) — the user clicks them. */
   neverClick?: string[];
+  /** Controls that change a record the moment they are clicked (a tick box that saves itself): asked about first. */
+  askBefore?: string[];
   knowledge: KnowledgeEntry[];
   createdAt: number;
   updatedAt: number;

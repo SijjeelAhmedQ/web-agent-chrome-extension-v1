@@ -7,7 +7,7 @@ import { BROWSER_TOOLS } from './browserTools';
 import { customTool } from './customTools';
 import { knowledgeTool } from './knowledgeTool';
 import { skillTool } from './skillTool';
-import type { AgentTool } from './types';
+import type { AgentTool, ToolContext } from './types';
 
 export interface Toolset {
   tools: AgentTool<any>[];
@@ -51,7 +51,9 @@ export function buildToolset(agent: AgentConfig, config: AppConfig, url: string)
   }
   const { always, onDemand } = skillsFor(agent, config, url);
   if (onDemand.length) tools.push(skillTool(onDemand));
-  if (sites.some((s) => s.knowledge.some((k) => k.enabled))) tools.push(knowledgeTool(sites));
+  // The tab the agent is on when it looks something up: another site's knowledge (a new tab it opened) comes first.
+  const here = async (ctx: ToolContext) => sitesFor(config, (await ctx.browser.currentTab().catch(() => null))?.url ?? '');
+  if (sites.some((s) => s.knowledge.some((k) => k.enabled))) tools.push(knowledgeTool(sites, here));
   return { tools, alwaysSkills: always, onDemandSkills: onDemand, sites };
 }
 

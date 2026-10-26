@@ -1,4 +1,4 @@
-import type { DialogInfo, ElementInfo, ElementRisk, FormAround, PageSnapshot, ReadMode, TableResult } from '@/shared/types/page';
+import type { DialogInfo, ElementInfo, ElementRisk, FormAround, PageSnapshot, ReadMode, TableResult, VisualRow } from '@/shared/types/page';
 
 /**
  * Typed request/response protocol between the agent (side panel) and the content script.
@@ -30,6 +30,7 @@ export type ContentRequest =
   | { kind: 'fetchPdf'; url: string }
   | { kind: 'table'; near: string; max: number }
   | { kind: 'formAround'; id: number }
+  | { kind: 'areaText'; anchor: string; next: string }
   | { kind: 'hover'; id: number; highlight: boolean }
   | { kind: 'menuPath'; path: string[]; highlight: boolean }
   | { kind: 'presence'; active: boolean };
@@ -149,6 +150,8 @@ export interface ResponseMap {
   popupControl: { id: number | null; disabled: boolean };
   fetchPdf: { data: string | null; bytes: number; error?: string };
   table: TableResult;
+  /** A record shown in the page: its area's text and rows, and the Next button (null when there is none to press). */
+  areaText: { text: string; rows: VisualRow[]; nextId: number | null; listItem: { text: string; red: boolean } | null } | null;
   /** The form around a button: null when it sits in none. */
   formAround: FormAround | null;
   presence: null;

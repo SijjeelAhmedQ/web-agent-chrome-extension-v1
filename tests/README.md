@@ -174,6 +174,21 @@ committed, because it holds patient data.
 | `live-cancel-med.mjs go` | Cancels an open, unsaved medication form |
 | `live-open-panel.mjs` | Opens the Web Agent side panel beside the Indici tab (after a reinstall closed it) |
 
+The Smart AI Inbox has its own tab. Start these with `TAB=inbox-app` so they work there:
+
+| Script | What it does |
+|---|---|
+| `live-elements.mjs [max]` | The elements the agent's content script lists on the tab |
+| `live-area.mjs "Go to Consult" Next` | The record showing, as `read_records` reads it: its table rows and its entry in the list (red or not) |
+| `live-colours.mjs` | The record's table and the list's record buttons, with their colours |
+| `live-recordwalk.mjs "Arya STARK. Abnormal" 6` | Opens a patient and goes through its records with Next. The app marks them read |
+| `live-selects.mjs "Status (All)"` | Opens each matching dropdown with a real click and prints its options |
+| `live-explore.mjs "<name>" …` | Opens each named control, prints what appeared, then presses Escape. Never give it a control that saves or files |
+| `live-actionforms.mjs Actions "Create Task"` | Opens a menu item's pop-up, prints its form fields, then cancels it. Nothing is saved |
+| `live-close-inbox.mjs` | Closes the Smart Inbox tabs, to try "open smart inbox" from Indici again |
+
+Example: `PANEL=side MODEL=google/gemini-3.8-flash REQUESTS='["summarize all abnormal inbox records"]' node live-agent.mjs` runs the agent on the inbox tab (open it first).
+
 ### The whole suite in one command
 
 `bash run-suite.sh` (in `tests/live-indici`, Git Bash) runs, in the side panel, one chat each: cleanup of earlier test

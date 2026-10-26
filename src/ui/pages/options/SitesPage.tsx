@@ -29,7 +29,7 @@ const COLORS = ['#0e7490', '#10b981', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6'
 
 const newSite = (name = '', sites: string[] = []): SiteProfile => {
   const now = Date.now();
-  return { id: uid('site_'), name, description: '', color: COLORS[Math.floor(Math.random() * COLORS.length)], sites, enabled: true, providerId: null, model: '', agentIds: [], skillIds: [], disabledSkillIds: [], customToolIds: [], disabledToolIds: [], neverClick: [], knowledge: [], createdAt: now, updatedAt: now };
+  return { id: uid('site_'), name, description: '', color: COLORS[Math.floor(Math.random() * COLORS.length)], sites, enabled: true, providerId: null, model: '', agentIds: [], skillIds: [], disabledSkillIds: [], customToolIds: [], disabledToolIds: [], neverClick: [], askBefore: [], knowledge: [], createdAt: now, updatedAt: now };
 };
 
 const newEntry = (kind: KnowledgeKind): KnowledgeEntry => {
@@ -1026,6 +1026,23 @@ function SettingsTab({ site, update }: { site: SiteProfile; update: (patch: Part
           </div>
         </div>
         <div>
+          <FieldLabel>Ask before clicking</FieldLabel>
+          <Select
+            mode="tags"
+            style={{ width: '100%' }}
+            value={site.askBefore ?? []}
+            onChange={(v: string[]) => update({ askBefore: v.map((x) => x.trim()).filter(Boolean) })}
+            tokenSeparators={[',']}
+            placeholder="e.g. Confidential, Inactive, Opt Out"
+            open={false}
+            suffixIcon={null}
+            aria-label="Controls the agent asks you about before clicking"
+          />
+          <div className="field-help">
+            Controls that change a record the moment they are clicked (a tick box that saves itself, an opt-out): the agent asks you first, as it does before a save or delete. Names must match exactly.
+          </div>
+        </div>
+        <div>
           <FieldLabel htmlFor="site-set-desc">Description</FieldLabel>
           <Input.TextArea id="site-set-desc" value={site.description} onChange={(e) => update({ description: e.target.value })} autoSize={{ minRows: 2, maxRows: 5 }} />
         </div>
@@ -1089,6 +1106,7 @@ function PreviewTab({ site }: { site: SiteProfile }) {
             </span>
             {site.disabledToolIds.length > 0 && <span className="pill warning">Off here: {site.disabledToolIds.join(', ')}</span>}
             {(site.neverClick ?? []).length > 0 && <span className="pill">Never clicks: {site.neverClick!.join(', ')}</span>}
+            {(site.askBefore ?? []).length > 0 && <span className="pill">Asks before: {site.askBefore!.join(', ')}</span>}
             <span className="pill">Room: ~{Math.round(budget / 1000)}k characters</span>
           </div>
           <pre className="spec-json mono site-preview">{text || 'No knowledge yet.'}</pre>

@@ -3,7 +3,7 @@ import { ActionError, clear, click, currentEffect, pointAt, pressKey, resolve, s
 import { formAround } from './form';
 import { hover, openMenu } from './hover';
 import { setPresence } from './overlay';
-import { readTable } from './rows';
+import { areaText, readTable } from './rows';
 import { fetchPdf, popupControl, describeRisk, find, findText, snapshot } from './snapshot';
 
 /**
@@ -57,6 +57,8 @@ async function handle(request: ContentRequest): Promise<unknown> {
       return fetchPdf(request.url);
     case 'table':
       return readTable(request.near, request.max);
+    case 'areaText':
+      return areaText(request.anchor, request.next);
     case 'formAround':
       return formAround(resolve(request.id));
     case 'hover':

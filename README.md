@@ -76,6 +76,7 @@ Each site has:
 - **Built-in tools:** switch them off one by one, or use *All on* / *All off*. If *Read page* is off, a warning offers to turn reading back on, because without it the agent can't see the site.
 - **Model:** run every agent on this site with a given connection or model.
 - **Never click these (Settings):** exact button names, such as `Pharmac`. The agent stops before them and leaves them to you, even if it forgets a rule. Clicks on them are refused and no approval is asked. A name blocks that button everywhere on the site, pop-ups included.
+- **Ask before clicking (Settings):** exact names of controls that change a record the moment they are clicked, such as a `Confidential` tick box or `Opt Out`. The agent asks you before each click on them, as it does before a Save.
 - **Room for knowledge:** about a fifth of the model's context window, between 3,000 and 24,000 characters. For example, Kaggle's 16k-token models get about 13,000 characters. The Preview shows the room.
 - **Preview:** shows exactly what an agent gets for a sample request, with a **Copy** button.
 - **Knowledge as text (Preview tab):** the whole knowledge base as editable text in the same `### Rule: …`, `### Navigation: …`, `### Page: …`, `### Workflow: …` format.
@@ -85,6 +86,25 @@ Each site has:
   - Write `### Rule (off): …` to keep an entry switched off, and use a `### Rule: Buttons you never click here` block to set the never-click list.
 
 The side panel's status bar shows a chip, such as **Indici**, while a site setup is in use.
+
+A task can move to another site, for example when a click opens a new tab. From then on the agent uses the rules, never-click and ask-before lists of the site it is on now, and `site_knowledge` looks that site up first.
+
+**Indici's Smart AI Inbox.** The restore file `knowledge/web-agent-restore-indici.json` has a second site, *indici smart inbox* (`inbox-app-dev.vitonta.com`), with its own agent, *indici smart inbox agent*.
+- On Indici, say "open smart inbox" (or "open AI inbox"). The agent clicks the **Open AI Assisted Inbox** icon, and the inbox opens in a new tab, already signed in.
+- When the inbox tab is active, the inbox agent takes over in the side panel.
+- Its knowledge covers:
+  - the page and the search filters;
+  - opening patients and records;
+  - the normal/abnormal rule: the STATUS column decides; a record without one is abnormal when it is red in the list;
+  - summaries of one patient or of the whole inbox;
+  - filing, diagnostic comments and the tick boxes;
+  - the Actions forms (text, email, task, recall, allergy);
+  - Clinical Summary and saved searches.
+- Reading is all it does on its own. Every File, comment, tick box and form Save needs your approval.
+- Viewing a record marks it read in the app.
+- A summary takes one `read_records` call with `area: "Go to Consult"`. That call goes through the records with the page's **Next** button, up to 100 at a time.
+  - Each record's verdict comes from its results table, or from its colour in the patient list.
+  - For example, all 92 abnormal records were read in about three minutes.
 
 **Sites → From a template** has two ready-made setups:
 - **Indici:** you add your practice's address. It covers hover menus, the Patient Search page, opening a patient by name, and the "select a patient from Search & List" workflow.
