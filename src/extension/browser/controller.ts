@@ -300,6 +300,26 @@ export class BrowserController {
     return opened;
   }
 
+  /**
+   * Real keyboard input of `text` at the caret, through Chrome's debugger — for rich editors (CKEditor)
+   * that keep their own model and ignore text a script puts in.
+   */
+  async realType(text: string): Promise<void> {
+    const target = { tabId: (await this.currentTab()).id! };
+    try {
+      await chrome.debugger.attach(target, '1.3');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new PageError('unsupported', 'Real typing isn’t possible on this tab right now (are DevTools open on it?).', msg);
+    }
+    try {
+      await chrome.debugger.sendCommand(target, 'Input.insertText', { text });
+    } finally {
+      await chrome.debugger.detach(target).catch(() => undefined);
+    }
+    await sleep(300);
+  }
+
   /** Notices tabs and pop-up windows the agent's tab opens (window.open, target=_blank) while it is on. */
   async watchNewTabs(): Promise<{ opened: () => chrome.tabs.Tab | null; stop: () => void }> {
     const opener = (await this.currentTab()).id;

@@ -400,7 +400,13 @@
         "Inactive",
         "Mark as Primary",
         "Call",
-        "Diagnostic Comment"
+        "Diagnostic Comment",
+        "Add task",
+        "Add urgent",
+        "Add diagnosis",
+        "Add recall",
+        "Dismiss suggestion",
+        "Dismiss"
       ],
       "knowledge": [
         {
@@ -435,11 +441,11 @@
           "id": "kb_smart_3",
           "kind": "workflow",
           "title": "Open a patient and a record",
-          "content": "1. Click the patient's name in the list (e.g. \"Arya STARK. Abnormal\" or \"Mic MOUSE\") — search by name first if it isn't in the list. Several patients with that name: ask which (name, NHI, age).\n2. Its records show under it and the first opens on the right. Open another with its \"<subject> <date>\" button in the list or its \"Open result: <subject>\" tab; or go through them with Previous / Next.\n3. The list starts with the default scope (unfiled). For all of a patient's records, filed ones too: \"Inbox scope for <name>\" → \"Show all for this patient\" (or \"Show all filed for this patient\"); \"Show Default\" goes back.\n4. Read the record from the page: who, which test, its values and STATUS (rule \"Normal and abnormal\").",
+          "content": "1. Click the patient's name in the list (e.g. \"Arya STARK. Abnormal\" or \"Mic MOUSE\") — search by name first if it isn't in the list. Several patients with that name: ask which (name, NHI, age).\n2. Its records show under it and the first opens on the right. Open another with its \"<subject> <date>\" button in the list or its \"Open result: <subject>\" tab; or go through them with Previous / Next.\n3. The list starts with the default scope (unfiled). For all of a patient's records, filed ones too: \"Inbox scope for <name>\" → \"Show all for this patient\" (or \"Show all filed for this patient\"); \"Show Default\" goes back.\n4. Read the record from the page: who, which test, its values and STATUS (rule \"Normal and abnormal\").\n5. The patient's name at the top of the open record (e.g. \"Aqib JAVED\", underlined) is a link to the consult in Indici, like \"Go to Consult\": click the name in the patient list on the left instead.",
           "trigger": "open arya stark’s results in the smart inbox",
           "enabled": true,
           "createdAt": 1792999777295,
-          "updatedAt": 1792999777295
+          "updatedAt": 1793013499851
         },
         {
           "id": "kb_smart_4",
@@ -493,12 +499,12 @@
         {
           "id": "kb_smart_9",
           "kind": "workflow",
-          "title": "Actions — text, email, task, recall, allergy, AI audit",
-          "content": "\"Actions\" (or the phone number's menu: Call, Send Text) opens these; each opens a pop-up form for the open patient:\n- Send Text: Select Template, SMS Date, SMS Time, Cell Number (fixed).\n- Send Email: Template — copy current & replace, Subject*, Email*.\n- Create Task (Add Task): Location, To*, Start*, Due In, Due*, Start Time, End Time, Patient (fixed), Type, Subject / Progress*.\n- Create Recall (Add Recall): Provider*, Recall Group*, Description* (fills after the Recall Group), Notes, Priority, Recall In*, Due Date*, Actual Recall Date (fixed), Cycle.\n- Create Allergy (Add Allergy/Adverse Reaction): Find Medicine*, Reaction, Onset Date*, Date of Entry, Comments.\n- AI file audit: the patient's AI Auto-File audit log — read only.\nFill only what the user gave; ask for a required (*) field that is still empty, by its name on the form; leave filled fields as they are. Then its Save or Send — the user approves it. Cancel closes a form without saving.",
+          "title": "Actions menu — text, email, task, recall, allergy, audit logs",
+          "content": "\"Actions\" (⋮) opens: Send Text, Send Email, Create Task, Create Recall, Create Allergy, AI file audit, View audit log. The first five open a pop-up form for the open patient:\n- Send Text: Select Template, SMS Date, SMS Time, Cell Number (the patient's, fixed) — it texts the patient.\n- Send Email: \"Full form — all fields editable, AI PRE-FILLED\": Template — copy current & replace, Subject* (filled, e.g. \"Your Test Results\"), Email* (the patient's address, filled), the message.\n- Create Task (Add Task): Location, To*, Start*, Due In, Due*, Start Time, End Time, Patient (fixed), Type, Subject / Progress* (its box is named \"Write Recall Notes\"); \"Save task\".\n- Create Recall (Add Recall): Provider*, Recall Group* (e.g. Bloods, Bowel screening, Colonoscopy, DEXA/Bone Density, Generic Blood Test…), Description* (its list follows the group, e.g. Bloods → CBC, HBA1C, Hep C Serology…), Notes, Priority, Recall In* (sets the Due Date), Due Date*, Actual Recall Date (fixed), Cycle; Save. Asking for a group or description: list the options the dropdown shows.\n- Create Allergy (Add Allergy/Adverse Reaction): Find Medicine* (type, then pick the medicine from the list), Reaction, Category* (Allergy or another kind — \"an allergy\" is Allergy; ask if unclear), Onset Date* (today), Date of Entry (today), Comments; \"Save Allergy\".\n- AI file audit: the patient's \"Audit Log\" (AI Auto-File) — read only; leave it with its back arrow (\"arrow-left\").\n- View audit log: the open record's \"View Audit Log\" — Data Source, Inserted By/At, Filed By/At, Un Filed By/At, Last Updated, Last Reviewed, Audit Log History; read only; Close.\nFill only what the user gave; ask for a required (*) field that is still empty, by its name on the form; leave filled fields as they are — except an email or text: send it only to the address or number the user gave. Then its Save or Send — the user approves it. Cancel closes a form without saving.",
           "trigger": "create a task for arya from the smart inbox to review her bloods",
           "enabled": true,
           "createdAt": 1792999777295,
-          "updatedAt": 1792999777295
+          "updatedAt": 1793013499851
         },
         {
           "id": "kb_smart_10",
@@ -517,6 +523,15 @@
           "enabled": true,
           "createdAt": 1792999777295,
           "updatedAt": 1792999777295
+        },
+        {
+          "id": "kb_smart_12",
+          "kind": "page",
+          "title": "Patient AI Actions panel (right side)",
+          "enabled": true,
+          "createdAt": 1793011569848,
+          "updatedAt": 1793013499851,
+          "content": "On the right of an open patient: \"AI Patient Summary\" and \"AI Result Summary\" (the app's AI wrote them — say so when you quote them), then \"Patient AI Actions (covers N unfiled results)\" with a count; \"Open AI actions\" (✦, bottom right) opens it when it is closed.\n- Each suggestion is a card: its kind (ADD TASK, ADD DIAGNOSIS, ADD RECALL, DRAFT EMAIL, DRAFT TEXT), a text box with the AI's words (Task subject, Diagnosis name, Add Recall, Draft Email, Draft Text), \"Dismiss suggestion\", and its button: Add task (and Add urgent), Add diagnosis, Add recall, Send email, Send Text.\n- \"Add task\" opens \"QUICK EDIT\" in the card (priority Normal); \"Add urgent\" does the same with priority Urgent — use it only when the user said urgent. QUICK EDIT: TASK, DUE DATE (DD/MM/YYYY), PRIORITY (Normal, Medium, Urgent), ASSIGN TO, LOCATION; then Dismiss, Cancel, \"Full Form\" (the full Add Task form, filled from it) and \"Create\" (saves it).\n- Which card: the one whose text matches what the user asked for; several alike — ask. Change the card's text only to the user's words. Each Add, Create, Dismiss, Send — the user approves it. Send email / Send Text go to the patient: only when the user asked, to the address the user gave.\n- An added or dismissed suggestion leaves the list (the count goes down). Check the result: a task, recall or diagnosis then shows in Indici (the patient's Task list, Recalls, Diagnosis)."
         }
       ],
       "createdAt": 1792999777295,

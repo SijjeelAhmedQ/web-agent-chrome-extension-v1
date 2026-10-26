@@ -14,7 +14,7 @@ const clean = (s: string) => s.replace(/\s+/g, ' ').trim();
 const list = (items: string[], max = 12) => (items.length > max ? `${items.slice(0, max).join(' / ')} / … (${items.length} in all)` : items.join(' / '));
 
 // Known pickers (select2, chosen, token/tag inputs, chips) — not any class with “tag” in it (“stage”).
-const PICKER = '[class*=select2],[class*=chosen-],[class*=token-],[class*=tokenfield],[class*=tagsinput],[class*=tagit],[class*=chip],[class*=multiselect]';
+const PICKER = '[class*=select2],[class*=chosen-],[class*=token-],[class*=tokenfield],[class*=tagsinput],[class*=tagit],[class*=chip],[class*=multiselect],.ant-select';
 
 /** The outermost box of a picker (a styled dropdown) around its small search field. */
 export function pickerOf(field: Element): Element | null {
@@ -41,6 +41,14 @@ export function pickerState(field: Element): PickerState | null {
   if (hidden && (hidden.selectedOptions.length || !several)) {
     return { several, chosen: Array.from(hidden.selectedOptions).map((o) => clean(o.text)).filter((t) => t && !/^-+\s*select\s*-+$/i.test(t)), options };
   }
+  // Ant Design: what it shows is its selection item(s); its placeholder is no choice.
+  if (box.matches('.ant-select')) {
+    const items = Array.from(box.querySelectorAll('.ant-select-selection-item'))
+      .filter((c) => isVisible(c))
+      .map((c) => clean(c.getAttribute('title') || (c as HTMLElement).innerText || '').replace(/\s*[×✕]\s*$/, ''))
+      .filter(Boolean);
+    return { several: box.matches('.ant-select-multiple'), chosen: items, options };
+  }
   const CHIP = '[class*=choice],[class*=token],[class*=tag],[class*=chip]';
   const chips = Array.from(box.querySelectorAll(CHIP))
     .filter((c) => !c.querySelector(CHIP) && !c.matches('[class*=remove],[class*=close],input') && isVisible(c))
@@ -56,7 +64,19 @@ export function formFields(d: Element): string[] {
 
 /** What the form holds now, by the names it shows — for the approval (fields that can't be changed left out). */
 export function formValues(d: Element): { label: string; value: string }[] {
-  return readForm(d).values.filter((v) => !v.fixed && v.value).map(({ label, value }) => ({ label, value }));
+  // Who a message goes to is worth seeing even when the form won't let it change (a patient's cell number).
+  const recipient = /\b(cell|phone|mobile|e-?mail|recipient|to)\b/i;
+  const values = readForm(d)
+    .values.filter((v) => v.value && (!v.fixed || recipient.test(v.label)))
+    .map(({ label, value }) => ({ label, value }));
+  // A rich-text editor (a message's body) is no input: its text is what will be sent.
+  for (const editor of Array.from(d.querySelectorAll('[contenteditable=true]'))) {
+    const text = ((editor as HTMLElement).innerText ?? '').replace(/\s+/g, ' ').trim();
+    if (!text || !isVisible(editor) || (editor.parentElement?.closest('[contenteditable=true]') ?? null)) continue;
+    const label = visualLabelInfo(editor).text || 'Message';
+    values.push({ label: /rich text editor/i.test(label) ? 'Message' : label, value: text.length > 70 ? `${text.slice(0, 69)}…` : text });
+  }
+  return values;
 }
 
 function readForm(d: Element): { lines: string[]; values: { label: string; value: string; fixed: boolean }[] } {

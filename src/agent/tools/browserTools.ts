@@ -498,7 +498,15 @@ const type: AgentTool<{ id: number; text: string; clear: boolean; submit: boolea
   async execute(a, ctx) {
     const before = await pageUrl(ctx);
     const form = a.submit || isSecretField(ctx, a.id) ? null : await formAroundOf(ctx, a.id);
-    const res = await ctx.browser.send({ kind: 'type', id: a.id, text: a.text, clear: a.clear, highlight: ctx.settings.highlightActions });
+    const trusted = ctx.settings.realClicks !== false;
+    let res = await ctx.browser.send({ kind: 'type', id: a.id, text: a.text, clear: a.clear, highlight: ctx.settings.highlightActions, trusted });
+    // A rich editor with its caret placed: the text goes in as real keyboard input (or, failing that, by script).
+    if (res.awaitsInput) {
+      const typed = await ctx.browser.realType(a.text).then(() => true, () => false);
+      res = typed
+        ? { ...res, value: (await ctx.browser.send({ kind: 'fieldText', id: a.id })).value }
+        : await ctx.browser.send({ kind: 'type', id: a.id, text: a.text, clear: a.clear, highlight: false });
+    }
     const label = res.element.name ? quote(res.element.name) : 'the field';
     let output = `Typed into ${label}. It now contains: ${quote(res.value)}.${await otherChanges(ctx, a.id, form)}`;
     if (res.suggestions?.length && !a.submit) {

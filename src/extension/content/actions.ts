@@ -291,7 +291,7 @@ async function suggestionsUnder(field: HTMLElement): Promise<string[]> {
   return [];
 }
 
-export async function type(id: number, text: string, clearFirst: boolean, show: boolean): Promise<TypeResult> {
+export async function type(id: number, text: string, clearFirst: boolean, show: boolean, trusted = false): Promise<TypeResult> {
   const el = resolve(id);
   if (isDisabled(el)) fail('disabled', `“${accessibleName(el) || 'That field'}” is disabled.`);
   const field = editableTarget(el);
@@ -328,6 +328,8 @@ export async function type(id: number, text: string, clearFirst: boolean, show: 
     selection?.removeAllRanges();
     selection?.addRange(range);
   }
+  // Editors that keep their own model (CKEditor) take only real keyboard input: the caller sends it now.
+  if (trusted) return { element: summary(el), value: (field.innerText ?? '').slice(0, 200), awaitsInput: true };
   // execCommand is deprecated but remains the only way to type into editors the way a user does.
   const inserted = doc.execCommand('insertText', false, text);
   if (!inserted) {
@@ -336,6 +338,13 @@ export async function type(id: number, text: string, clearFirst: boolean, show: 
     field.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, inputType: 'insertText', data: text }));
   }
   return { element: summary(el), value: (field.innerText ?? '').slice(0, 200) };
+}
+
+/** What a field holds now (a rich editor's text). */
+export function fieldText(id: number): { value: string } {
+  const field = editableTarget(resolve(id));
+  const value = isInput(field) || isTextArea(field) ? field.value : (field.innerText ?? '');
+  return { value: value.replace(/s+/g, ' ').trim().slice(0, 200) };
 }
 
 export async function clear(id: number, show: boolean): Promise<TypeResult> {

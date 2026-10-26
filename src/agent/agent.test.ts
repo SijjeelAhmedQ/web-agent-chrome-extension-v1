@@ -56,6 +56,11 @@ describe('risk policy', () => {
     expect(classifyClick(risk({ name: 'File' })).consequential).toBe(true);
     expect(classifyClick(risk({ name: 'Yes', dialogText: 'Are you sure you want to complete the selected task(s)? Yes No' })).consequence).toBe('complete or file a record');
     expect(classifyClick(risk({ name: 'Yes', dialogText: 'Do you want to see more results? Yes No' })).consequential).toBe(false);
+    expect(classifyClick(risk({ name: 'Create' })).consequence).toBe('save or submit changes');
+    // A log of filing is no filing.
+    expect(classifyClick(risk({ name: 'AI file audit' })).consequential).toBe(false);
+    expect(classifyClick(risk({ name: 'File All Normal 3' })).consequence).toBe('complete or file a record');
+    expect(classifyClick(risk({ name: 'Create Task' })).consequential).toBe(false);
     // An OK that saves a filled-in form.
     const filled = [{ label: 'Subject', value: '[web agent test] inbox' }, { label: 'Provider', value: 'Chadmin CHADMIN' }];
     expect(classifyClick(risk({ name: 'OK', dialogText: 'Inbox Name: NHI: Subject:* Cancel OK', formValues: filled })).consequence).toBe('save or submit changes');

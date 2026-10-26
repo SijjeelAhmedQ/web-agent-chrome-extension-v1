@@ -532,6 +532,20 @@ function formActions(el: Element): { id: number; name: string }[] {
   return [];
 }
 
+/**
+ * A small form in the page itself, not a pop-up (the Smart Inbox's quick-edit card): the nearest box around
+ * the button that holds a few fields — not the whole page.
+ */
+function cardAround(el: Element): Element | null {
+  let box = el.parentElement;
+  for (let depth = 0; box && depth < 6; depth++, box = box.parentElement) {
+    const fields = Array.from(box.querySelectorAll('input:not([type=hidden]),textarea,select,[contenteditable=true]')).filter((f) => isVisible(f));
+    if (fields.length > 12) return null;
+    if (fields.length) return box;
+  }
+  return null;
+}
+
 export function describeRisk(el: Element): ElementRisk {
   const info = describeElement(el);
   const form = (el as HTMLInputElement).form ?? el.closest('form');
@@ -563,7 +577,7 @@ export function describeRisk(el: Element): ElementRisk {
     // A pop-up form: its fields as the live form reading names them (pickers, radios, ticks); else the form's filled fields.
     formValues: (() => {
       const dialog = el.closest(DIALOGS);
-      const live = dialog ? formValues(dialog) : [];
+      const live = dialog ? formValues(dialog) : form ? [] : formValues(cardAround(el) ?? el);
       return live.length ? live : filledValues(form ?? el.closest('dialog,[role=dialog],[aria-modal=true]'));
     })(),
     formActions: actions,

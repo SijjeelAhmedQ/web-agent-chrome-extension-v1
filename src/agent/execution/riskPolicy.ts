@@ -26,7 +26,9 @@ const RULES: Rule[] = [
   { pattern: /\b(deactivate|close (my |your )?account|cancel (my |your )?(subscription|membership|order|account|plan)|unsubscribe|change password|reset password)\b/i, consequence: 'change your account', links: true },
   { pattern: /\b(send|reply( all)?|forward|post|publish|tweet|submit (review|comment|feedback|application))\b/i, consequence: 'send or publish something', links: false },
   { pattern: /\b(save|submit|update profile|save changes|confirm|sign (the )?(document|form|contract)|approve|authori[sz]e)\b/i, consequence: 'save or submit changes', links: false },
-  { pattern: /\b(complete( (the |this |these )?(selected )?tasks?)?|mark (it |them )?(as )?(done|complete)|finali[sz]e|sign off|file( as normal)?|un ?file)\b/i, consequence: 'complete or file a record', links: false },
+  // A form's own “Create” (the Smart Inbox's quick task) — not “Create Task”, which opens a form.
+  { pattern: /^create$/i, consequence: 'save or submit changes', links: false },
+  { pattern: /\b(complete( (the |this |these )?(selected )?tasks?)?|mark (it |them )?(as )?(done|complete)|finali[sz]e|sign off|file( as normal)?|un ?file)\b(?!\s+(audit|log|upload|name|size|type)\b)/i, consequence: 'complete or file a record', links: false },
   // Taking a record off its list without deleting it (Indici's recall “delete” is its “Inactive” icon).
   { pattern: /\b(inactive|inactivate|deactivate|archive|void|cancel (the |this )?(recall|appointment|task|order|prescription|referral|booking)s?|click to cancel)\b/i, consequence: 'cancel or deactivate a record', links: true },
 ];

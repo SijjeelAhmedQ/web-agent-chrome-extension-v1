@@ -187,6 +187,9 @@ The Smart AI Inbox has its own tab. Start these with `TAB=inbox-app` so they wor
 | `live-explore.mjs "<name>" …` | Opens each named control, prints what appeared, then presses Escape. Never give it a control that saves or files |
 | `live-actionforms.mjs Actions "Create Task"` | Opens a menu item's pop-up, prints its form fields, then cancels it. Nothing is saved |
 | `live-close-inbox.mjs` | Closes the Smart Inbox tabs, to try "open smart inbox" from Indici again |
+| `live-close-dialogs.mjs` | Closes pop-ups left open on the tab with their Close / Cancel / × (nothing saved) |
+| `live-panel-state.mjs` | The side panel now: the approval card waiting, if any, and the end of the last turn |
+| `live-panel-answer.mjs yes|no` | Answers the approval card waiting in the side panel (after a runner stopped) |
 | `live-addinbox.mjs` (`TAB=pmstraining`) | Opens Indici's "Add to Patient Inbox" pop-up, prints its fields and dropdowns, then cancels it |
 
 Example: `PANEL=side MODEL=google/gemini-3.8-flash REQUESTS='["summarize all abnormal inbox records"]' node live-agent.mjs` runs the agent on the inbox tab (open it first).

@@ -18,7 +18,9 @@ export type ContentRequest =
   | { kind: 'click'; id: number; highlight: boolean; double?: boolean }
   | { kind: 'pointAt'; id: number }
   | { kind: 'effect' }
-  | { kind: 'type'; id: number; text: string; clear: boolean; highlight: boolean }
+  /** trusted: in a rich editor, only place the caret — the text then comes as real keyboard input. */
+  | { kind: 'type'; id: number; text: string; clear: boolean; highlight: boolean; trusted?: boolean }
+  | { kind: 'fieldText'; id: number }
   | { kind: 'clear'; id: number; highlight: boolean }
   | { kind: 'select'; id: number; option: string; highlight: boolean }
   | { kind: 'scroll'; direction?: ScrollDirection; id?: number }
@@ -98,6 +100,8 @@ export interface TypeResult {
   value: string;
   /** A list of suggestions that opened under the field (typing chose none of them). */
   suggestions?: string[];
+  /** A rich editor (contenteditable) whose caret was placed for real keyboard input — nothing typed yet. */
+  awaitsInput?: boolean;
 }
 
 export interface SelectResult {
@@ -140,6 +144,7 @@ export interface ResponseMap {
   hover: HoverResult;
   menuPath: MenuResult;
   type: TypeResult;
+  fieldText: { value: string };
   clear: TypeResult;
   select: SelectResult;
   scroll: ScrollResult;

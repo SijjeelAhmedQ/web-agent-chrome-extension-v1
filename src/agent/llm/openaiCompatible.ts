@@ -92,6 +92,9 @@ export class OpenAICompatibleClient implements LlmClient {
         : {}),
     };
     Object.assign(body, thinkingFields(this.provider));
+    // OpenRouter holds back credit for the model's whole output limit (65k tokens) unless told less — a key with
+    // little left then fails every request. A step's reply is far shorter; high thinking gets more room.
+    if (/openrouter\.ai/.test(this.provider.baseUrl)) body.max_tokens = thinkingOf(this.provider) === 'high' ? 16_384 : 8_192;
     const send = () =>
       requestJson<OpenAIResponse>(joinUrl(this.provider.baseUrl, 'chat/completions'), {
         method: 'POST',

@@ -71,6 +71,8 @@ describe('OpenAI-compatible adapter', () => {
     const router = provider({ preset: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', thinking: 'low' });
     const res = await createClient(router).chat({ model: 'google/gemini-3.8-flash', messages: conversation, tools, temperature: 0 });
     expect(JSON.parse(fetchMock.mock.calls[0][1]!.body as string).reasoning).toEqual({ effort: 'low' });
+    // OpenRouter is told how long a reply may be, so it doesn't hold back credit for 65k tokens.
+    expect(JSON.parse(fetchMock.mock.calls[0][1]!.body as string).max_tokens).toBe(8192);
     expect(res.reasoning).toEqual(reasoning);
     // The next turn carries it back with the tool call it came with.
     await createClient(router).chat({ model: 'm', messages: [...conversation.slice(0, 2), { role: 'assistant', content: '', toolCalls: [{ id: 'z', name: 'click', arguments: {} }], reasoning }], tools, temperature: 0 });
