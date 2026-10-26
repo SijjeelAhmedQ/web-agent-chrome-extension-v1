@@ -58,12 +58,21 @@ try {
   let card = '';
   let sawLabel = '';
   for (;;) {
-    if (Date.now() - t0 > 600000) throw new Error('timed out');
+    if (Date.now() - t0 > Number(process.env.LIMIT_S ?? 600) * 1000) {
+      const lines = (await panel.$eval('.turn:last-child', (e) => e.innerText)).split('\n');
+      console.log('TIMED OUT — activity so far:');
+      console.log(lines.filter((l) => l.trim() && !/^(Done|Details)$|Details$|^[0-9.]+s$/.test(l.trim())).slice(-40).join('\n'));
+      break;
+    }
     const label = await panel.$eval('.step.thinking .step-label', (e) => e.textContent).catch(() => '');
-    if (/·/.test(label)) sawLabel = label;
+    if (/·/.test(label) && !sawLabel.includes(label)) sawLabel += (sawLabel ? ' / ' : '') + label;
     if (await panel.$('.approval')) {
       card = await panel.$eval('.approval', (e) => e.innerText.replace(/\s+/g, ' '));
-      await panel.evaluate(() => [...document.querySelectorAll('.approval-actions button')].find((b) => b.textContent.trim() === 'Save')?.click());
+      // A form's buttons: Save. A plain card: Confirm.
+      await panel.evaluate(() => {
+        const bs = [...document.querySelectorAll('.approval-actions button')];
+        (bs.find((b) => b.textContent.trim() === 'Save') ?? bs.find((b) => b.textContent.trim() === 'Confirm'))?.click();
+      });
       await sleep(800);
     }
     if (await panel.$('.turn:last-child .activity.done, .turn:last-child .activity.failed, .turn:last-child .notice.error')) break;

@@ -21,6 +21,6 @@ export type ApprovalAnswer = boolean | number;
 export type RunEvent =
   | { type: 'task'; task: TaskRecord }
   | { type: 'step'; taskId: string; step: StepRecord }
-  /** `by`: the decision model deciding this step, when it isn't the agent's own. */
-  | { type: 'thinking'; taskId: string; active: boolean; by?: string }
+  /** `label`: what the model is doing now, and which (“Deciding the next step · Jev Router”), when the agent has a decision model. */
+  | { type: 'thinking'; taskId: string; active: boolean; label?: string }
   | { type: 'approval'; taskId: string; prompt: ApprovalPrompt | null };

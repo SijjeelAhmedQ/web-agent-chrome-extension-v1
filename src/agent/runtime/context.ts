@@ -4,7 +4,7 @@ import { DIFF_HEAD } from '../tools/pageDiff';
 const SNAPSHOT_TOOLS = new Set(['read_page']);
 const MAX_TOOL_CHARS = 20_000;
 const PLACEHOLDER = '[Earlier page snapshot removed — its element ids are no longer valid.]';
-const RUNTIME_PROMPT = /^(Before you finish|Not finished yet:|Your last reply was cut off|You have not finished the task yet)/;
+const RUNTIME_PROMPT = /^(Before you finish|Not finished yet:|Your last reply was cut off|You have not finished the task yet|Decision \(from)/;
 const EARLIER_STEP = '[Result of an earlier step — removed to fit; it was done.]';
 /** The first line of a step the user approved: kept however tight the room, so what was done is not forgotten. */
 export const APPROVED_DONE = 'Done with the user’s approval:';

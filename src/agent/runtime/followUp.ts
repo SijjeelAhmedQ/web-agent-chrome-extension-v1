@@ -27,7 +27,7 @@ export function rememberedAnswer(answer: string, steps: StepRecord[], checklist:
 
 /** The answer with the steps done so far (and the checklist) — the list a reply carries on from. */
 function withStoppedList(answer: string, steps: StepRecord[], checklist: ChecklistItem[], always: boolean): string {
-  const done = steps.filter((s) => s.status === 'done' && s.tool !== 'verify' && s.tool !== 'task_list').slice(-15);
+  const done = steps.filter((s) => s.status === 'done' && s.tool !== 'verify' && s.tool !== 'task_list' && s.tool !== 'decision').slice(-15);
   if (!done.length && !checklist.length && !always) return answer;
   const lines = done.map((s, i) => `${i + 1}. ${s.label}${s.note ? ` → ${s.note}` : ''}`);
   // The checklist goes along, so the reply carries on with the same items ticked.

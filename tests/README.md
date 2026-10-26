@@ -23,11 +23,13 @@ Four ways, from the simplest:
      `web_agent_qwen38long`).
    - **OpenRouter** (paid, faster): your key. Its list offers `google/gemini-3.8-flash`, `anthropic/claude-haiku-5.5`
      and `typesafe/jev-router`. **Thinking** (on every connection): Off, Low or High — Low suits Flash and Haiku.
-6. Optional, on the agent (Agents → the agent → Model): a **Decision model**, e.g. Jev Router, decides each next
-   step; the agent's own model (e.g. Gemini Flash) reads the request first, double-checks and writes the answer.
-   The activity shows "Deciding the next step · Jev Router". You still approve every save, delete and complete.
-   Jev Router chooses its own model per request (it often picked Claude Opus: about $0.004–0.04 a step, against
-   about $0.003 for Flash and $0.001 for Haiku).
+6. Optional, on the agent (Agents → the agent → Model): a **Decision model**, e.g. Jev Router. It decides what to
+   do next and writes it as a short plan ("1. type … into [812] … 2. click [830] Save") — it never clicks. The agent's
+   own **Model** (any: Gemini Flash, Haiku, DeepSeek…) does every action of the plan with its tools, reports back,
+   and the decision model decides again; at the end the agent's model writes the answer. The activity shows
+   "Deciding the next step · Jev Router", "Decided the next steps · Jev Router" (the plan, under Details) and
+   "Doing it · Gemini 3.8 Flash". You still approve every save, delete and complete. Jev Router picks its own model
+   per request: in tests a whole small task cost about $0.07 (Jev's decisions about $0.004 of it).
 
 A stopped or failed task shows **Resume**: it carries on from where it stopped. A finished task shows **Run again**.
 5. Log in to https://pmstraining.vitonta.com, open the extension's side panel and type a request.

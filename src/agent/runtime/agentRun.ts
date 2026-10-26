@@ -217,7 +217,7 @@ export class AgentRun {
     // The decision model, when the agent has one, decides each next step; the agent's own model reads the
     // request first, double-checks and writes the answer.
     const decision = resolveDecision(agent, config);
-    const decider = decision ? { client: createClient(decision.provider), model: decision.model, label: decision.label } : null;
+    const decider = decision ? { client: createClient(decision.provider) as LlmClient, model: decision.model, label: decision.label } : null;
     const toolset = buildToolset(agent, config, url);
     // A reply to the question the last answer asked: carry on from there, don't start over.
     const followUp = followUpOf(this.options.history, request);
@@ -284,34 +284,48 @@ export class AgentRun {
     let popupsChecked = false;
     let quotesChecked = false;
     let lastModel = model;
-    for (let step = 0; step < this.stepLimit(agent.maxSteps); step++) {
+    // With a decision model, the work is split. 'act': the agent's model does steps with its tools — it reads
+    // the request first, then carries out each decision. 'decide': the decision model, without tools, writes
+    // the next few steps (or that the task is done, or what to ask the user). 'answer': the agent's model
+    // writes the answer and double-checks it. Without a decision model it is all 'act', as before.
+    let phase: 'act' | 'decide' | 'answer' = 'act';
+    let acts = 0;
+    const workerLabel = knownModel(model)?.label ?? model;
+    const stepLimit = this.stepLimit(agent.maxSteps) * (decider ? 2 : 1);
+    for (let step = 0; step < stepLimit; step++) {
       this.throwIfCancelled();
-      // “Deciding the next step” — after a tool's result — is the decision model's. Understanding the request
-      // (the first step) and the runtime's own prompts (the double-check, “not finished yet”) are the agent's model's.
-      const deciding = !!decider && step > 0 && messages.at(-1)?.role === 'tool';
-      const [c, m] = deciding ? [decider!.client, decider!.model] : [client, model];
-      this.emit({ type: 'thinking', taskId: this.id, active: true, ...(deciding ? { by: decider!.label } : {}) });
+      // The checklist is shown again before every step: early steps may have been dropped to fit.
+      messages[0] = { role: 'system', content: `${system}${decider ? `\n\n${WORKER_ROLE}` : ''}${this.checklist.size ? `\n\n${this.checklist.section()}` : ''}` };
+      // A decision carried out at length without a word back: the decision model looks again.
+      if (decider && phase === 'act' && acts >= MAX_ACTS) phase = 'decide';
       let response;
       try {
-        // The checklist is shown again before every step: early steps may have been dropped to fit.
-        messages[0] = { role: 'system', content: this.checklist.size ? `${system}\n\n${this.checklist.section()}` : system };
-        response = await c.chat({ model: m, messages: reasoningFor(compactMessages(messages, budget), m), tools: specs, temperature: agent.temperature, signal: this.abort.signal });
-        lastModel = m;
-        // The decision model decided to answer now: the agent's model writes the answer — without tools, so
-        // the decision (stop here, ask the user) stays the decision model's.
-        if (deciding && !response.toolCalls.length) {
-          this.emit({ type: 'thinking', taskId: this.id, active: true });
-          const ask: ChatMessage = { role: 'user', content: `${ANSWER_PROMPT}\n\nThe draft:\n${response.content.trim() || '(none)'}` };
+        if (decider && phase === 'decide') {
+          const decided = await this.decideNext(decider, messages, budget);
+          if (decided.next) {
+            messages.push({ role: 'user', content: `${DECISION_HEAD} ${decider.label}) — do these steps, then say in a sentence what happened:\n${decided.text}` });
+            phase = 'act';
+            acts = 0;
+            continue;
+          }
+          // Done, or a question for the user: the agent's model writes it — without tools, so the decision stands.
+          phase = 'answer';
+          this.emit({ type: 'thinking', taskId: this.id, active: true, label: `Writing the answer · ${workerLabel}` });
+          const ask: ChatMessage = { role: 'user', content: `${ANSWER_PROMPT}\n\nThe draft:\n${decided.text || '(none)'}` };
           const written = await client
             .chat({ model, messages: [...reasoningFor(compactMessages(messages, budget), model), ask], tools: [], temperature: agent.temperature, signal: this.abort.signal })
             .catch((err: unknown) => {
               if (this.abort.signal.aborted || isAbort(err)) throw err;
-              return null; // the decision model's own answer stands
+              return null; // the decision model's own words stand
             });
-          if (written?.content.trim()) {
-            response = { ...written, toolCalls: [] };
-            lastModel = model;
-          }
+          response = written?.content.trim() ? { ...written, toolCalls: [] } : { content: decided.text, toolCalls: [] };
+          lastModel = model;
+        } else {
+          const label = !decider || step === 0 ? undefined : phase === 'answer' ? `Checking the answer · ${workerLabel}` : `Doing it · ${workerLabel}`;
+          this.emit({ type: 'thinking', taskId: this.id, active: true, ...(label ? { label } : {}) });
+          response = await client.chat({ model, messages: reasoningFor(compactMessages(messages, budget), model), tools: specs, temperature: agent.temperature, signal: this.abort.signal });
+          lastModel = model;
+          if (phase === 'act') acts++;
         }
       } catch (err) {
         if (step === 0 && lacksToolSupport(err)) return this.answerWithoutTools(client, model, ctx);
@@ -320,6 +334,13 @@ export class AgentRun {
       this.emit({ type: 'thinking', taskId: this.id, active: false });
       this.throwIfCancelled();
 
+      // The agent's model, carrying out a decision (or having read the request), reports back: the decision
+      // model decides what comes next.
+      if (decider && phase === 'act' && !response.toolCalls.length) {
+        if (response.content.trim()) messages.push({ role: 'assistant', content: response.content.trim() });
+        phase = 'decide';
+        continue;
+      }
       if (!response.toolCalls.length) {
         const answer = withoutStoppedList(response.content.trim()) || 'Done.';
         // A reply cut off by the context limit, or narration of a next step, is not a final answer.
@@ -329,6 +350,7 @@ export class AgentRun {
           if (cutOff) budget = Math.max(3_000, Math.floor(budget * 0.6)); // make room: drop old page snapshots sooner
           messages.push({ role: 'assistant', content: answer });
           messages.push({ role: 'user', content: cutOff ? CUT_OFF_PROMPT : CONTINUE_PROMPT });
+          if (decider) phase = 'decide';
           continue;
         }
         // Answering with checklist items not ticked: they were skipped or forgotten.
@@ -337,6 +359,7 @@ export class AgentRun {
           listNudges++;
           messages.push({ role: 'assistant', content: answer });
           messages.push({ role: 'user', content: `${NOT_FINISHED_PROMPT} Checklist item${left.length === 1 ? '' : 's'} ${left.join(', ')} ${left.length === 1 ? 'is' : 'are'} not ticked:\n${this.checklist.format()}\nIf you finished one, call task_list with done for it. Otherwise carry on with item ${left[0]}. If one can't be done, tell the user which one and why.` });
+          if (decider) phase = 'decide';
           continue;
         }
         // An answer about the page from a task that never looked at it (earlier answers may be stale).
@@ -344,6 +367,7 @@ export class AgentRun {
           pageNudged = true;
           messages.push({ role: 'assistant', content: answer });
           messages.push({ role: 'user', content: `${NOT_FINISHED_PROMPT} you haven't looked at the page in this task — the tab may have changed since earlier answers. Call read_page now, check the page, and then do the task or answer from what it shows.` });
+          if (decider) phase = 'decide';
           continue;
         }
         // Finishing while pop-ups that came with the page opening are still there: one that can be
@@ -354,6 +378,7 @@ export class AgentRun {
           if (note) {
             messages.push({ role: 'assistant', content: answer });
             messages.push({ role: 'user', content: `${NOT_FINISHED_PROMPT} ${note}` });
+            if (decider) phase = 'decide';
             continue;
           }
         }
@@ -365,6 +390,7 @@ export class AgentRun {
           if (unseen.length) {
             messages.push({ role: 'assistant', content: answer });
             messages.push({ role: 'user', content: `${NOT_FINISHED_PROMPT} your answer quotes ${unseen.map((q) => `"${q}"`).join(', ')} as what the page shows, but no tool result in this task and nothing on the page now has ${unseen.length === 1 ? 'it' : 'them'}. Call read_page and answer only from what the page shows — give the user the answer itself, without mentioning this check or your earlier wording.` });
+            if (decider) phase = 'decide';
             continue;
           }
         }
@@ -384,6 +410,8 @@ export class AgentRun {
             checkedAnswer = answer;
             messages.push({ role: 'assistant', content: answer });
             messages.push({ role: 'user', content: verifyPrompt(page) });
+            // The double-check is the agent's model's.
+            if (decider) phase = 'answer';
             continue;
           }
         }
@@ -407,6 +435,8 @@ export class AgentRun {
       }
       // Keep presence on whichever tab the agent is in now.
       void browser.setPresence(true);
+      // The agent's model has read the request and the page: from here the decision model decides.
+      if (decider && phase === 'act' && !messages.some((m) => m.role === 'user' && m.content.startsWith(DECISION_HEAD))) phase = 'decide';
     }
     throw new AgentError('step_limit', `I couldn't finish within ${agent.maxSteps} steps. Try a more specific request, or raise the step limit for this agent.`);
   }
@@ -458,6 +488,39 @@ export class AgentRun {
       this.upsertStep({ ...step, status: 'skipped', note: 'Couldn’t read the page', durationMs: Date.now() - step.startedAt });
       return null;
     }
+  }
+
+  /**
+   * The decision model's next decision: the steps for the agent's model to do (`next`), or — done, or a question
+   * for the user — the words the answer is written from. Shown in the activity.
+   */
+  private async decideNext(decider: { client: LlmClient; model: string; label: string }, messages: ChatMessage[], budget: number): Promise<{ next: boolean; text: string }> {
+    this.emit({ type: 'thinking', taskId: this.id, active: true, label: `Deciding the next step · ${decider.label}` });
+    const started = Date.now();
+    const res = await decider.client.chat({
+      model: decider.model,
+      messages: [
+        { role: 'system', content: `${messages[0].content}\n\n${DECIDER_ROLE}` },
+        { role: 'user', content: decisionTranscript(compactMessages(messages, budget)) },
+      ],
+      tools: [],
+      temperature: 0,
+      signal: this.abort.signal,
+    });
+    const text = res.content.trim();
+    const form = text.match(/^\s*(NEXT|DONE|ASK)\s*:\s*/im);
+    const kind = form ? form[1].toUpperCase() : 'NEXT';
+    const body = form ? text.slice((form.index ?? 0) + form[0].length).trim() : text;
+    this.upsertStep({
+      id: uid('step_'),
+      label: kind === 'NEXT' ? `Decided the next steps · ${decider.label}` : kind === 'ASK' ? `Decided to ask you · ${decider.label}` : `Decided it is done · ${decider.label}`,
+      status: 'done',
+      tool: 'decision',
+      startedAt: started,
+      durationMs: Date.now() - started,
+      note: clip(body.replace(/\s+/g, ' '), 200),
+    });
+    return { next: kind === 'NEXT' && !!body, text: body };
   }
 
   private throwIfCancelled() {
@@ -975,6 +1038,42 @@ export function declinedAnswer(title: string): string {
 
 const NOT_FINISHED_PROMPT = 'Not finished yet:';
 /** Tools that only look at the page; this many in a row without an action is searching in circles. */
+/** How a decision reaches the agent's model (and how compaction tells it from the user's request). */
+export const DECISION_HEAD = 'Decision (from';
+/** The agent's model's calls on one decision before the decision model looks again. */
+const MAX_ACTS = 6;
+
+/** To the agent's model, when a decision model decides its steps. */
+const WORKER_ROLE = [
+  '## Who decides',
+  'A decision model decides your steps. First understand the request — make the checklist if it has several things to do, and read the page — then stop: reply in a sentence what you see, and wait for its decision.',
+  'When a decision comes (“Decision (from …)”), do exactly those steps with your tools, in order. When they are done, or one can’t be done (the element isn’t there, it changed nothing, a pop-up came up), stop and say in a sentence or two what happened. Don’t take other steps of your own.',
+].join('\n');
+
+/** To the decision model: it decides, the agent's model acts. */
+const DECIDER_ROLE = [
+  '## Your part: you decide, another model acts',
+  'You are the decision maker for this browser agent. Another model, the worker, does the steps with its tools (read_page, click, type…); you never act yourself. The rules, the site knowledge and the checklist above are yours to follow. From the user’s request and what has been done so far (below), decide what the worker does next.',
+  'Reply in one of these forms, and nothing else:',
+  'NEXT: the next steps that go together (one to four), numbered — each naming the element by its id and name from the latest page, and the exact text to type, e.g. “1. type “review bloods” into [812] textbox “Subject / Progress” 2. click [830] button “Save””. To see the page, say “read the page”.',
+  'DONE: what to tell the user — what was done, as the results show.',
+  'ASK: the question to ask the user, when only the user can decide (a pop-up asking which button, a value the user didn’t give, several matching records).',
+  'Every save, delete and complete is approved by the user anyway; never guess a value the user didn’t give.',
+].join('\n');
+
+/** What the decision model reads: the request and every step since, as plain text (it calls no tools). */
+export function decisionTranscript(messages: ChatMessage[]): string {
+  const lines: string[] = [];
+  for (const m of messages.slice(1)) {
+    if (m.role === 'user') lines.push(m.content.startsWith(DECISION_HEAD) ? `[Your decision] ${m.content}` : `[User or runtime] ${m.content}`);
+    else if (m.role === 'assistant') {
+      if (m.content.trim()) lines.push(`[Worker] ${m.content.trim()}`);
+      for (const c of m.toolCalls ?? []) lines.push(`[Worker did] ${c.name} ${JSON.stringify(c.arguments)}`);
+    } else if (m.role === 'tool') lines.push(`[Result of ${m.toolName}]\n${m.content}`);
+  }
+  return `${lines.join('\n\n')}\n\nDecide what the worker does next.`;
+}
+
 /** To the agent's model, when the decision model has decided to answer: it writes the answer, it takes no step. */
 const ANSWER_PROMPT =
   'The steps are done for now: write the answer for the user, from what the steps above found. Don’t take another step. Keep what the draft below decided — what was done, and any question it asks the user — and write it clearly. Only the answer, nothing about this note.';

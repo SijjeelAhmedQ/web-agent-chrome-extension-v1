@@ -111,7 +111,7 @@ export const TurnView = memo(function TurnView({ turn, agent, agents, showAgent,
           </div>
         )}
 
-        <ActivityCard task={task} thinking={turn.thinking} thinkingBy={turn.thinkingBy} developer={developer} defaultExpanded={expandActivity} />
+        <ActivityCard task={task} thinking={turn.thinking} thinkingLabel={turn.thinkingLabel} developer={developer} defaultExpanded={expandActivity} />
 
         {task?.checklist && task.checklist.length > 0 && <ChecklistView items={task.checklist} />}
 

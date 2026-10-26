@@ -6,7 +6,7 @@ import { classifyClick, classifySubmit, classifyTyping } from './execution/riskP
 import { extractTextToolCalls, parseArguments, stripThinking } from './llm/parse';
 import { buildSystemPrompt } from './planner/systemPrompt';
 import { APPROVED_DONE, budgetFor, compactMessages, estimateTokens, shrinkSnapshot } from './runtime/context';
-import { formKey, namedIn, quotesIn, reasoningFor, talksAboutPage } from './runtime/agentRun';
+import { DECISION_HEAD, decisionTranscript, formKey, namedIn, quotesIn, reasoningFor, talksAboutPage } from './runtime/agentRun';
 import { formatElement, formatSnapshot } from './tools/format';
 import { buildToolset, toolSpecs } from './tools/registry';
 import type { ChatMessage } from './llm/types';
@@ -248,6 +248,20 @@ describe('prompt and context', () => {
     const a = formKey([{ label: 'Subject / Progress', value: '[web agent test] review bloods' }, { label: 'Due', value: '29/10/2026' }]);
     expect(formKey([{ label: 'Due', value: '29/10/2026' }, { label: 'Subject / Progress ', value: '[Web Agent Test] review bloods' }])).toBe(a);
     expect(formKey([{ label: 'Subject / Progress', value: '[web agent test] review bloods' }, { label: 'Due', value: '30/10/2026' }])).not.toBe(a);
+  });
+  it('gives the decision model the request and every step as plain text', () => {
+    const text = decisionTranscript([
+      { role: 'system', content: 'rules' },
+      { role: 'user', content: 'add a task for Arya' },
+      { role: 'assistant', content: 'The Add Task form is open.', toolCalls: [{ id: 'a', name: 'read_page', arguments: {} }] },
+      { role: 'tool', toolName: 'read_page', toolCallId: 'a', content: '[812] textbox "Subject / Progress"' },
+      { role: 'user', content: `${DECISION_HEAD} Jev Router) — do these steps:\n1. type “review bloods” into [812]` },
+    ]);
+    expect(text).not.toContain('rules');
+    expect(text).toContain('[User or runtime] add a task for Arya');
+    expect(text).toContain('[Worker did] read_page {}');
+    expect(text).toContain('[Result of read_page]\n[812] textbox "Subject / Progress"');
+    expect(text).toContain('[Your decision] Decision (from Jev Router)');
   });
   it('hands each model back only its own reasoning', () => {
     const msgs: ChatMessage[] = [

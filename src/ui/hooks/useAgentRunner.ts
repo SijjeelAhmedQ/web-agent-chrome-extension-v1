@@ -75,7 +75,7 @@ export function useAgentRunner(tab: ActiveTab) {
             dispatch(chatActions.stepUpdated({ taskId: event.taskId, step: event.step }));
             break;
           case 'thinking':
-            dispatch(chatActions.thinking({ taskId: event.taskId, active: event.active, by: event.by }));
+            dispatch(chatActions.thinking({ taskId: event.taskId, active: event.active, label: event.label }));
             break;
           case 'approval':
             dispatch(chatActions.approval({ taskId: event.taskId, prompt: event.prompt }));
