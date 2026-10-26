@@ -28,7 +28,8 @@ const log = [];
 const say = (s) => { console.log(s); log.push(s); };
 let panel;
 try {
-  const site = (await browser.pages()).filter((p) => /vitonta\.com/.test(p.url())).at(-1);
+  // SITE=pmstraining: the tab to work on when several are open (otherwise the last vitonta one).
+  const site = (await browser.pages()).filter((p) => new RegExp(process.env.SITE ?? 'vitonta\\.com').test(p.url())).at(-1);
   if (sidePanel) {
     // The extension's own side panel, beside the site — opened by the user with the extension's icon.
     const target = browser.targets().find((t) => t.url().startsWith(`chrome-extension://${extId}/sidepanel.html`));
@@ -91,12 +92,12 @@ try {
         if (wrong) say(`  (card lacks /${wrong[1]}/ — declining)`);
         const ok = !!approve && approve.test(text) && !wrong;
         if (await panel.$('.approval-choices')) {
-          // A form's own buttons: approve means only APPROVE_BUTTON (Save) — never Complete or another;
+          // A form's own buttons: approve means only APPROVE_BUTTON (Save, or "Save|OK") — never Complete or another;
           // anything else is a no, given with the card's cancel-like button.
           const want = process.env.APPROVE_BUTTON ?? 'Save';
           const pressed = await panel.$$eval('.approval-choices button', (bs, want, ok) => {
             const label = (b) => b.textContent.trim();
-            const pick = (ok && bs.find((b) => label(b) === want)) || bs.find((b) => /^(cancel|close|not now)/i.test(label(b)));
+            const pick = (ok && bs.find((b) => want.split("|").includes(label(b)))) || bs.find((b) => /^(cancel|close|not now)/i.test(label(b)));
             pick?.click();
             return pick ? label(pick) : 'nothing';
           }, want, ok);

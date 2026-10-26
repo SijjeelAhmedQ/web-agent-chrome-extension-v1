@@ -76,7 +76,7 @@ Each site has:
 - **Built-in tools:** switch them off one by one, or use *All on* / *All off*. If *Read page* is off, a warning offers to turn reading back on, because without it the agent can't see the site.
 - **Model:** run every agent on this site with a given connection or model.
 - **Never click these (Settings):** exact button names, such as `Pharmac`. The agent stops before them and leaves them to you, even if it forgets a rule. Clicks on them are refused and no approval is asked. A name blocks that button everywhere on the site, pop-ups included.
-- **Ask before clicking (Settings):** exact names of controls that change a record the moment they are clicked, such as a `Confidential` tick box or `Opt Out`. The agent asks you before each click on them, as it does before a Save.
+- **Ask before clicking or typing (Settings):** exact names of controls that change a record the moment they are used. Examples are a `Confidential` tick box, `Opt Out`, or a `Diagnostic Comment` box that saves itself. The agent asks you before it clicks or types into one, as it does before a Save, and the card shows the text it will type.
 - **Room for knowledge:** about a fifth of the model's context window, between 3,000 and 24,000 characters. For example, Kaggle's 16k-token models get about 13,000 characters. The Preview shows the room.
 - **Preview:** shows exactly what an agent gets for a sample request, with a **Copy** button.
 - **Knowledge as text (Preview tab):** the whole knowledge base as editable text in the same `### Rule: …`, `### Navigation: …`, `### Page: …`, `### Workflow: …` format.
@@ -100,7 +100,8 @@ A task can move to another site, for example when a click opens a new tab. From 
   - filing, diagnostic comments and the tick boxes;
   - the Actions forms (text, email, task, recall, allergy);
   - Clinical Summary and saved searches.
-- Reading is all it does on its own. Every File, comment, tick box and form Save needs your approval.
+- Reading is all it does on its own. Every File, comment, tick box and form Save needs your approval. The Diagnostic Comment box saves itself as you type, so the agent asks before typing into it, and the card shows the text.
+- A new inbox record is added in Indici, not in the inbox. On Indici, ask for it (for example "add a new inbox record for Arya Stark, subject …"). The agent uses **Add to Patient Inbox**, asks for the Folder if you didn't give one, and you approve each OK and Save. The record then shows in the Smart Inbox, unfiled. Indici can't delete an inbox record, so a wrong one is filed instead.
 - Viewing a record marks it read in the app.
 - A summary takes one `read_records` call with `area: "Go to Consult"`. That call goes through the records with the page's **Next** button, up to 100 at a time.
   - Each record's verdict comes from its results table, or from its colour in the patient list.

@@ -516,9 +516,15 @@ function formActions(el: Element): { id: number; name: string }[] {
     const last = all.at(-1);
     return last ? formActions(last) : [];
   }
+  // Only the buttons on its own line: a pop-up's header buttons (“Back to List”, “Clinical Summary”) don't finish the form.
+  const at = el.getBoundingClientRect();
+  const sameLine = (b: Element) => {
+    const r = b.getBoundingClientRect();
+    return !at.height || (r.bottom > at.top + 2 && r.top < at.bottom - 2);
+  };
   let box = el.parentElement;
   for (let depth = 0; box && depth < 5; depth++, box = box.parentElement) {
-    const buttons = Array.from(box.querySelectorAll(ACTION_BUTTONS)).filter((b) => isVisible(b) && !isDisabled(b));
+    const buttons = Array.from(box.querySelectorAll(ACTION_BUTTONS)).filter((b) => isVisible(b) && !isDisabled(b) && sameLine(b));
     const named = buttons.map((b) => ({ el: b, name: accessibleName(b).trim() })).filter((b) => /\p{L}/u.test(b.name) && b.name.length <= 24);
     if (named.length >= 3 && named.some((b) => b.el === el)) return named.slice(0, 6).map((b) => ({ id: idFor(b.el), name: b.name }));
     if (box.matches(DIALOGS)) break;

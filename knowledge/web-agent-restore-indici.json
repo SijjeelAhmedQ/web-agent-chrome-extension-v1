@@ -358,10 +358,20 @@
           "enabled": true,
           "createdAt": 1792999777295,
           "updatedAt": 1792999777295
+        },
+        {
+          "id": "kb_add_inbox",
+          "kind": "workflow",
+          "title": "Add a record to a patient’s inbox",
+          "trigger": "add a new inbox record for arya stark, subject blood results",
+          "enabled": true,
+          "createdAt": 1793002621233,
+          "updatedAt": 1793004717724,
+          "content": "A new inbox record is added in Indici (the Smart AI Inbox shows it too, unfiled).\n1. On the dashboard's Inbox panel, click \"Add to Patient Inbox\" (an icon in the bar with Copied, Quick File, Flagged and All). The pop-up \"Inbox\" opens.\n2. Patient: type the name in \"Search Patient\" and click the search (icon) beside it. The Patient Search pop-up opens with the patients found — several of that name: ask which; then click the patient's name. Name, NHI and DOB fill in.\n3. Subject*: type the user's subject in \"Search message subject\".\n4. Result Date*: today already — change it only if the user gave a date.\n5. Provider*: the provider the user named; Attention only if the user named someone. Folder*: Lab, Rad, Referrals, Discharge Summary, Clinical Docs, Scan Document, Other Docs… — if the user didn't say, ask, listing them.\n6. \"Enter comments\": only the user's words. Tick Do not show on Portal or Confidential only if the user asked.\n7. Click OK — the user approves it. The record is saved and the pop-up grows: Order, ACC45, Diagnosis, \"Add lab Test\" / \"Click to add test\", and tabs (Attachments, Tasks…). Never Draft SMS or Create Referral unless the user asked.\n8. Folder Lab — results: \"Click to add test\" opens \"Add lab Test\" (Test*, Result*, Status* — High, Low, Normal, Abnormal…, Attachment). Enter only the tests the user gave; ask if a Lab record should have one and the user gave none. Save each; then OK again — the user approves each.\n9. Check: the record is in the Inbox list (today's Imported Date, the patient, the subject); tell the user. Indici has no delete for an inbox record — a wrong one is filed instead."
         }
       ],
       "createdAt": 1792493958545,
-      "updatedAt": 1792999777295
+      "updatedAt": 1793002621233
     },
     {
       "id": "site-smart-inbox",
@@ -389,17 +399,18 @@
         "Do not show on Portal",
         "Inactive",
         "Mark as Primary",
-        "Call"
+        "Call",
+        "Diagnostic Comment"
       ],
       "knowledge": [
         {
           "id": "kb_smart_0",
           "kind": "rule",
           "title": "Smart AI Inbox — what it is and what changes it",
-          "content": "Indici's AI-assisted inbox, in a tab of its own (inbox-app-dev.vitonta.com), signed in with the Indici login. It holds inbox records (lab, radiology, discharge, referrals) from the last year, grouped by patient.\n- Reading is safe, but the app itself marks a record read when it is shown — opening records changes their read state.\n- These change records: File, Unfile, File All Normal, File All, Save diagnostic comment, the tick boxes Do not show on Portal, Confidential and Inactive, Opt Out / Opt In, and the Save or Send of the Actions forms (text, email, task, recall, allergy). Do them only when the user asked; the user approves each one. Never file or change a record on your own.\n- Several patients match the user's words: never pick one — list them (name, NHI, age) and ask which.",
+          "content": "Indici's AI-assisted inbox, in a tab of its own (inbox-app-dev.vitonta.com), signed in with the Indici login. It holds inbox records (lab, radiology, discharge, referrals) from the last year, grouped by patient.\n- Reading is safe, but the app itself marks a record read when it is shown — opening records changes their read state.\n- These change records: File, Unfile, File All Normal, File All, Save diagnostic comment, the tick boxes Do not show on Portal, Confidential and Inactive, Opt Out / Opt In, and the Save or Send of the Actions forms (text, email, task, recall, allergy). Do them only when the user asked; the user approves each one. Never file or change a record on your own.\n- Several patients match the user's words: never pick one — list them (name, NHI, age) and ask which.\n- A new inbox record is not added here: it is added in Indici, with \"Add to Patient Inbox\" on the dashboard's Inbox panel (switch to the Indici tab and follow Indici's workflow \"Add a record to a patient's inbox\"). It then shows here, unfiled.",
           "enabled": true,
           "createdAt": 1792999777295,
-          "updatedAt": 1792999777295
+          "updatedAt": 1793004717724
         },
         {
           "id": "kb_smart_1",
@@ -434,10 +445,10 @@
           "id": "kb_smart_4",
           "kind": "rule",
           "title": "Normal and abnormal (Smart AI Inbox)",
-          "content": "Decide it as in Indici, from each test's flag — never from your own reading of the values:\n- The flag is the STATUS column of the results table. A record is abnormal when any test's flag is not normal (HIGH, LOW, Abnormal, Critical…). \"Normal\", or an empty flag (\"—\"), is normal.\n- A record without a STATUS column (only TEST and CURRENT), or a document: its colour in the patient's list decides — red is abnormal, the usual colour normal — or the Status filter (Abnormal / Normal) it shows under.\n- A patient is abnormal when any of its records is (\"<name>. Abnormal\" in the list).",
+          "content": "Decide it as in Indici, from each test's flag — never from your own reading of the values:\n- The flag is the STATUS column of the results table. A record is abnormal when any test's flag is not normal (HIGH, LOW, Abnormal, Critical…). \"Normal\", or an empty flag (\"—\"), is normal.\n- A record without a STATUS column (only TEST and CURRENT), or a document: its colour in the patient's list decides — red is abnormal, the usual colour normal — or the Status filter (Abnormal / Normal) it shows under.\n- A patient is abnormal when any of its records is (\"<name>. Abnormal\" in the list).\n- Never call a record normal or abnormal from its values yourself: use read_records' verdict (it checks the STATUS column and the list's colour), even for one record.",
           "enabled": true,
           "createdAt": 1792999777295,
-          "updatedAt": 1792999777295
+          "updatedAt": 1793003272545
         },
         {
           "id": "kb_smart_5",
@@ -463,21 +474,21 @@
           "id": "kb_smart_7",
           "kind": "workflow",
           "title": "Add a diagnostic comment",
-          "content": "1. Open the record. Type the user's words, exactly, into \"Diagnostic Comment\" — never words of your own.\n2. Click \"Save diagnostic comment\"; the user approves it. Read the page to check it is there, then tell the user.",
+          "content": "1. Open the record. The \"Diagnostic Comment\" box saves itself as you type (\"Saved\" shows beside it): type the user's words, exactly — never words of your own — and only once the user has approved it.\n2. If \"Save diagnostic comment\" is enabled after typing, click it; if it is greyed out, it is saved already. Check that \"Saved\" shows, then tell the user.\n3. To remove a comment, clear the box (the user approves it).",
           "trigger": "add the comment \"repeat in 3 months\" to arya’s HbA1c result",
           "enabled": true,
           "createdAt": 1792999777295,
-          "updatedAt": 1792999777295
+          "updatedAt": 1793003272545
         },
         {
           "id": "kb_smart_8",
           "kind": "workflow",
           "title": "Patient tick boxes and opt-out",
-          "content": "- \"Do not show on Portal\", \"Confidential\", \"Inactive\" are tick boxes that save the moment they are clicked; \"Opt Out\" (or \"Opt In\") changes the patient's opt-out straight away.\n- Click one only when the user asked for that change on that patient; the user approves it. Read the page after to check it changed, and tell the user.",
+          "content": "- \"Do not show on Portal\", \"Confidential\", \"Inactive\" are tick boxes that save the moment they are clicked; \"Opt Out\" (or \"Opt In\") changes the patient's opt-out straight away.\n- Click one only when the user asked for that change on that patient; the user approves it. Read the page after to check it changed, and tell the user.\n- \"Opt Out\" opens \"Revoke AI Consent\" (opt out for AI processing): a tick \"I confirm consent is revoked\", then Confirm. Tick it and Confirm only when the user asked to opt the patient out; Cancel otherwise.",
           "trigger": "mark arya stark confidential in the smart inbox",
           "enabled": true,
           "createdAt": 1792999777295,
-          "updatedAt": 1792999777295
+          "updatedAt": 1793004717724
         },
         {
           "id": "kb_smart_9",

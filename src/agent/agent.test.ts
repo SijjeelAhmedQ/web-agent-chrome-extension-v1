@@ -56,6 +56,10 @@ describe('risk policy', () => {
     expect(classifyClick(risk({ name: 'File' })).consequential).toBe(true);
     expect(classifyClick(risk({ name: 'Yes', dialogText: 'Are you sure you want to complete the selected task(s)? Yes No' })).consequence).toBe('complete or file a record');
     expect(classifyClick(risk({ name: 'Yes', dialogText: 'Do you want to see more results? Yes No' })).consequential).toBe(false);
+    // An OK that saves a filled-in form.
+    const filled = [{ label: 'Subject', value: '[web agent test] inbox' }, { label: 'Provider', value: 'Chadmin CHADMIN' }];
+    expect(classifyClick(risk({ name: 'OK', dialogText: 'Inbox Name: NHI: Subject:* Cancel OK', formValues: filled })).consequence).toBe('save or submit changes');
+    expect(classifyClick(risk({ name: 'OK', dialogText: 'Session expired. OK', formValues: [] })).consequential).toBe(false);
     // A warning to go past is the user's call (Indici: a prescription that will not be funded).
     expect(classifyClick(risk({ name: 'Yes', dialogText: '× Please add name of specialist and date of recommendation. Do you want to continue? The prescription will not be funded. Yes No' })).consequence).toBe('go on past the warning in this pop-up');
     expect(classifyClick(risk({ name: 'Yes', dialogText: 'This medicine is already in the active medicines list. Are you sure you want to add it again? Yes No' })).consequential).toBe(false);

@@ -1026,20 +1026,20 @@ function SettingsTab({ site, update }: { site: SiteProfile; update: (patch: Part
           </div>
         </div>
         <div>
-          <FieldLabel>Ask before clicking</FieldLabel>
+          <FieldLabel>Ask before clicking or typing</FieldLabel>
           <Select
             mode="tags"
             style={{ width: '100%' }}
             value={site.askBefore ?? []}
             onChange={(v: string[]) => update({ askBefore: v.map((x) => x.trim()).filter(Boolean) })}
             tokenSeparators={[',']}
-            placeholder="e.g. Confidential, Inactive, Opt Out"
+            placeholder="e.g. Confidential, Opt Out, Diagnostic Comment"
             open={false}
             suffixIcon={null}
-            aria-label="Controls the agent asks you about before clicking"
+            aria-label="Controls the agent asks you about before clicking or typing"
           />
           <div className="field-help">
-            Controls that change a record the moment they are clicked (a tick box that saves itself, an opt-out): the agent asks you first, as it does before a save or delete. Names must match exactly.
+            Controls that change a record the moment they are used — a tick box or a comment box that saves itself, an opt-out: the agent asks you before clicking or typing into them, as it does before a save or delete. Names must match exactly.
           </div>
         </div>
         <div>

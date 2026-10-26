@@ -145,7 +145,8 @@ On Windows, run these commands in Git Bash: the `NAME=value command` form does n
 | `MODEL` | Another model name than the default |
 | `APPROVE` | Regex. An approval card is approved only when its text matches. Anything else is declined |
 | `APPROVE_IF` | `[[cardRegex, mustHaveRegex], …]`: a card that matches `cardRegex` but lacks `mustHaveRegex` is declined, as a careful user would |
-| `APPROVE_BUTTON` | On a form's button card (Save / Complete / Reset / Cancel), the button that counts as yes. Default `Save` |
+| `APPROVE_BUTTON` | On a form's button card (Save / Complete / Reset / Cancel), the button that counts as yes. Default `Save`; several with `|`, e.g. `Save task|Save` |
+| `SITE` | Regex for the tab to work on when several are open, e.g. `pmstraining` or `inbox-app`. Default: the last vitonta tab |
 | `KEEP_CHAT=1` | Continue the last chat, for answering the agent's question |
 | `ANSWERS` | `[[questionRegex, answer], …]`: when the agent stops with a question that matches, the answer is sent in the same chat — a whole flow with its questions in one run |
 | `PANEL=side` | Drive the extension's real side panel beside the site (open it with the toolbar icon, or `node live-open-panel.mjs`) instead of a tab of its own |
@@ -186,6 +187,7 @@ The Smart AI Inbox has its own tab. Start these with `TAB=inbox-app` so they wor
 | `live-explore.mjs "<name>" …` | Opens each named control, prints what appeared, then presses Escape. Never give it a control that saves or files |
 | `live-actionforms.mjs Actions "Create Task"` | Opens a menu item's pop-up, prints its form fields, then cancels it. Nothing is saved |
 | `live-close-inbox.mjs` | Closes the Smart Inbox tabs, to try "open smart inbox" from Indici again |
+| `live-addinbox.mjs` (`TAB=pmstraining`) | Opens Indici's "Add to Patient Inbox" pop-up, prints its fields and dropdowns, then cancels it |
 
 Example: `PANEL=side MODEL=google/gemini-3.8-flash REQUESTS='["summarize all abnormal inbox records"]' node live-agent.mjs` runs the agent on the inbox tab (open it first).
 

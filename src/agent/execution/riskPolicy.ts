@@ -50,6 +50,10 @@ export function classifyClick(info: ElementRisk): RiskVerdict {
     // A warning to go past (“… will not be funded. Do you want to continue?”): the user's call, not the agent's.
     if (WARNING.test(info.dialogText)) return { consequential: true, consequence: 'go on past the warning in this pop-up' };
   }
+  // “OK” under a form that has been filled in (Indici's Add to Patient Inbox): it saves what was entered.
+  if ((BUTTONISH.has(info.role) || isSubmit) && CONFIRMS.test(name) && (info.formValues ?? []).filter((v) => v.value.trim()).length >= 2) {
+    return { consequential: true, consequence: 'save or submit changes' };
+  }
   if (BUTTONISH.has(info.role) || isLink || isSubmit) {
     for (const rule of candidates) {
       if (isLink && !rule.links) continue;

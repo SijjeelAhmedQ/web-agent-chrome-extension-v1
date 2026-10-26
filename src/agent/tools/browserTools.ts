@@ -94,6 +94,7 @@ async function approvalFor(
   elementId: number,
   kind: 'click' | 'submit' | 'type',
   action: string,
+  typed?: string,
 ): Promise<ApprovalRequest | null> {
   let info;
   try {
@@ -102,9 +103,11 @@ async function approvalFor(
     return null; // the action itself will report the problem
   }
   let verdict = kind === 'click' ? classifyClick(info) : kind === 'submit' ? classifySubmit(info) : classifyTyping(info);
-  // A control this site's setup lists as changing a record the moment it is clicked (a tick box that saves itself).
-  if (!verdict.consequential && kind === 'click' && (ctx.askBefore ?? []).map(norm).includes(norm(info.name ?? ''))) {
-    verdict = { consequential: true, consequence: 'change the record right away' };
+  // A control this site's setup lists as changing a record the moment it is clicked or typed into (a tick box
+  // or a comment box that saves itself).
+  if (!verdict.consequential && kind !== 'submit' && (ctx.askBefore ?? []).map(norm).includes(norm(info.name ?? ''))) {
+    verdict = { consequential: true, consequence: kind === 'type' ? 'save it to the record right away (this box saves itself)' : 'change the record right away' };
+    if (kind === 'type' && typed !== undefined) action = `Type “${typed}” into “${info.name}”?`;
   }
   if (!verdict.consequential) return null;
   const site = siteOf(await pageUrl(ctx)) || 'this site';
@@ -488,7 +491,7 @@ const type: AgentTool<{ id: number; text: string; clear: boolean; submit: boolea
     return `Typing ${shown}${target ? ` into ${quote(target)}` : ''}`;
   },
   async assess(a, ctx) {
-    const typing = await approvalFor(ctx, a.id, 'type', `Type into ${nameOf(ctx, a.id, 'this field')}?`);
+    const typing = await approvalFor(ctx, a.id, 'type', `Type into ${nameOf(ctx, a.id, 'this field')}?`, isSecretField(ctx, a.id) ? undefined : a.text);
     if (typing) return typing;
     return a.submit ? approvalFor(ctx, a.id, 'submit', 'Submit this form?') : null;
   },
