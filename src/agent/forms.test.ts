@@ -100,5 +100,8 @@ describe('loop guard: repeated cycles of steps', () => {
     expect(repeatedCycle([type, search, type, 'Clicking “Clear”'], type)).toEqual([type]);
     // A different next step is fine.
     expect(repeatedCycle([type, search, pick, type, search, pick], 'Typing “2” into “Take”')).toBeNull();
+    // The same comment on record after record, with Next between: going through them, not a loop.
+    const comment = 'Typing “hello world” into “Diagnostic Comment”';
+    expect(repeatedCycle([comment, next, comment, next, comment, next], comment)).toBeNull();
   });
 });

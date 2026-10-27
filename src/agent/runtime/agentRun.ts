@@ -664,7 +664,8 @@ export class AgentRun {
     // (Paging — “Next”, “Load more” — repeats by design.)
     const pager = /^\s*(next|previous|prev|more|load more|show more|[›»>‹«<])\s*$/i.test(String((args as { name?: unknown; text?: unknown }).name ?? (args as { text?: unknown }).text ?? ''));
     // Reading the same thing again gives the same answer too (read_page and wait excepted: the page moves on).
-    const sameKey = !pager && tool.name !== 'read_page' && tool.name !== 'wait' ? `${tool.name} ${JSON.stringify(args)}` : '';
+    // (read_records reading on from the record showing has the same arguments each time; it knows itself what it read.)
+    const sameKey = !pager && !['read_page', 'wait', 'read_records'].includes(tool.name) ? `${tool.name} ${JSON.stringify(args)}` : '';
     if (sameKey && (this.sameActions.get(sameKey) ?? 0) >= 3) {
       finish({ status: 'skipped', note: 'Done 3 times already — not again' });
       return `Not done: you already did exactly this 3 times in this task (“${step.label}”) and it hasn't got you there. Don't do it again. Read the page and use another control — for a row in a list, its icons in the Actions column (e.g. "Edit") — or tell the user what you can't find.`;
@@ -996,14 +997,21 @@ const READ_PAGE = BROWSER_TOOLS.find((t) => t.name === 'read_page')!;
  * counts on its own too. (A single click repeated — "Next page" — is normal and not counted.)
  */
 export function repeatedCycle(trail: string[], next: string): string[] | null {
+  // Going through records with Next and doing the same on each (a comment on every abnormal result) repeats
+  // by design: a cycle with paging in it is not a loop.
+  const paging = (l: string) => /^Clicking “(next|previous|prev|load more|show more|[›»>‹«<])”/i.test(l);
   for (let len = 2; len <= 4; len++) {
     if (trail.length < 2 * len) continue;
     const last = trail.slice(-len);
     const before = trail.slice(-2 * len, -len);
     // A "cycle" of one step repeated (Next, Next…) is paging, not a loop.
-    if (new Set(last).size > 1 && last.every((l, i) => l === before[i]) && next === last[0]) return last;
+    if (new Set(last).size > 1 && !last.some(paging) && last.every((l, i) => l === before[i]) && next === last[0]) return last;
   }
-  if (next.startsWith('Typing') && trail.filter((l) => l === next).length >= 2) return [next];
+  // The same text typed into the same field again and again — unless Next, or a click on another dated entry of a
+  // list (“Testing 21/10/2026”), moved on to another record in between.
+  const entry = (l: string) => paging(l) || /^Clicking “[^”]*\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}[^”]*”/.test(l);
+  const movedOn = trail.findLastIndex(entry);
+  if (next.startsWith('Typing') && trail.slice(movedOn + 1).filter((l) => l === next).length >= 2) return [next];
   return null;
 }
 

@@ -454,6 +454,17 @@ const clickText: AgentTool<ClickTextArgs> = {
   },
 };
 
+/**
+ * Adding words to a field that already ends with them, or holds them (a comment added on a record before): its
+ * text, so the words aren't written twice. Only for adding (clear false) and real words, not a letter or a digit.
+ */
+async function holdsAlready(ctx: ToolContext, a: { id: number; text: string; clear: boolean }): Promise<string | null> {
+  const words = a.text.replace(/\s+/g, ' ').trim().toLowerCase();
+  if (a.clear || words.length < 4 || isSecretField(ctx, a.id)) return null;
+  const now = await ctx.browser.send({ kind: 'fieldText', id: a.id }).then((r) => r.value, () => '');
+  return now && now.toLowerCase().includes(words) ? now : null;
+}
+
 /** A form's filled fields around a field, to tell what else filling it changed. */
 async function formAroundOf(ctx: ToolContext, id: number): Promise<FormAround | null> {
   return ctx.browser.send({ kind: 'formAround', id }).catch(() => null);
@@ -491,11 +502,19 @@ const type: AgentTool<{ id: number; text: string; clear: boolean; submit: boolea
     return `Typing ${shown}${target ? ` into ${quote(target)}` : ''}`;
   },
   async assess(a, ctx) {
+    if (await holdsAlready(ctx, a)) return null; // not typed (execute says so): nothing to approve
     const typing = await approvalFor(ctx, a.id, 'type', `Type into ${nameOf(ctx, a.id, 'this field')}?`, isSecretField(ctx, a.id) ? undefined : a.text);
     if (typing) return typing;
     return a.submit ? approvalFor(ctx, a.id, 'submit', 'Submit this form?') : null;
   },
   async execute(a, ctx) {
+    const already = await holdsAlready(ctx, a);
+    if (already) {
+      return {
+        output: `Not typed: ${nameOf(ctx, a.id, 'the field')} already holds “${a.text.trim()}” — it now reads ${quote(clip(already, 200))}. Adding it again would write it twice. Leave this one as it is and go on (to the next record, if you are going through several).`,
+        note: 'Already there — not typed again',
+      };
+    }
     const before = await pageUrl(ctx);
     const form = a.submit || isSecretField(ctx, a.id) ? null : await formAroundOf(ctx, a.id);
     const trusted = ctx.settings.realClicks !== false;
@@ -504,7 +523,7 @@ const type: AgentTool<{ id: number; text: string; clear: boolean; submit: boolea
     if (res.awaitsInput) {
       const typed = await ctx.browser.realType(a.text).then(() => true, () => false);
       res = typed
-        ? { ...res, value: (await ctx.browser.send({ kind: 'fieldText', id: a.id })).value }
+        ? { ...res, value: clip((await ctx.browser.send({ kind: 'fieldText', id: a.id })).value, 200) }
         : await ctx.browser.send({ kind: 'type', id: a.id, text: a.text, clear: a.clear, highlight: false });
     }
     const label = res.element.name ? quote(res.element.name) : 'the field';
@@ -952,6 +971,19 @@ const readRecords: AgentTool<{ first: string; near: string; next: string; close:
       itemsOf.push(shown.item ?? null);
       whoOf.push(inPage ? (text.split('\n').find((l) => l.trim()) ?? '').trim().slice(0, 60) : '');
       if (i === Math.min(a.max, inPage ? 100 : 50) - 1) break;
+      // The list shows a page of entries at a time: at its end, “Load more” brings the rest — then Next goes on.
+      for (let loads = 0; inPage && !nextInPage && loads < 3; loads++) {
+        const found = await ctx.browser.send({ kind: 'find', query: 'Load more', limit: 6 }).catch(() => null);
+        const more = found?.matches.find((m) => /^(load|show) more$/i.test(m.name.trim()));
+        if (!more) break;
+        await ctx.browser.send({ kind: 'click', id: more.id, highlight: false }).catch(() => undefined);
+        await ctx.browser.send({ kind: 'settle', quietMs: 500, timeoutMs: 4000 }).catch(() => null);
+        // Next turns on once the new entries have come.
+        for (let tries = 0; tries < 10 && !nextInPage; tries++) {
+          await recordText({});
+          if (!nextInPage) await sleep(400);
+        }
+      }
       const next = inPage ? { id: nextInPage, disabled: false } : await ctx.browser.send({ kind: 'popupControl', name: a.next }).catch(() => null);
       if (!next?.id || next.disabled) break;
       await ctx.browser.send({ kind: 'click', id: next.id, highlight: false }).catch(() => undefined);
@@ -985,6 +1017,8 @@ const readRecords: AgentTool<{ first: string; near: string; next: string; close:
       output: [
         summary,
         more ? `Stopped at ${records.length} records; there are more. The next one is open now: to read on, call read_records again with first empty and the same area.` : '',
+        // Several calls for one list: the total, counted here — models add them up wrong.
+        (ctx.recordsRead?.size ?? 0) > 1 ? `Read in this task so far: ${[...ctx.recordsRead!.values()].reduce((n, v) => n + v, 0)} records, in ${ctx.recordsRead!.size} calls (this one: ${records.length}).` : '',
         recordsOutput(records, a.next, inPage ? '' : a.close, Math.max(3_000, budget)),
       ]
         .filter(Boolean)

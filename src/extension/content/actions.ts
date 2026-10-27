@@ -344,7 +344,8 @@ export async function type(id: number, text: string, clearFirst: boolean, show: 
 export function fieldText(id: number): { value: string } {
   const field = editableTarget(resolve(id));
   const value = isInput(field) || isTextArea(field) ? field.value : (field.innerText ?? '');
-  return { value: value.replace(/\s+/g, ' ').trim().slice(0, 200) };
+  // Whole: a long comment's end is where words added before are.
+  return { value: value.replace(/\s+/g, ' ').trim().slice(0, 20_000) };
 }
 
 export async function clear(id: number, show: boolean): Promise<TypeResult> {

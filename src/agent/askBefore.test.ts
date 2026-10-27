@@ -27,6 +27,27 @@ describe('ask-before controls', () => {
     expect(ask?.detail).toMatch(/as you type/);
   });
 
+  it('does not add words a field already holds (a comment added on the record before)', async () => {
+    const type = BROWSER_TOOLS.find((t) => t.name === 'type')!;
+    const sent: string[] = [];
+    const ctx = {
+      browser: {
+        send: async (req: { kind: string }) => {
+          sent.push(req.kind);
+          if (req.kind === 'fieldText') return { value: 'Attention provider testing hello world' };
+          throw new Error(`unexpected ${req.kind}`);
+        },
+      },
+      settings: {},
+      elements: new ElementMemory(),
+      askBefore: ['Diagnostic Comment'],
+    } as unknown as ToolContext;
+    const args = { id: 3, text: ' Hello World', clear: false, submit: false };
+    expect(await type.assess!(args, ctx)).toBeNull();
+    expect((await type.execute(args, ctx)).output).toMatch(/^Not typed: .* already holds “Hello World”/);
+    expect(sent).not.toContain('type');
+  });
+
   it('keeps the list when the configuration is loaded', async () => {
     const { normalizeSite } = await import('@/shared/storage/configStore');
     expect(normalizeSite({ name: 'inbox', askBefore: ['Diagnostic Comment'] }).askBefore).toEqual(['Diagnostic Comment']);
