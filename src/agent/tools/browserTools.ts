@@ -106,7 +106,7 @@ async function approvalFor(
   // A control this site's setup lists as changing a record the moment it is clicked or typed into (a tick box
   // or a comment box that saves itself).
   if (!verdict.consequential && kind !== 'submit' && (ctx.askBefore ?? []).map(norm).includes(norm(info.name ?? ''))) {
-    verdict = { consequential: true, consequence: kind === 'type' ? 'save it to the record right away (this box saves itself)' : 'change the record right away' };
+    verdict = { consequential: true, consequence: kind === 'type' ? 'change the record as you type (this site asks before typing here)' : 'change the record right away' };
     if (kind === 'type' && typed !== undefined) action = `Type “${typed}” into “${info.name}”?`;
   }
   if (!verdict.consequential) return null;
@@ -542,7 +542,7 @@ const clear: AgentTool<{ id: number }> = {
 
 const selectOption: AgentTool<{ id: number; option: string }> = {
   name: 'select_option',
-  description: 'Choose an option in a native dropdown (<select>) by its visible text. For custom dropdowns, click to open them and then click the option instead.',
+  description: 'Choose an option in a dropdown by its visible text — a native <select>, or an Ant Design one (it opens it, narrows or scrolls the list, and clicks the option). For other custom dropdowns, click to open them and then click the option instead.',
   schema: z.object({ id, option: str().describe('Visible text of the option') }),
   risk: 'action',
   touchesPage: true,

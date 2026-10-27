@@ -192,7 +192,8 @@ export class BrowserController {
       }
       chrome.tabs.onUpdated.addListener(listener);
     });
-    const settled = this.send({ kind: 'settle', quietMs: 350, timeoutMs: 2500 }).catch(() => null);
+    // A save that is still answering (“Saving…”) is waited for, up to 5 s.
+    const settled = this.send({ kind: 'settle', quietMs: 350, timeoutMs: 5000 }).catch(() => null);
     const navigated = await navStarted;
     let alerts: string[] = [];
     let effect: ClickEffect | undefined;

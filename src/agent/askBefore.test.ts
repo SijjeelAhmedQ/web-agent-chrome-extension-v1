@@ -24,7 +24,7 @@ describe('ask-before controls', () => {
     const type = BROWSER_TOOLS.find((t) => t.name === 'type')!;
     const ask = await type.assess!({ id: 3, text: '[web agent test] comment', clear: true, submit: false }, ctxFor('Diagnostic Comment', 'textbox', 'textarea'));
     expect(ask?.title).toBe('Type “[web agent test] comment” into “Diagnostic Comment”?');
-    expect(ask?.detail).toMatch(/saves itself/);
+    expect(ask?.detail).toMatch(/as you type/);
   });
 
   it('keeps the list when the configuration is loaded', async () => {

@@ -431,11 +431,11 @@
           "id": "kb_smart_2",
           "kind": "workflow",
           "title": "Find records — search and filters",
-          "content": "1. Type what the user gave: Patient Name, NHI, Date of birth (DD/MM/YYYY) or Phone; change the Date range only if the user gave dates.\n2. A dropdown (Status, File, Category, Message Subject, Providers, Sender, AI): click it, then click the option (\"Abnormal\", \"Unfiled\", \"Lab\"…). Set only those the user named.\n3. Click \"Search\", then read the patient list. \"Reset\" clears every filter.\n4. The counts Normal / Abnormal / Unfiled Records are at the top; say them when the user asks how many.",
+          "content": "1. Type what the user gave: Patient Name, NHI, Date of birth (DD/MM/YYYY) or Phone; change the Date range only if the user gave dates.\n2. A dropdown (Status, File, Category, Message Subject, Providers, Sender, AI): select_option with the option (\"Abnormal\", \"Unfiled\", \"Lab\"…). Set only those the user named.\n3. Click \"Search\", then read the patient list. \"Reset\" clears every filter.\n4. The counts Normal / Abnormal / Unfiled Records are at the top; say them when the user asks how many.",
           "trigger": "find arya stark’s unfiled abnormal lab results",
           "enabled": true,
           "createdAt": 1792999777295,
-          "updatedAt": 1792999777295
+          "updatedAt": 1793087801694
         },
         {
           "id": "kb_smart_3",
@@ -532,6 +532,54 @@
           "createdAt": 1793011569848,
           "updatedAt": 1793013499851,
           "content": "On the right of an open patient: \"AI Patient Summary\" and \"AI Result Summary\" (the app's AI wrote them — say so when you quote them), then \"Patient AI Actions (covers N unfiled results)\" with a count; \"Open AI actions\" (✦, bottom right) opens it when it is closed.\n- Each suggestion is a card: its kind (ADD TASK, ADD DIAGNOSIS, ADD RECALL, DRAFT EMAIL, DRAFT TEXT), a text box with the AI's words (Task subject, Diagnosis name, Add Recall, Draft Email, Draft Text), \"Dismiss suggestion\", and its button: Add task (and Add urgent), Add diagnosis, Add recall, Send email, Send Text.\n- \"Add task\" opens \"QUICK EDIT\" in the card (priority Normal); \"Add urgent\" does the same with priority Urgent — use it only when the user said urgent. QUICK EDIT: TASK, DUE DATE (DD/MM/YYYY), PRIORITY (Normal, Medium, Urgent), ASSIGN TO, LOCATION; then Dismiss, Cancel, \"Full Form\" (the full Add Task form, filled from it) and \"Create\" (saves it).\n- Which card: the one whose text matches what the user asked for; several alike — ask. Change the card's text only to the user's words. Each Add, Create, Dismiss, Send — the user approves it. Send email / Send Text go to the patient: only when the user asked, to the address the user gave.\n- An added or dismissed suggestion leaves the list (the count goes down). Check the result: a task, recall or diagnosis then shows in Indici (the patient's Task list, Recalls, Diagnosis)."
+        },
+        {
+          "id": "kb_smart_task",
+          "kind": "workflow",
+          "title": "Add a task (AI card, Full Form or Actions menu)",
+          "trigger": "add the suggested task for aqib, due next week",
+          "content": "Which way: the user names an AI suggestion (\"the suggested task\", \"the AI recall\", its words) → its card in Patient AI Actions (rule \"Patient AI Actions panel\"); the user says \"full form\" → the card's Full Form; otherwise the quick edit. A new one the AI didn't suggest → the Actions menu (task, recall) — never change a suggestion's card into something else.\nFill only what the user gave; leave the AI's filled values unless the user changed them; ask for a required field still empty. Each Add, Create and Save — the user approves it. After saving, check it on the page (the card left the list, or the form closed with no error) before saying it was added; if you can't see it, say so.\n1. AI card ADD TASK: \"Add task\" (or \"Add urgent\" only when the user said urgent) opens QUICK EDIT — TASK (the subject), DUE DATE (DD/MM/YYYY), PRIORITY (Normal, Medium, Urgent), ASSIGN TO, LOCATION. Change what the user gave, then \"Create\".\n2. Full Form (from the quick edit): \"Add Task — Full form, AI PRE-FILLED\": Location, To*, From, Priority*, Start*, Due In, Due*, Start Time, End Time, Type, Subject / Progress* (its box is named \"Write Recall Notes\"); \"Save task\".\n3. A new task: Actions › Create Task — the same form, empty; \"Save task\".",
+          "enabled": true,
+          "createdAt": 1793085876884,
+          "updatedAt": 1793085876884
+        },
+        {
+          "id": "kb_smart_recall",
+          "kind": "workflow",
+          "title": "Add a recall (AI card, Full Form or Actions menu)",
+          "trigger": "add the AI recall for aqib with the full form",
+          "content": "Which way: the user names an AI suggestion (\"the suggested task\", \"the AI recall\", its words) → its card in Patient AI Actions (rule \"Patient AI Actions panel\"); the user says \"full form\" → the card's Full Form; otherwise the quick edit. A new one the AI didn't suggest → the Actions menu (task, recall) — never change a suggestion's card into something else.\nFill only what the user gave; leave the AI's filled values unless the user changed them; ask for a required field still empty. Each Add, Create and Save — the user approves it. After saving, check it on the page (the card left the list, or the form closed with no error) before saying it was added; if you can't see it, say so.\n1. AI card ADD RECALL: \"Add recall\" opens QUICK EDIT — RECALL GROUP (select_option) and RECALL DATE (filled); then \"Create\".\n2. Full Form (from the quick edit): \"Add Recall — Full form, AI PRE-FILLED\": Provider*, Recall Group*, Description* (its list follows the group), Notes (the AI's words, filled), Priority (Medium), Recall In* (sets the Due Date), Due Date*, Actual Recall Date, Cycle (Yearly), tick boxes Active, Confidential, Do not show on Portal; \"Save\".\n3. A new recall: Actions › Create Recall — the same form, empty; \"Save\".\nRecall Group and Description: ask the user when they didn't say, listing what the dropdown shows (e.g. Bloods → CBC, HBA1C…).",
+          "enabled": true,
+          "createdAt": 1793085876884,
+          "updatedAt": 1793087801694
+        },
+        {
+          "id": "kb_smart_diagnosis",
+          "kind": "workflow",
+          "title": "Add a diagnosis (AI card or its Full Form)",
+          "trigger": "add the suggested diagnosis dyslipidaemia for aqib",
+          "content": "Which way: the user names an AI suggestion (\"the suggested task\", \"the AI recall\", its words) → its card in Patient AI Actions (rule \"Patient AI Actions panel\"); the user says \"full form\" → the card's Full Form; otherwise the quick edit. A new one the AI didn't suggest → the Actions menu (task, recall) — never change a suggestion's card into something else.\nFill only what the user gave; leave the AI's filled values unless the user changed them; ask for a required field still empty. Each Add, Create and Save — the user approves it. After saving, check it on the page (the card left the list, or the form closed with no error) before saying it was added; if you can't see it, say so.\nA diagnosis is added only from an AI card here — the Actions menu has none; for one the AI didn't suggest, tell the user it is added in Indici's consult.\n1. AI card ADD DIAGNOSIS: \"Add diagnosis\" opens QUICK EDIT — DIAGNOSIS NAME, DETAILS (the AI's summary), DIAGNOSIS TYPE (e.g. disorder, finding); then \"Create\".\n2. Full Form (from the quick edit): \"Add Diagnosis — Full form, AI PRE-FILLED\": Concept ID, Synonym, Fully Specified Name; Diagnosis Options (tick boxes) Long Term, Problem List, Highlight, Add Recall, Confidential, Do not show on Portal, Add To CarePlan; Diagnosis Status Confirmed / Interim / Suspected / Probable; Onset Date; Notes; \"Save\" (\"Health Pathways\" and \"Up-to Date\" only show information).\nTick an option or choose a status only when the user said it.\n- A save that answers \"Something went wrong, Please try again\" did not save. The Full Form does this when its Concept ID is <UNKNOWN> (the AI found no code for the diagnosis): tell the user, and offer the quick edit's Create instead — don't press Save again.",
+          "enabled": true,
+          "createdAt": 1793085876884,
+          "updatedAt": 1793089287502
+        },
+        {
+          "id": "kb_smart_medication",
+          "kind": "rule",
+          "title": "Medications in the Smart AI Inbox",
+          "enabled": true,
+          "createdAt": 1793085876884,
+          "updatedAt": 1793085876884,
+          "content": "The Smart AI Inbox can't add, change or stop a medication — it only shows them (Clinical Summary › Medications). Asked to add one: tell the user it is done in Indici's consult, and offer to open it with \"Go to Consult for <name>\" (it opens in Indici, where Indici's workflow \"Add a medication in the consult\" applies). Open it only when the user says yes."
+        },
+        {
+          "id": "kb_smart_dropdowns",
+          "kind": "rule",
+          "title": "Dropdowns and pop-up forms (Smart AI Inbox)",
+          "enabled": true,
+          "createdAt": 1793087801694,
+          "updatedAt": 1793087801694,
+          "content": "- Every dropdown here (Provider, Recall Group, Description, Recall In, Priority, Cycle, To, Location, Type, the search filters) is a custom one: choose with select_option and the option's text, e.g. select_option(Recall Group, \"Bloods\") — don't type into it or click its options yourself. A dropdown whose list follows another (Description after Recall Group) is chosen after that one. If select_option says there is no such option, it lists the ones there: ask the user which.\n- Never press Escape in a pop-up form: it closes the form and loses what was filled. Leave a form only with its Cancel or Close, and only when the user wants it left.\n- Stay on the way the user asked for (the AI card, its Full Form, or the Actions menu); if it doesn't work, tell the user instead of starting the same thing another way."
         }
       ],
       "createdAt": 1792999777295,

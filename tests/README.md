@@ -187,6 +187,10 @@ The Smart AI Inbox has its own tab. Start these with `TAB=inbox-app` so they wor
 | `live-explore.mjs "<name>" …` | Opens each named control, prints what appeared, then presses Escape. Never give it a control that saves or files |
 | `live-actionforms.mjs Actions "Create Task"` | Opens a menu item's pop-up, prints its form fields, then cancels it. Nothing is saved |
 | `live-close-inbox.mjs` | Closes the Smart Inbox tabs, to try "open smart inbox" from Indici again |
+| `live-antselect.mjs "Create Recall" "Recall Group=Bloods" …` | Opens an Actions form, chooses each Ant Design dropdown with `select_option`, prints what the Save's approval card would show, then closes it. Nothing is saved |
+| `live-aicards.mjs "Aqib" "Add recall" "Add diagnosis"` | Opens a patient's AI cards: each card's quick edit and its Full Form, printed, then cancelled. Nothing is created |
+| `live-aifullform.mjs "Serial FBCs" "Add recall" "Description=CBC" "Notes~text"` | An AI card's Full Form as the agent fills it (`=` chooses, `~` types), and what its Save card would show; then closed |
+| `live-aidiagsave.mjs "Dyslipidaemia" "[web agent test] …"` | **Saves** an AI diagnosis through its Full Form and prints the page's messages for 20 s (the app answers “Something went wrong” when the Concept ID is `<UNKNOWN>`) |
 | `live-close-dialogs.mjs` | Closes pop-ups left open on the tab with their Close / Cancel / × (nothing saved) |
 | `live-panel-state.mjs` | The side panel now: the approval card waiting, if any, and the end of the last turn |
 | `live-panel-answer.mjs yes|no` | Answers the approval card waiting in the side panel (after a runner stopped) |

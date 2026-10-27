@@ -9,7 +9,7 @@ import type {
   SelectResult,
   TypeResult,
 } from '../messaging/protocol';
-import { accessibleName, elementFor, hasHiddenMenu, isDisabled, isEditable, isVisible, OVERLAY_HOST_ID, roleOf } from './elements';
+import { accessibleName, elementFor, hasHiddenMenu, isDisabled, isEditable, isVisible, OVERLAY_HOST_ID, roleOf, visualLabelInfo } from './elements';
 import { isHovered, openHoverMenu, releaseHoverUnlessInside } from './hover';
 import { highlight } from './overlay';
 import { showingDialogs } from './snapshot';
@@ -344,7 +344,7 @@ export async function type(id: number, text: string, clearFirst: boolean, show: 
 export function fieldText(id: number): { value: string } {
   const field = editableTarget(resolve(id));
   const value = isInput(field) || isTextArea(field) ? field.value : (field.innerText ?? '');
-  return { value: value.replace(/s+/g, ' ').trim().slice(0, 200) };
+  return { value: value.replace(/\s+/g, ' ').trim().slice(0, 200) };
 }
 
 export async function clear(id: number, show: boolean): Promise<TypeResult> {
@@ -372,6 +372,8 @@ export async function select(id: number, option: string, show: boolean): Promise
   const el = resolve(id);
   const native = isSelect(el) ? el : el.querySelector('select');
   if (!native) {
+    const custom = await chooseInCustom(el, option, show);
+    if (custom) return custom;
     return fail('not_native_select', `“${accessibleName(el) || 'That control'}” is a custom dropdown.`, 'Click it to open the list, then click the option you want (read_page after opening).');
   }
   if (native.disabled) fail('disabled', `“${accessibleName(native)}” is disabled.`);
@@ -392,6 +394,73 @@ export async function select(id: number, option: string, show: boolean): Promise
   native.dispatchEvent(new Event('input', { bubbles: true }));
   native.dispatchEvent(new Event('change', { bubbles: true }));
   return { element: summary(native), selected: match.text.trim() };
+}
+
+/**
+ * An Ant Design dropdown (the Smart Inbox's Provider, Recall Group, Description…): opened with a press on it,
+ * narrowed by typing when it has a search box, scrolled through when its list is long (only the options in
+ * view are on the page), and the option clicked. Null when it isn't one.
+ */
+async function chooseInCustom(el: Element, option: string, show: boolean): Promise<SelectResult | null> {
+  const box = el.closest('.ant-select') ?? el.querySelector('.ant-select');
+  if (!box) return null;
+  // Its label on the form, not its generated id (“rc_select_40”).
+  const label = visualLabelInfo(box).text.replace(/[:*]\s*$/, '').trim();
+  const own = accessibleName(el);
+  const name = label || (own && !/^rc_select_/.test(own) ? own : '') || 'That dropdown';
+  // One whose list follows another field (Description after Recall Group) opens a moment after that is chosen.
+  for (let i = 0; i < 10 && box.matches('.ant-select-disabled'); i++) await sleep(300);
+  if (box.matches('.ant-select-disabled')) fail('disabled', `“${name}” is disabled — it may need another field chosen first.`);
+  await prepare(box, 'Selecting', show);
+  const input = box.querySelector('input') as HTMLInputElement | null;
+  const opener = box.querySelector('.ant-select-selector') ?? box;
+  const popup = (): Element | null => {
+    const list = input?.getAttribute('aria-controls') || input?.getAttribute('aria-owns');
+    const own = list ? document.getElementById(list)?.closest('.ant-select-dropdown') : null;
+    if (own && isVisible(own)) return own;
+    return Array.from(document.querySelectorAll('.ant-select-dropdown')).filter((d) => isVisible(d) && !d.matches('.ant-select-dropdown-hidden')).at(-1) ?? null;
+  };
+  if (!popup()) {
+    dispatchPointerSequence(opener);
+    opener.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }));
+    await sleep(350);
+  }
+  const wanted = optionNorm(option);
+  const textOf = (o: Element) => optionNorm(o.getAttribute('title') || (o as HTMLElement).innerText || '');
+  const seen = new Set<string>();
+  const find = (): Element | null => {
+    const options = Array.from(popup()?.querySelectorAll('.ant-select-item-option') ?? []);
+    for (const o of options) seen.add(((o as HTMLElement).innerText ?? '').trim());
+    return options.find((o) => textOf(o) === wanted) ?? options.find((o) => textOf(o).startsWith(wanted)) ?? options.find((o) => textOf(o).includes(wanted)) ?? null;
+  };
+  let match = find();
+  // A searchable one: type to narrow the list.
+  if (!match && input && !input.readOnly && box.matches('.ant-select-show-search')) {
+    setFieldValue(input, option, option);
+    await sleep(500);
+    match = find();
+  }
+  // A long list shows only what is in view: scroll through it.
+  const holder = popup()?.querySelector('.rc-virtual-list-holder') as HTMLElement | null;
+  for (let i = 0; !match && holder && i < 30 && holder.scrollTop + holder.clientHeight < holder.scrollHeight; i++) {
+    holder.scrollTop += Math.max(40, holder.clientHeight - 20);
+    holder.dispatchEvent(new Event('scroll', { bubbles: true }));
+    await sleep(120);
+    match = find();
+  }
+  if (!match) {
+    // Leave it as it was: no search text behind, the list closed.
+    if (input?.value) setFieldValue(input, '', null);
+    input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    const list = Array.from(seen).filter(Boolean).slice(0, 40);
+    return fail('option_not_found', `There's no option “${option}” in “${name}”.`, list.length ? `Available: ${list.join(' | ')}` : 'Its list was empty — another field may need choosing first.');
+  }
+  const picked = ((match as HTMLElement).innerText ?? '').trim();
+  dispatchPointerSequence(match);
+  match.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }));
+  await sleep(300);
+  const shown = Array.from(box.querySelectorAll('.ant-select-selection-item')).map((c) => (c.getAttribute('title') || (c as HTMLElement).innerText || '').trim()).filter(Boolean);
+  return { element: summary(el), selected: shown.join(', ') || picked };
 }
 
 function isScrollable(el: Element): boolean {
@@ -527,22 +596,47 @@ export function pageAlerts(): string[] {
   return [...out].slice(0, 8);
 }
 
+const TOASTS = '[role=alert],.ant-message-notice,.ant-notification-notice';
+
+/** A save still on its way: a button saying “Saving…”, or one marked busy or loading. */
+function stillSaving(): boolean {
+  if (document.querySelector('.ant-btn-loading,[aria-busy=true]:not(body)')) return true;
+  return Array.from(document.querySelectorAll('button')).some((b) => isVisible(b) && /^(saving|submitting|sending|please wait)\b/i.test((b.innerText ?? '').trim()));
+}
+
 export function settle(quietMs: number, timeoutMs: number): Promise<{ mutations: number; url: string; title: string; alerts: string[]; effect?: ClickEffect }> {
   return new Promise((done) => {
     let mutations = 0;
+    // A toast that comes and goes while waiting (“Something went wrong”, “Saved”) is kept: it says how it went.
+    const toasts = new Set<string>();
     let quietTimer = setTimeout(finish, quietMs);
-    const hardTimer = setTimeout(finish, timeoutMs);
+    const hardTimer = setTimeout(() => finish(true), timeoutMs);
     const observer = new MutationObserver((records) => {
       mutations += records.length;
+      for (const r of records) {
+        for (const n of Array.from(r.addedNodes)) {
+          if (!(n instanceof Element)) continue;
+          for (const t of [n, ...Array.from(n.querySelectorAll(TOASTS))].filter((e) => e.matches(TOASTS))) {
+            const text = ((t as HTMLElement).innerText ?? '').replace(/\s+/g, ' ').trim();
+            if (text && text.length < 200) toasts.add(text);
+          }
+        }
+      }
       clearTimeout(quietTimer);
       quietTimer = setTimeout(finish, quietMs);
     });
     observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
-    function finish() {
+    function finish(hard = false) {
+      // Quiet, but the save hasn't answered yet: wait for its answer (up to the time limit).
+      if (!hard && stillSaving()) {
+        quietTimer = setTimeout(finish, quietMs);
+        return;
+      }
       observer.disconnect();
       clearTimeout(quietTimer);
       clearTimeout(hardTimer);
-      done({ mutations, url: location.href, title: document.title, alerts: pageAlerts(), effect: currentEffect() });
+      const alerts = [...new Set([...pageAlerts(), ...toasts])].slice(0, 8);
+      done({ mutations, url: location.href, title: document.title, alerts, effect: currentEffect() });
     }
   });
 }
