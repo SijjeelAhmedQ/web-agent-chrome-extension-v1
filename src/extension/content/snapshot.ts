@@ -537,8 +537,10 @@ function formActions(el: Element): { id: number; name: string }[] {
  * the button that holds a few fields — not the whole page.
  */
 function cardAround(el: Element): Element | null {
+  // A menu's item opens something — the fields beside the menu (a record's comment box) are not its own.
+  if (el.matches('[role=menuitem],[role=option],[role=tab],a[href]') || el.closest('[role=menu],[role=listbox],[role=menubar],[role=tablist]')) return null;
   let box = el.parentElement;
-  for (let depth = 0; box && depth < 6; depth++, box = box.parentElement) {
+  for (let depth = 0; box && depth < 6 && box !== document.body; depth++, box = box.parentElement) {
     const fields = Array.from(box.querySelectorAll('input:not([type=hidden]),textarea,select,[contenteditable=true]')).filter((f) => isVisible(f));
     if (fields.length > 12) return null;
     if (fields.length) return box;
