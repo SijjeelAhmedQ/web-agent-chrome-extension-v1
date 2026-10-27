@@ -2,7 +2,7 @@ import { BrowserController, PageError, scriptableReason } from '@/extension/brow
 import type { ForegroundLock } from '@/extension/browser/foreground';
 import { BUILT_IN_TOOL_IDS } from '@/shared/constants/tools';
 import { upsertTask } from '@/shared/storage/historyStore';
-import type { AgentConfig, AppConfig, ProviderConfig } from '@/shared/types/config';
+import type { AgentConfig, AppConfig, ProviderConfig, SiteProfile } from '@/shared/types/config';
 import type { StepRecord, TaskRecord } from '@/shared/types/history';
 import { clip, matchesSite, siteOf, uid } from '@/shared/utils';
 import { AgentError, isAbort, toAgentError } from '@/shared/utils/errors';
@@ -114,6 +114,8 @@ export class AgentRun {
   private checklist = new Checklist();
   /** The site knowledge in the prompt — values written there count as the user's. */
   private knowledgeText = '';
+  /** The sites of the tab the agent last worked on — its knowledge goes in the prompt when the task moved there. */
+  private hereSites: SiteProfile[] = [];
   /** Set when the task must end now, with this answer. */
   private endWith: string | null = null;
   private task!: TaskRecord;
@@ -258,15 +260,22 @@ export class AgentRun {
     // With a checklist, the ticked items already say what is done.
     this.doneBefore = new Set(this.checklist.size ? [] : (followUp?.doneSteps ?? []));
     const pageNote = scriptableReason(url) ?? undefined;
-    const system = buildSystemPrompt({
-      agent,
-      toolNames: [...byName.keys()],
-      alwaysSkills: toolset.alwaysSkills,
-      onDemandSkills: toolset.onDemandSkills,
-      page: { title: tab?.title ?? '', url, note: pageNote ? `${pageNote} Navigate to a website if the task needs one.` : undefined },
-      readOnly: matchesSite(url, config.settings.readOnlySites),
-      siteKnowledge: (this.knowledgeText = knowledgeSection(toolset.sites, followUp ? `${followUp.task}\n${request}` : request, knowledgeBudget(contextWindowOf(provider))).text),
-    });
+    const systemFor = (sites: SiteProfile[]) => {
+      const knowledge = knowledgeSection(sites, followUp ? `${followUp.task}\n${request}` : request, knowledgeBudget(contextWindowOf(provider))).text;
+      this.knowledgeText += `\n${knowledge}`;
+      return buildSystemPrompt({
+        agent,
+        toolNames: [...byName.keys()],
+        alwaysSkills: toolset.alwaysSkills,
+        onDemandSkills: toolset.onDemandSkills,
+        page: { title: tab?.title ?? '', url, note: pageNote ? `${pageNote} Navigate to a website if the task needs one.` : undefined },
+        readOnly: matchesSite(url, config.settings.readOnlySites),
+        siteKnowledge: knowledge,
+      });
+    };
+    const siteKey = (sites: SiteProfile[]) => sites.map((s) => s.id).join(',');
+    let system = systemFor(toolset.sites);
+    let knowledgeOf = siteKey(toolset.sites);
     // Earlier answers are context, not facts about the page now.
     const history = historyForModel(this.options.history.slice(-12), followUp);
     const messages: ChatMessage[] = [{ role: 'system', content: system }, ...history, { role: 'user', content: followUp?.request ?? request }];
@@ -295,6 +304,18 @@ export class AgentRun {
     const stepLimit = this.stepLimit(agent.maxSteps) * (decider ? 2 : 1);
     for (let step = 0; step < stepLimit; step++) {
       this.throwIfCancelled();
+      // The task moved to another site (Indici → its Smart Inbox, in a new tab): the knowledge of that site, as if
+      // the task had started there — a title search would miss its workflows. Back on the first site, its own again.
+      if (this.hereSites.length && siteKey(this.hereSites) !== knowledgeOf) {
+        knowledgeOf = siteKey(this.hereSites);
+        system = systemFor(this.hereSites);
+        // Steps planned on the site before (“open the patient's consult”) mean something else here.
+        const names = this.hereSites.map((s) => s.name).join(', ');
+        messages.push({
+          role: 'user',
+          content: `(The task is on ${names} now. What the user taught you about it is in your instructions now, in place of the site before. Do the steps left${this.checklist.size ? ' on your checklist' : ''} the way it says here — its workflows and its controls — not the way you planned them on the site before. A step that names something of the site before (e.g. opening a patient's consult) means what it is for: do that here, the way this site does it.)`,
+        });
+      }
       // The checklist is shown again before every step: early steps may have been dropped to fit.
       messages[0] = { role: 'system', content: `${system}${decider ? `\n\n${WORKER_ROLE}` : ''}${this.checklist.size ? `\n\n${this.checklist.section()}` : ''}` };
       // A decision carried out at length without a word back: the decision model looks again.
@@ -683,6 +704,7 @@ export class AgentRun {
       if (tool.touchesPage) {
         const here = sitesFor(this.options.config, (await ctx.browser.currentTab().catch(() => null))?.url ?? '');
         if (here.length) {
+          this.hereSites = here;
           ctx.neverClick = [...new Set([...(ctx.neverClick ?? []), ...here.flatMap((s) => s.neverClick ?? [])])];
           ctx.askBefore = [...new Set([...(ctx.askBefore ?? []), ...here.flatMap((s) => s.askBefore ?? [])])];
         }
@@ -781,7 +803,7 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
       if (form && !/^Not saved/.test(outcome.note ?? '')) this.savedForms.add(form);
       // The checklist's item in hand now has a change of its own to show for it.
       if (!/^Not saved/.test(outcome.note ?? '') && this.checklist.size) {
-        this.checklist.markSaved();
+        this.checklist.markSaved([approvalNeeded.title, ...(approvalNeeded.fields ?? []).map((f) => `${f.label} ${f.value}`)].join(' '));
         this.updateTask({ checklist: this.checklist.items.map((i) => ({ ...i })) });
       }
       // A form's button: which one, and the form's first values say what it saved.

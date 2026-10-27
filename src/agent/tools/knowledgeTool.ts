@@ -30,7 +30,8 @@ export function knowledgeTool(sites: SiteProfile[], here?: (ctx: ToolContext) =>
         ctx.overviewTextChars && rest.length
           ? `${formatEntry(best)}\n\nAlso saved: ${rest.map((e) => `“${e.title.trim()}”`).join(', ')} — look one up by its name if you need it.`
           : found.map(formatEntry).join('\n\n');
-      return { output, note: `${found.length} ${found.length === 1 ? 'entry' : 'entries'} · ${names}` };
+      const from = fromHere.length ? moved.map((s) => s.name).join(', ') : names;
+      return { output, note: `${found.length} ${found.length === 1 ? 'entry' : 'entries'} · ${from}` };
     },
   };
 }

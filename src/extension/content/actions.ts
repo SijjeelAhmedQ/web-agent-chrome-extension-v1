@@ -368,6 +368,8 @@ export async function clear(id: number, show: boolean): Promise<TypeResult> {
 }
 
 const optionNorm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+/** Singular and plural alike — “3 Months” is the option “3 Month(s)”. Only for an exact match after the others. */
+const optionLoose = (s: string) => optionNorm(s).replace(/\(s\)/g, '').replace(/([a-z])s\b/g, '$1');
 
 export async function select(id: number, option: string, show: boolean): Promise<SelectResult> {
   const el = resolve(id);
@@ -383,7 +385,8 @@ export async function select(id: number, option: string, show: boolean): Promise
   const match =
     options.find((o) => optionNorm(o.text) === wanted || optionNorm(o.value) === wanted) ??
     options.find((o) => optionNorm(o.text).startsWith(wanted)) ??
-    options.find((o) => optionNorm(o.text).includes(wanted));
+    options.find((o) => optionNorm(o.text).includes(wanted)) ??
+    options.find((o) => optionLoose(o.text) === optionLoose(option));
   if (!match) {
     return fail('option_not_found', `There's no option “${option}”.`, `Available: ${options.map((o) => o.text.trim()).filter(Boolean).slice(0, 40).join(' | ')}`);
   }
@@ -432,7 +435,13 @@ async function chooseInCustom(el: Element, option: string, show: boolean): Promi
   const find = (): Element | null => {
     const options = Array.from(popup()?.querySelectorAll('.ant-select-item-option') ?? []);
     for (const o of options) seen.add(((o as HTMLElement).innerText ?? '').trim());
-    return options.find((o) => textOf(o) === wanted) ?? options.find((o) => textOf(o).startsWith(wanted)) ?? options.find((o) => textOf(o).includes(wanted)) ?? null;
+    return (
+      options.find((o) => textOf(o) === wanted) ??
+      options.find((o) => textOf(o).startsWith(wanted)) ??
+      options.find((o) => textOf(o).includes(wanted)) ??
+      options.find((o) => optionLoose(textOf(o)) === optionLoose(option)) ??
+      null
+    );
   };
   let match = find();
   // A searchable one: type to narrow the list.
@@ -440,6 +449,12 @@ async function chooseInCustom(el: Element, option: string, show: boolean): Promi
     setFieldValue(input, option, option);
     await sleep(500);
     match = find();
+    // Worded unlike the option (“3 Months” for “3 Month(s)”): the whole list again, to look through.
+    if (!match) {
+      setFieldValue(input, '', null);
+      await sleep(300);
+      match = find();
+    }
   }
   // A long list shows only what is in view: scroll through it.
   const holder = popup()?.querySelector('.rc-virtual-list-holder') as HTMLElement | null;

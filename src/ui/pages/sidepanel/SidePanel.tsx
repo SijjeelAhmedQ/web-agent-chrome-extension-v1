@@ -145,7 +145,7 @@ export function SidePanel() {
           <Settings2 size={16} />
         </IconButton>
       </header>
-      {providers.length > 0 && <RuntimeBar agent={agent} config={config} url={tab.url} />}
+      {providers.length > 0 && <RuntimeBar agent={agent} config={config} url={tab.url} running={running} />}
 
       {view === 'history' ? (
         <HistoryView onBack={() => setView('chat')} onRunAgain={onSend} onResume={(task) => { setView('chat'); void resume(task); }} busy={running} />

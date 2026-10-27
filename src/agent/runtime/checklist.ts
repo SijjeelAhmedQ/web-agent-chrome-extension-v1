@@ -12,9 +12,17 @@ export class Checklist {
   items: ChecklistItem[];
   /** Items whose tick was held back once because the page didn't show what they quote. */
   asked = new Set<number>();
-  /** Something the user approved was done: it belongs to the item in hand. */
-  markSaved(): void {
-    const item = this.items.find((i) => !i.done);
+  /**
+   * Something the user approved was done: it belongs to the item in hand — or, when `what` (the approval's
+   * title and fields) shares words with a later item still without a save, to that one: the model may tick
+   * an item only after the next one's save (a task ticked after the recall was saved).
+   */
+  markSaved(what = ''): void {
+    const open = this.items.filter((i) => !i.done);
+    const words = new Set(norm(what).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 2));
+    const shared = (i: ChecklistItem) => norm(i.text).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 2 && words.has(w)).length;
+    const best = open.filter((i) => !i.saved).sort((a, b) => shared(b) - shared(a))[0];
+    const item = best && shared(best) > (open[0] ? shared(open[0]) : 0) ? best : open[0];
     if (item) item.saved = true;
   }
 

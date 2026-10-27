@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/agent/llm';
+import { describeCredit, fetchCredit, hasCredit, LOW_CREDIT, type Credit } from '@/agent/llm/credit';
 import { resolveProvider } from '@/agent/runtime/agentRun';
 import { locationOf, modelLabel, type Location } from '@/shared/constants/providers';
 import type { AgentConfig, AppConfig, ProviderConfig } from '@/shared/types/config';
@@ -17,13 +18,23 @@ export interface RuntimePart {
   location: { kind: Location; label: string; host: string };
   connection: string;
   health: Health;
+  /** What the connection's key can still spend (OpenRouter). */
+  credit?: Credit;
 }
 
 const REFRESH_MS = 120_000;
 const CHECKING: Health = { state: 'checking', message: 'Checking…' };
 
-async function checkActions(provider: ProviderConfig, model: string, signal: AbortSignal): Promise<Health> {
+async function checkActions(provider: ProviderConfig, model: string, signal: AbortSignal): Promise<Health & { credit?: Credit }> {
   try {
+    if (hasCredit(provider) && provider.apiKey) {
+      // OpenRouter: the key answers with what it can still spend — that is also the connection check.
+      const credit = await fetchCredit(provider, signal);
+      const text = describeCredit(credit);
+      if (credit.left === 0) return { state: 'error', message: `No credit left (${text}). Add credit or raise the key's limit on openrouter.ai.`, credit };
+      if (credit.left != null && credit.left < LOW_CREDIT) return { state: 'warning', message: `Credit running out: ${text}`, credit };
+      return { state: 'ok', message: `Connected · ${text}`, credit };
+    }
     if (provider.preset === 'kaggle') {
       // The notebook's /health says which GPU and which models it has.
       const h = await speechHealth({ serverUrl: provider.baseUrl, key: provider.apiKey }, signal);
@@ -48,7 +59,7 @@ async function checkActions(provider: ProviderConfig, model: string, signal: Abo
  * What powers the side panel right now — the active agent's model and the voice engine —
  * where each runs, and whether it answers. Re-checked on change, on focus and every 2 minutes.
  */
-export function useRuntimeStatus(agent: AgentConfig, config: AppConfig, url = '') {
+export function useRuntimeStatus(agent: AgentConfig, config: AppConfig, url = '', running = false) {
   const voice = config.settings.voice;
   const resolved = useMemo(() => {
     try {
@@ -58,7 +69,7 @@ export function useRuntimeStatus(agent: AgentConfig, config: AppConfig, url = ''
     }
   }, [agent, config, url]);
 
-  const [actionsHealth, setActionsHealth] = useState<Health>(CHECKING);
+  const [actionsHealth, setActionsHealth] = useState<Health & { credit?: Credit }>(CHECKING);
   const [voiceHealth, setVoiceHealth] = useState<Health>(CHECKING);
   const [checkedAt, setCheckedAt] = useState<number | null>(null);
   const abort = useRef<AbortController | null>(null);
@@ -94,6 +105,14 @@ export function useRuntimeStatus(agent: AgentConfig, config: AppConfig, url = ''
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
+  // A task that just finished has spent some of the credit: look again.
+  const wasRunning = useRef(running);
+  useEffect(() => {
+    if (wasRunning.current && !running && provider && hasCredit(provider)) void refresh();
+    wasRunning.current = running;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running]);
+
   useEffect(() => {
     void refresh();
     const timer = setInterval(() => void refresh(), REFRESH_MS);
@@ -107,7 +126,7 @@ export function useRuntimeStatus(agent: AgentConfig, config: AppConfig, url = ''
   }, [refresh]);
 
   const actions: RuntimePart | null = provider
-    ? { name: modelLabel(model), id: model, location: locationOf(provider.baseUrl, provider.preset), connection: provider.name, health: actionsHealth }
+    ? { name: modelLabel(model), id: model, location: locationOf(provider.baseUrl, provider.preset), connection: provider.name, health: actionsHealth, credit: actionsHealth.credit }
     : null;
   const engine = SPEECH_ENGINES.find((e) => e.id === voice.engine)!;
   const speech: RuntimePart | null = voiceOn

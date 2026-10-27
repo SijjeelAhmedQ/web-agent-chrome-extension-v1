@@ -57,6 +57,20 @@ describe('the checklist for a request with several things to do', () => {
     expect((await tool.execute(tool.schema.parse({ done: 3 }), ctx)).output).toContain('☑ 3.'); // reads nothing to save
   });
 
+  it('gives a save to the item it matches when the one before was ticked late', async () => {
+    const list = new Checklist([
+      { text: 'Open patient Arya STARK', done: true },
+      { text: 'Create task: subject "[web agent test] follow up bloods", due 30/11/2026', done: false },
+      { text: 'Create recall: group Bloods, description HBA1C, recall in 3 months', done: false },
+    ]);
+    list.markSaved('Click “Save task”? Subject / Progress [web agent test] follow up bloods Due 30/11/2026');
+    // The recall saved before the task was ticked: it is the recall's save, not the task's second one.
+    list.markSaved('Click “Save”? Recall Group Bloods Description HBA1C Recall In 3 Month(s)');
+    const tool = checklistTool(list, () => undefined);
+    expect((await tool.execute(tool.schema.parse({ done: 2 }), ctx)).output).toContain('☑ 2.');
+    expect((await tool.execute(tool.schema.parse({ done: 3 }), ctx)).output).toContain('☑ 3.');
+  });
+
   it('remembers across a question that the item in hand was saved', () => {
     const items = [{ text: 'Add recall: Bloods / CBC — save', done: false, saved: true }];
     const asked = rememberedAnswer('2 recalls of CBC already exist. Which button should I press?', [], items);

@@ -54,6 +54,7 @@ async function requestOnce<T>(url: string, init: RequestInit & { timeoutMs?: num
     if (res.status === 404 || /model.*(not found|does not exist)|unknown model|no such model/i.test(text)) {
       throw new AgentError('model_not_found', `The model wasn't found at ${host}. Check the model name in Models.`, detail);
     }
+    if (res.status === 402) throw new AgentError('model_error', `${host} says this key is out of credit. Add credit, or raise the key's limit, and try again.`, detail);
     if (res.status === 429) throw new AgentError('model_rate_limited', 'The model is getting too many requests. Wait a moment and try again.', detail);
     if (res.status === 400 && /tool|function/i.test(text)) {
       throw new AgentError('model_error', "This model doesn't seem to support tool calling. Choose a model that does.", detail);

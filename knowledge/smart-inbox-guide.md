@@ -172,20 +172,20 @@ add a new inbox record for Arya STARK, subject "<subject>", folder Lab, provider
 
 Inhein bilkul aise hi copy karein; naam aur values apni daal lein. Har likhne wale qadam par approval aayega.
 
-> ○ In mein se koi bhi poora ek hi run mein Smart Inbox par abhi test nahi hua. Har qadam alag alag ✓ hai (upar dekhein). Pehle ek ek chala kar dekhein.
+**Naya line:** message box mein Enter dabate hi message chala jaata hai. Kai lines likhni hon to **Shift+Enter** dabayein, ya poora transcript ek hi line mein likhein (`…then: 1. … ; 2. …`). Paste karne se lines theek rehti hain.
+
+> **B** ek hi request mein live ✓ chala (27/10/2026, Qwen3.8 27B, ~12 min): Indici se Smart Inbox, Arya list se khuli, task aur recall dono save, har Save par approval. Baaqi (A, C–F) ab tak ek hi run mein nahi chale — har qadam alag alag ✓ hai (upar dekhein).
 
 **A. Navigation se padhne tak**
 ```
 open smart inbox, find Arya STARK, show all her records (filed ones too), and summarize which are abnormal with the abnormal tests
 ```
 
-**B. Navigation se task aur recall (Actions menu)**
+**B. Navigation se task aur recall (Actions menu)** ✓
 ```
-open smart inbox, open Arya STARK, then:
-1. create a task: subject "[web agent test] follow up bloods", due <DD/MM/YYYY>, to <provider>
-2. create a recall: group Bloods, description HBA1C, recall in 3 months
-Tell me after each one whether it saved.
+open smart inbox, open Arya STARK, then: 1. create a task: subject "[web agent test] follow up bloods", due <DD/MM/YYYY>; 2. create a recall: group Bloods, description HBA1C, recall in 3 months. Tell me after each one whether it saved.
 ```
+- Task ka "To" na batayein to form ka pehle se bhara provider (jo login hai) rehta hai.
 
 **C. AI ke suggestions se (right panel)**
 ```

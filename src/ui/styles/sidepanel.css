@@ -676,6 +676,19 @@ body {
   color: var(--text-muted);
 }
 
+.rt-credit {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.rt-chip.warning .rt-credit {
+  color: var(--warning);
+}
+
+.rt-chip.error .rt-credit {
+  color: var(--danger);
+}
+
 .rt-dot {
   width: 7px;
   height: 7px;

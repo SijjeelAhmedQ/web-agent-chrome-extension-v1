@@ -1,10 +1,11 @@
 import { Popover } from 'antd';
-import { BookOpen, Cloud, Cpu, Laptop, Mic, RefreshCw, Server } from 'lucide-react';
+import { BookOpen, Cloud, Cpu, Laptop, Mic, RefreshCw, Server, Wallet } from 'lucide-react';
 import { sitesFor } from '@/agent/tools/registry';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { Location } from '@/shared/constants/providers';
 import type { AgentConfig, AppConfig } from '@/shared/types/config';
 import { formatRelative } from '@/shared/utils';
+import { dollars } from '@/agent/llm/credit';
 import { useRuntimeStatus, type Health, type RuntimePart } from '../hooks/useRuntimeStatus';
 import { openConfiguration } from '../utils/navigation';
 
@@ -24,6 +25,14 @@ function Chip({ icon, part, label }: { icon: ReactNode; part: RuntimePart; label
         ·
       </span>
       <span className="rt-place">{SHORT_PLACE[part.location.kind]}</span>
+      {part.credit?.left != null && (
+        <>
+          <span className="rt-sep" aria-hidden>
+            ·
+          </span>
+          <span className="rt-credit">{dollars(part.credit.left)} left</span>
+        </>
+      )}
       <Dot health={part.health} />
     </span>
   );
@@ -47,6 +56,13 @@ function Detail({ title, icon, part, action }: { title: string; icon: ReactNode;
         <Place size={13} aria-hidden /> {part.location.label}
       </div>
       {part.location.host && <div className="rt-host mono">{part.location.host}</div>}
+      {part.credit && (
+        <div className="rt-place-line">
+          <Wallet size={13} aria-hidden /> {part.credit.left == null ? 'No spending limit' : `${dollars(part.credit.left)} credit left`}
+          {part.credit.keyLimit != null && ` · key limit ${dollars(part.credit.keyLimit)}, ${dollars(part.credit.keyUsed)} used`}
+          {part.credit.account && ` · account ${dollars(part.credit.account.total - part.credit.account.used)} of ${dollars(part.credit.account.total)}`}
+        </div>
+      )}
       <div className={`rt-health ${part.health.state}`}>
         <Dot health={part.health} /> {part.health.message}
       </div>
@@ -55,8 +71,8 @@ function Detail({ title, icon, part, action }: { title: string; icon: ReactNode;
 }
 
 /** “Running on” — which model does the work, which one hears you, and where each runs. */
-export function RuntimeBar({ agent, config, url = '' }: { agent: AgentConfig; config: AppConfig; url?: string }) {
-  const { actions, voice, checkedAt, refresh } = useRuntimeStatus(agent, config, url);
+export function RuntimeBar({ agent, config, url = '', running = false }: { agent: AgentConfig; config: AppConfig; url?: string; running?: boolean }) {
+  const { actions, voice, checkedAt, refresh } = useRuntimeStatus(agent, config, url, running);
   const sites = sitesFor(config, url);
   const [, tick] = useState(0);
   useEffect(() => {

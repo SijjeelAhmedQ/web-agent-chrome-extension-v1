@@ -3,11 +3,12 @@ import { DEFAULT_CONTEXT_WINDOW } from '@/agent/llm/ollama';
 import { CheckCircle2, ExternalLink, Laptop, MoreHorizontal, Plus, RefreshCw, Star, Trash2, XCircle, Zap } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/agent/llm';
+import { describeCredit, fetchCredit, hasCredit } from '@/agent/llm/credit';
 import { KAGGLE_CONTEXT_WINDOW, PROVIDER_PRESETS, presetById, withApiPath, type ProviderPreset } from '@/shared/constants/providers';
 import { speechBase } from '@/shared/voice/speech';
 import type { ProviderConfig, ThinkingLevel } from '@/shared/types/config';
 import { thinkingOf, uid } from '@/shared/utils';
-import { toAgentError } from '@/shared/utils/errors';
+import { AgentError, toAgentError } from '@/shared/utils/errors';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { configActions } from '@/store/configSlice';
 import { FieldLabel, PageHeader, Section } from './parts';
@@ -17,6 +18,9 @@ type TestState = { status: 'idle' | 'testing' | 'ok' | 'error'; message?: string
 
 /** A tiny tool-calling round trip — proves the address, key, model and tool support at once. */
 async function testConnection(provider: ProviderConfig, model: string): Promise<string> {
+  // OpenRouter: what the key can still spend — checked first, so an empty key says why it fails.
+  const credit = hasCredit(provider) && provider.apiKey ? await fetchCredit(provider).then((c) => ` Credit: ${describeCredit(c)}.`, () => '') : '';
+  if (/^ Credit: \$0\.00 left/.test(credit)) throw new AgentError('model_error', `No credit left on this key.${credit} Add credit or raise the key's limit on openrouter.ai.`);
   const client = createClient(provider);
   const res = await client.chat({
     model,
@@ -27,8 +31,8 @@ async function testConnection(provider: ProviderConfig, model: string): Promise<
     ],
     tools: [{ name: 'ping', description: 'Confirms the connection works.', parameters: { type: 'object', properties: {}, additionalProperties: false } }],
   });
-  if (res.toolCalls.some((c) => c.name === 'ping')) return 'Connected — the model can use tools.';
-  return 'Connected, but the model answered without using a tool. Agents work best with models that support tool calling.';
+  if (res.toolCalls.some((c) => c.name === 'ping')) return `Connected — the model can use tools.${credit}`;
+  return `Connected, but the model answered without using a tool. Agents work best with models that support tool calling.${credit}`;
 }
 
 function PresetBadge({ preset, size = 36 }: { preset: ProviderPreset; size?: number }) {

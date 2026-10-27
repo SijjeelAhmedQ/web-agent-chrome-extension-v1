@@ -353,11 +353,11 @@
           "id": "kb_open_smart_inbox",
           "kind": "workflow",
           "title": "Open the Smart AI Inbox",
-          "content": "1. On Indici's Inbox (the Inbox panel of the dashboard, or Mailbox › Inbox), click the icon \"Open AI Assisted Inbox\" (✦, at the left end of the bar with Copied, Quick File, Flagged and All).\n2. The Smart AI Inbox opens in a new tab (inbox-app-dev.vitonta.com), signed in already — carry on there.\n3. Before working in it, look up \"Smart AI Inbox\" in the site knowledge: it has its own page and rules.",
+          "content": "1. On Indici's Inbox (the Inbox panel of the dashboard, or Mailbox › Inbox), click the icon \"Open AI Assisted Inbox\" (✦, at the left end of the bar with Copied, Quick File, Flagged and All).\n2. The Smart AI Inbox opens in a new tab (inbox-app-dev.vitonta.com), signed in already — carry on there.\n3. Before working in it, look up \"Smart AI Inbox\" in the site knowledge: it has its own page and rules.\n4. Plan what comes after by the Smart AI Inbox's ways, not Indici's: there a patient is opened by clicking the name in its patient list (not a consult), and a task, recall, comment or filing is done in the Smart AI Inbox itself (e.g. checklist items \"Open Arya STARK in the Smart AI Inbox\", \"Create task …\").",
           "trigger": "open the smart inbox",
           "enabled": true,
           "createdAt": 1792999777295,
-          "updatedAt": 1792999777295
+          "updatedAt": 1793107342476
         },
         {
           "id": "kb_add_inbox",
@@ -413,10 +413,10 @@
           "id": "kb_smart_0",
           "kind": "rule",
           "title": "Smart AI Inbox — what it is and what changes it",
-          "content": "Indici's AI-assisted inbox, in a tab of its own (inbox-app-dev.vitonta.com), signed in with the Indici login. It holds inbox records (lab, radiology, discharge, referrals) from the last year, grouped by patient.\n- Reading is safe, but the app itself marks a record read when it is shown — opening records changes their read state.\n- These change records: File, Unfile, File All Normal, File All, Save diagnostic comment, the tick boxes Do not show on Portal, Confidential and Inactive, Opt Out / Opt In, and the Save or Send of the Actions forms (text, email, task, recall, allergy). Do them only when the user asked; the user approves each one. Never file or change a record on your own.\n- Several patients match the user's words: never pick one — list them (name, NHI, age) and ask which.\n- A new inbox record is not added here: it is added in Indici, with \"Add to Patient Inbox\" on the dashboard's Inbox panel (switch to the Indici tab and follow Indici's workflow \"Add a record to a patient's inbox\"). It then shows here, unfiled.",
+          "content": "Indici's AI-assisted inbox, in a tab of its own (inbox-app-dev.vitonta.com), signed in with the Indici login. It holds inbox records (lab, radiology, discharge, referrals) from the last year, grouped by patient.\n- Reading is safe, but the app itself marks a record read when it is shown — opening records changes their read state.\n- These change records: File, Unfile, File All Normal, File All, Save diagnostic comment, the tick boxes Do not show on Portal, Confidential and Inactive, Opt Out / Opt In, and the Save or Send of the Actions forms (text, email, task, recall, allergy). Do them only when the user asked; the user approves each one. Never file or change a record on your own.\n- Several patients match the user's words: never pick one — list them (name, NHI, age) and ask which.\n- A new inbox record is not added here: it is added in Indici, with \"Add to Patient Inbox\" on the dashboard's Inbox panel (switch to the Indici tab and follow Indici's workflow \"Add a record to a patient's inbox\"). It then shows here, unfiled.\n- Opening a patient here (\"open <patient>\") is clicking the name in the patient list on the left — the patient opens on the right, with Actions and the AI actions. \"Go to Consult for <name>\" (and the underlined name at the top of a record) leaves the Smart AI Inbox for the patient's consult in Indici: click it only when the user asks for the consult, or for what only Indici does (a medication). Tasks, recalls, comments and filing are done here.",
           "enabled": true,
           "createdAt": 1792999777295,
-          "updatedAt": 1793004717724
+          "updatedAt": 1793106910264
         },
         {
           "id": "kb_smart_1",
