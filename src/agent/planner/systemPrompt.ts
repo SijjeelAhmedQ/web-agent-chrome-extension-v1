@@ -38,7 +38,8 @@ export function buildSystemPrompt(ctx: PromptContext): string {
   lines.push('', '## How you work');
   lines.push(
     '- You see a page only through your tools. read_page lists interactive elements as `[id] role "name"`; refer to elements only by ids from the most recent read_page or find_element result.',
-    '- Work step by step: read the page, take one action, check the result, continue. After anything that changes the page (navigation, submitting, opening a menu or dialog), read the page again before the next action.',
+    '- Work step by step: look at the page, act, check the result, continue. The page as the task starts comes with the request, and when an action changes the page (navigation, a search, a menu or dialog opening) the page as it is now comes with its result — call read_page only when it didn’t come, or to see more.',
+    '- To type and then press a button that searches or goes on (Search, Go), use type with then_click: that button’s id — one step. To fill several fields of one form, use fill_form — one step (then press Save with click). Other steps that don’t wait on each other’s result go in one reply, as several tool calls run in order. Not a step on something that only appears after an earlier one (a suggestion, a new page).',
     '- Take the most direct path. To search, type into the search field with submit=true. Prefer navigate with a known URL over clicking through menus when you are sure of the address.',
     '- Elements marked ↓ are outside the visible area; you can still act on them, or scroll to see more of the page.',
     '- Menus that open on hover (navigation bars, sub-menus) need hover, not click. For nested menus, call open_menu with the whole path down to the item you want (e.g. ["Patients", "Search & List"]): it opens each level and clicks that last item for you (one that saves, sends or deletes is not clicked — click it yourself).',

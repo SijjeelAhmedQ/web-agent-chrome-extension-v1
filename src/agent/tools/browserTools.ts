@@ -295,6 +295,14 @@ async function clickAndReport(ctx: ToolContext, elementId: number, double: boole
     const real = await realClick(ctx, elementId, label, double, openedTab).catch(() => null);
     if (real) return real;
   }
+  // A pop-up that waits on the server (“Processing…”, then Indici's Medication Advanced Search) can show after the
+  // seconds above: one more look before saying nothing changed — or the model presses it again and reads twice.
+  if (!changed() && effect) {
+    await ctx.browser.send({ kind: 'settle', quietMs: 1_200, timeoutMs: 4_000 }).catch(() => null);
+    effect = (await ctx.browser.send({ kind: 'effect' }).catch(() => undefined)) ?? effect;
+    const late = openedTab();
+    if (late) return followNewTab(ctx, late, label);
+  }
   // A form's Save that changed nothing, its pop-up still open: it was refused — not “fine”. Say which
   // required fields are still empty, or the model goes on as if it had saved (and presses Complete).
   if (!changed() && effect && /^(save|submit|ok|done|add|update|confirm|apply)\b/i.test(res.element.name ?? '')) {
@@ -494,21 +502,28 @@ async function otherChanges(ctx: ToolContext, id: number, before: FormAround | n
   return ` The page also changed ${changed.map((v) => `“${v.label}” from ${quote(was.get(v.label)!)} to ${quote(v.value)}`).join(', ')}. If the user gave a value for it, set it again now.`;
 }
 
-const type: AgentTool<{ id: number; text: string; clear: boolean; submit: boolean }> = {
+const type: AgentTool<{ id: number; text: string; clear: boolean; submit: boolean; then_click?: number }> = {
   name: 'type',
-  description: 'Type text into a text field, search box, combobox or editor. Replaces the existing text unless clear is false. Set submit to true to press Enter afterwards (e.g. to run a search).',
+  description:
+    'Type text into a text field, search box, combobox or editor. Replaces the existing text unless clear is false. Set submit to true to press Enter afterwards, or then_click to press a button after typing (e.g. the form’s Search) — in the same step.',
   schema: z.object({
     id,
     text: str().describe('The text to type'),
     clear: bool(true).describe('Replace existing text (default true)'),
     submit: bool(false).describe('Press Enter after typing (default false)'),
+    then_click: z.coerce
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe('Id of a button to press right after typing: one that searches or goes on (Search, Go). One that saves, sends or deletes is not pressed — click it next'),
   }),
   risk: 'action',
   touchesPage: true,
   label: (a, ctx) => {
     const shown = isSecretField(ctx, a.id) ? '••••' : quote(a.text);
     const target = ctx.elements.get(a.id)?.name;
-    return `Typing ${shown}${target ? ` into ${quote(target)}` : ''}`;
+    return `Typing ${shown}${target ? ` into ${quote(target)}` : ''}${a.then_click ? `, then pressing ${nameOf(ctx, a.then_click, 'a button')}` : ''}`;
   },
   async assess(a, ctx) {
     if (await holdsAlready(ctx, a)) return null; // not typed (execute says so): nothing to approve
@@ -551,9 +566,26 @@ const type: AgentTool<{ id: number; text: string; clear: boolean; submit: boolea
       output += ` Pressed Enter.${changeReport(after)}`;
       return { output, note: after.navigated ? 'Submitted' : undefined };
     }
+    if (a.then_click) return { output: `${output}${await pressAfterTyping(ctx, a.then_click, !!res.suggestions?.length)}` };
     return { output };
   },
 };
+
+/**
+ * type's then_click: the button pressed after typing, in the same step — a whole model call saved (typing a name,
+ * then pressing Search). Only a button that needs no one's OK: one that saves, sends or deletes, one this site
+ * never lets the agent click, or any when the agent asks before every action, is left for click (which asks).
+ * Nor while a list of suggestions waits for a choice: the field isn't set yet.
+ */
+async function pressAfterTyping(ctx: ToolContext, buttonId: number, suggestions: boolean): Promise<string> {
+  const name = nameOf(ctx, buttonId, `[${buttonId}]`);
+  if (suggestions) return ` ${name} was not pressed: choose a suggestion first, then press it.`;
+  if (ctx.askEveryAction || (await neverClickName(ctx, buttonId)) || (await approvalFor(ctx, buttonId, 'click', ''))) {
+    return ` ${name} was not pressed: it needs the user's OK — press it with click.`;
+  }
+  const clicked = await clickById(ctx, buttonId);
+  return ` Then: ${clicked.output}`;
+}
 
 const clear: AgentTool<{ id: number }> = {
   name: 'clear',

@@ -11,18 +11,18 @@ import { createClient, type LlmClient } from '../llm';
 import { KAGGLE_CONTEXT_WINDOW, knownModel } from '@/shared/constants/providers';
 import { BROWSER_TOOLS } from '../tools/browserTools';
 import { formatDialogs } from '../tools/format';
-import { DIFF_HEAD } from '../tools/pageDiff';
 import { DEFAULT_CONTEXT_WINDOW } from '../llm/ollama';
 import type { ChatMessage, ToolCall } from '../llm/types';
 import { buildSystemPrompt } from '../planner/systemPrompt';
 import { knowledgeBudget, knowledgeSection } from '../planner/siteKnowledge';
 import { buildToolset, sitesFor, toolSpecs } from '../tools/registry';
 import { ElementMemory, type AgentTool, type ApprovalRequest, type ToolContext, type ToolOutcome } from '../tools/types';
-import { APPROVED_DONE, budgetFor, clipToolOutput, compactMessages, estimateTokens, FIRST_PAGE, isPageRead } from './context';
+import { APPROVED_DONE, budgetFor, clipToolOutput, compactMessages, estimateTokens, FIRST_PAGE, isFullRead, isPageRead, PAGE_AFTER, pageIn } from './context';
 import type { ApprovalAnswer, ApprovalPrompt, RunEvent } from './events';
 import { asksUser, followUpOf, historyForModel, withoutStoppedList } from './followUp';
 import { Checklist, checklistTool } from './checklist';
 import { meteredClient } from './costLog';
+import { FILL_FORM, fieldCall, fillFormSchema, fillFormTool, stopsFilling } from './fillForm';
 import { changedSomething, namedIn, nearlyNamed, pageState, undoTool, wrongRowClick, type ClickRecord } from './clickGuard';
 
 export { namedIn } from './clickGuard';
@@ -272,6 +272,8 @@ export class AgentRun {
         ),
       );
     }
+    // Several fields of a form in one step — for agents that type.
+    if (toolset.tools.some((t) => t.name === 'type')) toolset.tools.push(fillFormTool);
     const specs = toolSpecs(toolset.tools);
     // Room for the conversation: the server's context window minus the tool definitions sent with every call.
     // Tokens for the conversation: the context window minus the reply and the tool definitions sent with every call.
@@ -508,11 +510,11 @@ export class AgentRun {
       }
       messages.push({ role: 'assistant', content: response.content, toolCalls: response.toolCalls, ...(response.reasoning ? { reasoning: response.reasoning, reasoningBy: lastModel } : {}) });
 
-      for (const call of response.toolCalls) {
+      for (const [n, call] of response.toolCalls.entries()) {
         this.throwIfCancelled();
         const signature = `${call.name}:${JSON.stringify(call.arguments)}`;
         recent.push(signature);
-        let output = await this.runTool(call, byName, ctx);
+        let output = call.name === FILL_FORM ? await this.fillForm(call, byName, ctx) : await this.runTool(call, byName, ctx);
         if (this.endWith) return this.endWith;
         if (this.skippedInARow >= 6) {
           return `I got stuck: my last ${this.skippedInARow} steps were all ones I had already tried, so I stopped rather than go round in circles. Tell me what to do next, or say it differently and I'll try again.`;
@@ -520,6 +522,8 @@ export class AgentRun {
         if (recent.slice(-3).every((s) => s === signature) && recent.length >= 3) {
           output += '\nYou have repeated this exact action three times. Try a different approach or explain to the user what is blocking you.';
         }
+        // The reply's last step changed the page: the page now comes with its result.
+        if (n === response.toolCalls.length - 1) output = await this.pageAfter(call, output, byName, ctx);
         messages.push({ role: 'tool', toolCallId: call.id, toolName: call.name, content: clipToolOutput(output) });
       }
       // Keep presence on whichever tab the agent is in now.
@@ -562,6 +566,54 @@ export class AgentRun {
     });
     this.emit({ type: 'thinking', taskId: this.id, active: false });
     return response.content.trim() || 'Done.';
+  }
+
+  /**
+   * fill_form: each field as its own type or select_option step, in order — every check, guard and approval of
+   * those runs as if the model had called them one by one. Stops at the first field that is refused, fails,
+   * needs the user or waits for a suggestion to be chosen; the fields after it are left as they are.
+   */
+  private async fillForm(call: ToolCall, byName: Map<string, AgentTool<any>>, ctx: ToolContext): Promise<string> {
+    const parsed = fillFormSchema.safeParse(call.arguments ?? {});
+    if (!parsed.success) {
+      const issues = parsed.error.issues.map((i) => `${i.path.join('.') || 'arguments'}: ${i.message}`).join('; ');
+      return `Error: invalid arguments for fill_form — ${issues}.`;
+    }
+    const lines: string[] = [];
+    const { fields } = parsed.data;
+    for (const [n, f] of fields.entries()) {
+      this.throwIfCancelled();
+      const out = await this.runTool(fieldCall(f, n, call.id), byName, ctx);
+      lines.push(`- field [${f.id}]: ${out}`);
+      if (this.endWith) break;
+      if (stopsFilling(out)) {
+        const left = fields.slice(n + 1).map((x) => `[${x.id}]`);
+        if (left.length) lines.push(`Stopped here — not filled: ${left.join(', ')}. Deal with this field first, then fill the rest.`);
+        break;
+      }
+    }
+    return lines.join('\n');
+  }
+
+  /**
+   * After an action that changed the page (a new page, search results, a pop-up), the page as it is now, added to
+   * the action's result: reading it is the model's next step anyway — a whole call (the instructions, the tools,
+   * every step) only to ask for it. Not after a step that was refused or failed.
+   */
+  private async pageAfter(call: ToolCall, output: string, byName: Map<string, AgentTool<any>>, ctx: ToolContext): Promise<string> {
+    const tool = byName.get(call.name);
+    const acted = !!tool && ((tool.risk !== 'read' && tool.touchesPage) || tool.name === 'open_menu');
+    if (!acted || this.endWith || !byName.has('read_page') || !/read_page|New on the page:/.test(output) || /^(Not |Error|Stopped|Cancelled)/.test(output)) return output;
+    // A new page or tab may still be filling in (Indici's consult: 148 controls at first, 445 a few seconds later,
+    // its pop-ups last): read it once it has gone quiet, or the model reads it again — a call more.
+    if (/new tab or window|opens in a new tab|The page changed — now/.test(output)) {
+      await this.inFront(ctx, () => ctx.browser.send({ kind: 'settle', quietMs: 1_000, timeoutMs: 8_000 })).catch(() => null);
+    }
+    const page = await this.runTool({ id: uid('read_'), name: 'read_page', arguments: { mode: 'overview' } }, byName, ctx);
+    if (/^(Error|Not )/.test(page)) return output;
+    // The result's own “Call read_page” is done now: left in, the model reads the page again — a call more.
+    const done = output.replace(/\b([Cc])all read_page( before acting on it| once to check| to see what is visible| to see it| to check| if you need to see the result)?/g, (_m, c: string) => `${c === 'C' ? 'S' : 's'}ee the page below`);
+    return `${done}\n\n${PAGE_AFTER}\n${page}`;
   }
 
   /** Reads the page for the double-check, shown as its own step. Null when the page can't be read. */
@@ -1188,7 +1240,6 @@ const DECIDER_ROLE = [
  */
 export function decisionTranscript(messages: ChatMessage[], checklist = ''): string {
   const rest = messages.slice(1);
-  const isFullRead = (m: ChatMessage) => isPageRead(m) && !m.content.startsWith(DIFF_HEAD);
   const latestRead = rest.findLastIndex(isFullRead);
   const howTo = rest.findLastIndex((m) => m.role === 'tool' && m.toolName === 'site_knowledge');
   const recent = rest.length - 3;
@@ -1205,15 +1256,18 @@ export function decisionTranscript(messages: ChatMessage[], checklist = ''): str
       // data (records, tables: the answer is made of them), the latest site knowledge and every approved save.
       const keep =
         i >= recent ||
-        (latestRead >= 0 && i >= latestRead && m.toolName === 'read_page') ||
+        (latestRead >= 0 && i >= latestRead && isPageRead(m)) ||
         DATA_TOOLS.has(m.toolName) ||
         i === howTo ||
         m.content.startsWith(APPROVED_DONE);
+      // An older page read goes; what an action did, before the page added to its result, stays.
+      const page = pageIn(m);
+      const did = page === null ? '' : m.content.slice(0, m.content.length - page.length).replace(`\n\n${PAGE_AFTER}\n`, '').trim();
       const content =
         keep || m.content.length <= DECIDER_OLD_RESULT
           ? m.content
           : isFullRead(m) && i < latestRead
-            ? '[A page read — the page has been read again since: see the latest read below.]'
+            ? `${did ? `${clip(did, DECIDER_OLD_RESULT)}\n` : ''}[A page read — the page has been read again since: see the latest read below.]`
             : `${m.content.slice(0, DECIDER_OLD_RESULT)}\n[…cut — an earlier result]`;
       lines.push(`[Result of ${m.toolName}]\n${content}`);
     }

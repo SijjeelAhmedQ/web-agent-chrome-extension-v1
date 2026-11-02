@@ -73,7 +73,7 @@ export function formatSnapshot(s: PageSnapshot, mode: 'overview' | 'content'): s
   if (!s.elements.length) lines.push('(none found — the page may still be loading)');
   // A table row's icons (details, edit, task, payment…) share its context: say it once per row.
   s.elements.forEach((e, i) => lines.push(elementLine(e, !!e.context && /^row /.test(e.context) && s.elements[i - 1]?.context === e.context)));
-  if (s.omitted > 0) lines.push(`(+${s.omitted} more not listed — use find_element or scroll)`);
+  if (s.omitted > 0) lines.push(`(+${s.omitted} more not listed — a long table's later rows among them: use find_element, read_table or scroll)`);
 
   if (s.headings.length && mode === 'overview') {
     lines.push('', 'Headings:', ...s.headings);

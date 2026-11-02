@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { StepRecord } from '@/shared/types/history';
-import { followUpOf, historyForModel, rememberedAnswer } from './runtime/followUp';
+import { asksUser, followUpOf, historyForModel, rememberedAnswer } from './runtime/followUp';
 
 const step = (label: string, note?: string, status: StepRecord['status'] = 'done'): StepRecord => ({ id: label, label, status, tool: 'click', startedAt: 1, ...(note ? { note } : {}) });
 
@@ -70,6 +70,18 @@ describe('a reply to the agent’s question', () => {
     expect(followUpOf(history, 'add medication Metformin')).toBeNull();
     expect(followUpOf([], 'hello')).toBeNull();
     expect(historyForModel(history, null)[1].content.startsWith('(Earlier answer — may be out of date)')).toBe(true);
+  });
+});
+
+describe('a question the task waits on', () => {
+  it('is a question offering choices, however politely worded', () => {
+    expect(asksUser('The NZF pop-up shows two interactions.\n\nDo you want me to press **OK** or **Cancel**?')).toBe(true);
+    expect(asksUser('Two patients match. Would you like me to open Arya STARK or Arya STARKK?')).toBe(true);
+  });
+  it('is not a polite offer at the end of a finished task', () => {
+    expect(asksUser('The task is saved. Would you like me to do anything else?')).toBe(false);
+    expect(asksUser('Done. Is there anything else, or something else I can help with?')).toBe(false);
+    expect(asksUser('Saved the task. Let me know if you need anything or want changes?')).toBe(false);
   });
 });
 

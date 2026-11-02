@@ -11,14 +11,41 @@ const PLACEHOLDER = '[Earlier page snapshot removed — its element ids are no l
 export const FIRST_PAGE = '(The page as the task starts — read for you, as read_page would; its ids are valid:)';
 const RUNTIME_PROMPT = /^(Before you finish|Not finished yet:|Your last reply was cut off|You have not finished the task yet|Decision \(from|\(The page as the task starts)/;
 
-/** A message holding a read of the page: a read_page result, or the page read before the first call. */
-export const isPageRead = (m: ChatMessage): boolean =>
-  (m.role === 'tool' && SNAPSHOT_TOOLS.has(m.toolName)) || (m.role === 'user' && m.content.startsWith(FIRST_PAGE));
+/**
+ * The head of the page read for the model after an action that changed it, added to that action's result
+ * (reading it would be the model's next step — a whole call).
+ */
+export const PAGE_AFTER = '(The page now — read for you after this step, as read_page would:)';
+
+/**
+ * The page read a message holds, null for none: a read_page result, the page read before the first call, or
+ * the page added to an action's result.
+ */
+export function pageIn(m: ChatMessage): string | null {
+  if (m.role === 'tool' && SNAPSHOT_TOOLS.has(m.toolName)) return m.content;
+  if (m.role === 'user' && m.content.startsWith(FIRST_PAGE)) return m.content.slice(FIRST_PAGE.length).trimStart();
+  const at = m.role === 'tool' ? m.content.indexOf(`\n\n${PAGE_AFTER}\n`) : -1;
+  return at < 0 ? null : m.content.slice(at + PAGE_AFTER.length + 3);
+}
+export const isPageRead = (m: ChatMessage): boolean => pageIn(m) !== null;
+/** A whole read of a page — not one of only what changed since the last. */
+export const isFullRead = (m: ChatMessage): boolean => {
+  const page = pageIn(m);
+  return page !== null && !page.startsWith(DIFF_HEAD) && !page.endsWith(PLACEHOLDER);
+};
+/** A message's page read, gone: what came before it (an action's result, the head) stays. */
+function withoutPage(m: ChatMessage): ChatMessage {
+  if (m.role === 'user') return { ...m, content: `${FIRST_PAGE} ${PLACEHOLDER}` };
+  const at = m.content.indexOf(`\n\n${PAGE_AFTER}\n`);
+  return { ...m, content: at < 0 ? PLACEHOLDER : `${m.content.slice(0, at)}\n${PLACEHOLDER}` };
+}
 const EARLIER_STEP = '[Result of an earlier step — removed to fit; it was done.]';
 /** The first line of a step the user approved: kept however tight the room, so what was done is not forgotten. */
 export const APPROVED_DONE = 'Done with the user’s approval:';
 /** A cloud model's room for the conversation, in tokens (it was 56k: a simple task's calls grew to 30k each). */
 export const CLOUD_BUDGET = 24_000;
+/** How far under its room a conversation is cut once over it. */
+const COMPACT_TO = 0.75;
 /** The least of the latest page the model keeps, in tokens, however tight the budget. */
 const MIN_PAGE_TOKENS = 1_200;
 const SHRUNK_NOTE = '[…page list shortened to fit the model’s memory — use find_element or click_text for something not listed]';
@@ -53,27 +80,27 @@ const size = (messages: ChatMessage[]) => messages.reduce((n, m) => n + tokensOf
  */
 export function compactMessages(messages: ChatMessage[], budgetTokens: number): ChatMessage[] {
   if (size(messages) <= budgetTokens) return messages;
+  // Once over, older steps are cut to well under the room (not just under it), so the next several calls only add
+  // at the end: every cut rewrites the prompt from that point, and the server's prompt cache can't serve it.
+  // The latest page is never cut to that lower mark — only to the room itself (below).
+  const target = Math.floor(budgetTokens * COMPACT_TO);
   // The latest full read of a page stays, with the reads of only its changes after it; earlier reads go.
   const isRead = (m: ChatMessage) => isPageRead(m) && !m.content.endsWith(PLACEHOLDER);
-  let latest = -1;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (isRead(messages[i]) && !messages[i].content.startsWith(DIFF_HEAD)) {
-      latest = i;
-      break;
-    }
-  }
+  const isDiff = (m: ChatMessage) => !!pageIn(m)?.startsWith(DIFF_HEAD);
+  const latest = messages.findLastIndex(isFullRead);
   for (let i = 0; i < messages.length; i++) {
-    // (The page read before the first call keeps its head: it is the runtime's, not the user's request.)
-    if (isRead(messages[i]) && i < latest) messages[i] = { ...messages[i], content: messages[i].role === 'user' ? `${FIRST_PAGE} ${PLACEHOLDER}` : PLACEHOLDER };
+    // (The page read before the first call keeps its head: it is the runtime's, not the user's request; an
+    // action's result keeps what the action did.)
+    if (isRead(messages[i]) && i < latest) messages[i] = withoutPage(messages[i]);
   }
   // The latest look-up of the site's knowledge is how the step now is done (fill “Take”, not “Quantity”):
   // it stays whole like the latest page, until a newer one.
   const howTo = messages.findLastIndex((m) => m.role === 'tool' && m.toolName === 'site_knowledge');
   let total = size(messages);
   const lastIndex = messages.length - 1;
-  for (let i = 0; i < lastIndex && total > budgetTokens; i++) {
+  for (let i = 0; i < lastIndex && total > target; i++) {
     const m = messages[i];
-    if (i !== latest && i !== howTo && m.role === 'tool' && m.content.length > 600 && m.content !== PLACEHOLDER && !(i > latest && latest >= 0 && m.content.startsWith(DIFF_HEAD))) {
+    if (i !== latest && i !== howTo && m.role === 'tool' && m.content.length > 600 && m.content !== PLACEHOLDER && !(i > latest && latest >= 0 && isDiff(m))) {
       total -= tokensOf(m);
       messages[i] = { ...m, content: `${m.content.slice(0, 600)}\n[…trimmed]` };
       total += tokensOf(messages[i]);
@@ -82,7 +109,7 @@ export function compactMessages(messages: ChatMessage[], budgetTokens: number): 
   // Earlier turns of the chat (before this request): their gist is enough.
   // The user's request — not the runtime's own prompts after it (the double-check, “not finished yet”…).
   const request = messages.findLastIndex((m) => m.role === 'user' && !RUNTIME_PROMPT.test(m.content));
-  for (let i = 1; i < request && total > budgetTokens; i++) {
+  for (let i = 1; i < request && total > target; i++) {
     const m = messages[i];
     if ((m.role === 'user' || m.role === 'assistant') && m.content.length > 500) {
       total -= tokensOf(m);
@@ -94,8 +121,8 @@ export function compactMessages(messages: ChatMessage[], budgetTokens: number): 
   // each result still answers its call). Not the latest page read, nor the changes read after it (they stand
   // on it), nor the last few steps.
   const keepFrom = lastIndex - 6;
-  const chain = (i: number) => i === latest || (latest >= 0 && i > latest && isRead(messages[i]) && messages[i].content.startsWith(DIFF_HEAD));
-  for (let i = request + 1; i < keepFrom && total > budgetTokens; i++) {
+  const chain = (i: number) => i === latest || (latest >= 0 && i > latest && isRead(messages[i]) && isDiff(messages[i]));
+  for (let i = request + 1; i < keepFrom && total > target; i++) {
     const m = messages[i];
     if (chain(i) || i === howTo) continue;
     if (m.role === 'tool' && m.content !== PLACEHOLDER && m.content.length > 80) {

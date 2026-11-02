@@ -14,9 +14,19 @@ const SAVED = ' ⟪saved, not ticked yet⟫';
 /** Polite offers at the end of an answer are not questions the task is waiting on. */
 const OFFER = /\b(is there anything|anything else|something else|let me know|else (can|could|should) i|help (you )?with|(would|do) you (like|want) me to|you'?d like me to|shall i|want me to|need (any|more|further))\b[^?]*\?/gi;
 
+/**
+ * A question that offers choices (“Do you want me to press OK or Cancel?”, “Arya STARK or Arya STARKK?”): the task
+ * waits on the answer, however politely it is worded — taken for an offer, the task was pushed on and the model
+ * pressed a pop-up's OK itself.
+ */
+const CHOICE = /[^.!?\n]*\S\s+or\s+\S[^.!?\n]*\?/gi;
+const NOT_A_CHOICE = /\b(anything else|something else|let me know)\b/i;
+
 /** True when an answer ends by asking the user something the task needs. */
 export function asksUser(answer: string): boolean {
-  return /\?/.test(answer.trim().slice(-500).replace(OFFER, ''));
+  const tail = answer.trim().slice(-500);
+  if ((tail.match(CHOICE) ?? []).some((q) => !NOT_A_CHOICE.test(q))) return true;
+  return /\?/.test(tail.replace(OFFER, ''));
 }
 
 /** The answer as remembered for the next turn: when it asks the user something, with the steps done so far. */

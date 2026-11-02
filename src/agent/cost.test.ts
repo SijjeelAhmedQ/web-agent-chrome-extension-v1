@@ -7,7 +7,7 @@ import { createClient } from './llm';
 import type { ChatMessage } from './llm/types';
 import { knowledgeSection } from './planner/siteKnowledge';
 import { DECISION_HEAD, decisionTranscript } from './runtime/agentRun';
-import { budgetFor, CLOUD_BUDGET, compactMessages, estimateTokens, FIRST_PAGE } from './runtime/context';
+import { budgetFor, CLOUD_BUDGET, compactMessages, estimateTokens, FIRST_PAGE, PAGE_AFTER } from './runtime/context';
 import { meteredClient, promptParts } from './runtime/costLog';
 
 const openrouter: ProviderConfig = { id: 'p', name: 'OpenRouter', kind: 'openai', preset: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', apiKey: 'k', defaultModel: 'm', createdAt: 0 };
@@ -189,5 +189,25 @@ describe('the page read before the first call', () => {
     expect(text).toContain('[User or runtime] goto patients');
     expect(text).not.toContain('Page 1');
     expect(text).toContain('Page 2');
+  });
+});
+
+describe('the page added to an action that changed it', () => {
+  const page = (n: number) => `Page ${n}\n${'[1] button "Search"\n'.repeat(200)}`;
+  it('goes once a newer read is in, and what the action did stays', () => {
+    const msgs = compactMessages(
+      [
+        { role: 'system', content: 'rules' },
+        { role: 'user', content: 'select arya stark' },
+        { role: 'assistant', content: '', toolCalls: [{ id: 'a', name: 'click', arguments: { id: 1 } }] },
+        { role: 'tool', toolName: 'click', toolCallId: 'a', content: `Clicked "Search". New on the page: "2 patients".\n\n${PAGE_AFTER}\n${page(1)}` },
+        { role: 'assistant', content: '', toolCalls: [{ id: 'b', name: 'read_page', arguments: {} }] },
+        { role: 'tool', toolName: 'read_page', toolCallId: 'b', content: page(2) },
+      ],
+      1_000,
+    );
+    expect(msgs[3].content).toContain('Clicked "Search"');
+    expect(msgs[3].content).not.toContain('Page 1');
+    expect(msgs[5].content).toContain('Page 2');
   });
 });

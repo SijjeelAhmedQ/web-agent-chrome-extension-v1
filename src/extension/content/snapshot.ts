@@ -340,6 +340,9 @@ function inFront(d: Element): boolean {
   return !!hit && (d === hit || d.contains(hit)) && hit.closest(DIALOGS) === d;
 }
 
+/** A table's rows listed before anything else on a page too big to list whole. */
+const ROWS_FIRST = 6;
+
 /** Reads of this document so far, the read each control first showed up in, and those the last read listed. */
 let reads = 0;
 const firstSeen = new Map<number, number>();
@@ -358,8 +361,19 @@ export function snapshot(mode: ReadMode, maxElements: number, maxTextChars: numb
   const front = frontDialog();
   const inFront = new Set(front ? described.filter((_, i) => front.contains(elements[i])).map((e) => e.id) : []);
   const order = new Map(described.map((e, i) => [e.id, i]));
+  // A long table's later rows go last: a page's sidebar, form and buttons are what a step uses (Indici's consult —
+  // 443 controls, most of them medicine rows — left out “Medications” and “Find Medicine”); read_table reads rows.
+  const deepRow = (e: ElementInfo) => Number(e.context?.match(/^row (\d+)/)?.[1] ?? 0) > ROWS_FIRST;
   const chosen = [...described]
-    .sort((a, b) => +inFront.has(b.id) - +inFront.has(a.id) || +known(b) - +known(a) || (firstSeen.get(b.id) ?? 0) - (firstSeen.get(a.id) ?? 0) || +b.inViewport - +a.inViewport || (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+    .sort(
+      (a, b) =>
+        +inFront.has(b.id) - +inFront.has(a.id) ||
+        +deepRow(a) - +deepRow(b) ||
+        +known(b) - +known(a) ||
+        (firstSeen.get(b.id) ?? 0) - (firstSeen.get(a.id) ?? 0) ||
+        +b.inViewport - +a.inViewport ||
+        (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0),
+    )
     .slice(0, maxElements);
   chosen.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
   const listed = new Set(chosen.map((e) => e.id));

@@ -112,6 +112,9 @@ try {
       await sleep(1000);
     }
     await sleep(600);
+    // The task's model calls, opened: what each was for, its tokens and its cost.
+    await panel.$$eval('.turn:last-child .cost-head[aria-expanded=false]', (bs) => bs.forEach((b) => b.click())).catch(() => {});
+    await sleep(200);
     const turn = await panel.$eval('.turn:last-child', (e) => e.innerText);
     say(`--- ${Math.round((Date.now() - t0) / 1000)}s ---\n${turn}`);
     const asked = turn.trim().slice(-800);
