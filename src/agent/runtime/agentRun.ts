@@ -503,7 +503,7 @@ export class AgentRun {
           if (page) {
             checkedAnswer = answer;
             messages.push({ role: 'assistant', content: answer });
-            messages.push({ role: 'user', content: verifyPrompt(page) });
+            messages.push({ role: 'user', content: verifyPrompt(page, this.changedData) });
             nextPurpose = 'Double-check';
             // The double-check is the agent's model's.
             if (decider) phase = 'answer';
@@ -1351,13 +1351,20 @@ export function claimsDone(answer: string): boolean {
   return /\b(selected|saved|added|created|submitted|scheduled|booked|sent|deleted|removed|updated|changed|completed|filled|signed in|opened|successfully|confirm(s|ed))\b/i.test(answer);
 }
 
-function verifyPrompt(page: string): string {
+/**
+ * The double-check. After a save the user approved (`afterSave`), its own result is the evidence: the model checks
+ * the details it reports against the page and the results above, and goes nowhere to look — sent off to search,
+ * it opened three lists and read each again (nine calls) to confirm what the saves had already said.
+ */
+function verifyPrompt(page: string, afterSave = false): string {
   return [
     'Before you finish, check your answer against the page as it is right now (below).',
     '- For every action you said you did (selected, saved, added, created, scheduled…), find the evidence on this page or in an earlier tool result. A success message you did not see in a tool result is not evidence.',
     '- A record that was already there before you started (an older one with the same name or words — check its date and time) is not evidence that yours was added. If you cannot tell yours from an older one, say so and ask the user where to check.',
     '- Report details (names, IDs, numbers, dates) only exactly as they appear here or in earlier tool results. Never construct or guess them.',
-    '- If the page does not confirm something, do it now with your tools — search, go to the next page, click — or tell the user plainly that it did not happen.',
+    afterSave
+      ? '- A save’s own result above (“saved successfully”, the new row) is its evidence: don’t open other pages or lists to look again. A detail you can’t find here or above — leave it out, or say you couldn’t see it.'
+      : '- If the page does not confirm something, do it now with your tools — search, go to the next page, click — or tell the user plainly that it did not happen.',
     'If everything in your answer is confirmed, reply with exactly: CONFIRMED',
     'Otherwise, after fixing it, reply with the corrected answer for the user — without mentioning this check.',
     '',

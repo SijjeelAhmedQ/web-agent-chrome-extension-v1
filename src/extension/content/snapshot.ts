@@ -360,8 +360,10 @@ export function snapshot(mode: ReadMode, maxElements: number, maxTextChars: numb
   reads++;
   for (const e of described) if (!firstSeen.has(e.id)) firstSeen.set(e.id, reads);
   const known = (e: ElementInfo) => listedBefore.has(e.id) || firstSeen.get(e.id) === reads;
-  // The pop-up in front is where the user works: all its controls are listed, before the page behind it.
-  const front = frontDialog();
+  // The pop-up in front is where the user works: all its controls are listed, before the page behind it — the
+  // whole of it: a pop-up inside another (Indici's Add Task) keeps its Save in the outer one's footer.
+  let front = frontDialog();
+  for (let outer = front?.parentElement?.closest(DIALOGS); outer; outer = outer.parentElement?.closest(DIALOGS)) front = outer;
   const inFront = new Set(front ? described.filter((_, i) => front.contains(elements[i])).map((e) => e.id) : []);
   const order = new Map(described.map((e, i) => [e.id, i]));
   // A long table's later rows go last: a page's sidebar, form and buttons are what a step uses (Indici's consult —
