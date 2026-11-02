@@ -147,8 +147,8 @@ add Paracetamol 500 mg to Arya STARK
 - Agent batata hai ke yeh Smart Inbox mein nahi hota, aur "Go to Consult" se Indici mein kholne ka poochta hai.
 - Haan kahein to Indici ka "Add a medication in the consult" flow chalta hai, har Save par approval ke saath.
 
-### 3.10 Clinical Summary aur Saved searches ○ (sirf padhna)
-Knowledge page dekh kar likhi gayi hai, lekin agent se yeh prompts abhi live nahi chalaye gaye.
+### 3.10 Clinical Summary aur Saved searches ✓ (sirf padhna)
+Live chale 02/11/2026: Clinical Summary › Medications (aaj ki, long-term, pichhle 3 mahine) aur Saved searches (har filter ki values).
 ```
 show the medications in Arya STARK's clinical summary
 show the allergies in Arya STARK's clinical summary
@@ -174,7 +174,9 @@ Inhein bilkul aise hi copy karein; naam aur values apni daal lein. Har likhne wa
 
 **Naya line:** message box mein Enter dabate hi message chala jaata hai. Kai lines likhni hon to **Shift+Enter** dabayein, ya poora transcript ek hi line mein likhein (`…then: 1. … ; 2. …`). Paste karne se lines theek rehti hain.
 
-> **B** ek hi request mein live ✓ chala (27/10/2026, Qwen3.8 27B, ~12 min): Indici se Smart Inbox, Arya list se khuli, task aur recall dono save, har Save par approval. Baaqi (A, C–F) ab tak ek hi run mein nahi chale — har qadam alag alag ✓ hai (upar dekhein).
+> **B** ek hi request mein live ✓ chala (27/10/2026, Qwen3.8 27B, ~12 min): Indici se Smart Inbox, Arya list se khuli, task aur recall dono save, har Save par approval.
+> **C** ek hi request mein live chala (02/11/2026, ~9 min): task ✓ aur recall ✓ save; diagnosis par app ne "Something went wrong" diya — agent ne dobara nahi dabaya aur bata diya.
+> Baaqi (A, D–F) ab tak ek hi run mein nahi chale — har qadam alag alag ✓ hai (upar dekhein).
 
 **A. Navigation se padhne tak**
 ```
@@ -187,7 +189,7 @@ open smart inbox, open Arya STARK, then: 1. create a task: subject "[web agent t
 ```
 - Task ka "To" na batayein to form ka pehle se bhara provider (jo login hai) rehta hai.
 
-**C. AI ke suggestions se (right panel)**
+**C. AI ke suggestions se (right panel)** ✓ (diagnosis app ki taraf se fail ho sakta hai)
 ```
 open smart inbox, open Aqib JAVED, then from Patient AI Actions:
 1. add the suggested task
