@@ -48,6 +48,22 @@ describe('ask-before controls', () => {
     expect(sent).not.toContain('type');
   });
 
+  it('never asks about an id that is another element than the one named, and does not click it', async () => {
+    const click = BROWSER_TOOLS.find((t) => t.name === 'click')!;
+    const sent: string[] = [];
+    const ctx = {
+      browser: { send: async (req: { kind: string }) => (sent.push(req.kind), { name: 'Send Text', role: 'button', tag: 'button', formHasPassword: false, formHasPayment: false, formIsSearch: false, formSubmitLabels: [] }) },
+      settings: {},
+      elements: new ElementMemory(),
+      askBefore: [],
+    } as unknown as ToolContext;
+    ctx.elements.remember([{ id: 3403, role: 'button', name: 'Send Text', tag: 'button' } as never]);
+    const args = { id: 3403, name: 'Medications', double: false };
+    expect(await click.assess!(args, ctx)).toBeNull();
+    expect((await click.execute(args, ctx)).output).toMatch(/^Not clicked: \[3403\] is button “Send Text”/);
+    expect(sent).not.toContain('click');
+  });
+
   it('keeps the list when the configuration is loaded', async () => {
     const { normalizeSite } = await import('@/shared/storage/configStore');
     expect(normalizeSite({ name: 'inbox', askBefore: ['Diagnostic Comment'] }).askBefore).toEqual(['Diagnostic Comment']);

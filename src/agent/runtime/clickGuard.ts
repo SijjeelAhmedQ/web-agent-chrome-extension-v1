@@ -16,6 +16,27 @@ export function namedIn(request: string, item: string): boolean {
   return want.length > 0 && want.every((w) => asked.has(w));
 }
 
+/** At most one letter added, dropped or changed (“stark” / “starkk”). */
+function oneEditApart(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  const rest = (x: string, skip: number) => x.slice(i + skip);
+  return rest(a, 1) === rest(b, 1) || rest(a, 1) === rest(b, 0) || rest(a, 0) === rest(b, 1);
+}
+
+/**
+ * Another name so like this one that the user may mean either — “Arya STARKK” for “Arya STARK”: the same words,
+ * one of them (four letters or more) a letter apart. Not the same name: that is a plain match.
+ */
+export function nearlyNamed(name: string, other: string): boolean {
+  const a = words(name);
+  const b = words(other);
+  if (!a.length || a.length !== b.length || a.join(' ') === b.join(' ')) return false;
+  return a.every((w, i) => w === b[i] || (w.length >= 4 && oneEditApart(w, b[i])));
+}
+
 /** Words that describe a control rather than what it does. */
 const GENERIC = new Set(['icon', 'button', 'image', 'link', 'the', 'and', 'for', 'open', 'click', 'here', 'more']);
 

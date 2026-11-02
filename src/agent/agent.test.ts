@@ -289,10 +289,18 @@ describe('prompt and context', () => {
   it('estimates more tokens for digits', () => {
     expect(estimateTokens('2026-10-15')).toBeGreaterThan(estimateTokens('abcdefghij'));
   });
-  it('knows when the request names the item being picked', () => {
+  it('knows when the request names the item being picked', async () => {
     expect(namedIn('goto patients and select arya stark', 'Arya STARK')).toBe(true);
     expect(namedIn('open the first patient', 'Arya STARK')).toBe(false);
     expect(namedIn('select Patient 1', 'Patient 1')).toBe(true);
+    // A name a letter apart (Indici's “Arya STARK” and “Arya STARKK”) may be the one meant — not a plain other name.
+    const { nearlyNamed } = await import('./runtime/clickGuard');
+    expect(nearlyNamed('Arya STARK', 'Arya STARKK')).toBe(true);
+    expect(nearlyNamed('Arya STARK', 'Arya STAK')).toBe(true);
+    expect(nearlyNamed('Arya STARK', 'arya stark')).toBe(false);
+    expect(nearlyNamed('Arya STARK', 'Sansa STARK')).toBe(false);
+    expect(nearlyNamed('Arya STARK', 'Arya STARK JONES')).toBe(false);
+    expect(nearlyNamed('Mic MOUSE', 'Mac MOUSE')).toBe(false);
   });
   it('sends an answer about the page back when the page was never read', () => {
     expect(talksAboutPage("You're already on Arya STARK's consult (DOB 03-12-2015).")).toBe(true);
@@ -346,6 +354,16 @@ describe('unfinished replies', () => {
     expect(soundsUnfinished('Done. Let me know if you need anything else.')).toBe(false);
     expect(soundsUnfinished('| Laptop | Price |\n|---|---|\n| Aero 14 | $649 |')).toBe(false);
     expect(soundsUnfinished('Arya has 1 record.\n* **Test** — 21/10/2026\n  * **Status**: Filed')).toBe(false);
+  });
+
+  it('spots a reply that repeats one line until it is cut off', async () => {
+    const { repeatsItself } = await import('./runtime/agentRun');
+    // From a live run: a made-up audit log, one row 185 times.
+    const rows = Array.from({ length: 40 }, (_, i) => `| ${i + 1} | **AI Auto-File** — "Record filed by AI (auto-file)" | 02/11/2026 11:07:54 |`);
+    expect(repeatsItself(`**Arya STARK — AI File Audit**\n\n| # | Action | Time |\n|---|---|---|\n${rows.join('\n')}`)).toBe(true);
+    // A long real list is not a loop.
+    const records = Array.from({ length: 20 }, (_, i) => `- Patient ${i + 1}: ${['HbA1c', 'CBC', 'LFT', 'TSH'][i % 4]} — ${i % 3 ? 'normal' : 'abnormal'}`);
+    expect(repeatsItself(records.join('\n'))).toBe(false);
   });
 });
 

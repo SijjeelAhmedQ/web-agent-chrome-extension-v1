@@ -89,9 +89,14 @@ export function followUpOf(history: ChatMessage[], reply: string): FollowUp | nu
   const asked = history.at(-2);
   if (!last || last.role !== 'assistant' || asked?.role !== 'user') return null;
   // The list of steps is what closes the answer — not the same words quoted inside it.
+  const stopped = (m: ChatMessage | undefined) => m?.role === 'assistant' && m.content.lastIndexOf(STOPPED) >= 0 && m.content.trimEnd().endsWith(']');
+  if (!stopped(last)) return null;
   const at = last.content.lastIndexOf(STOPPED);
-  if (at < 0 || !last.content.trimEnd().endsWith(']')) return null;
-  const task = asked.content.trim();
+  // A reply to a second question (“follow up”, then “OK”): the task is the request the questions came from,
+  // not the reply before — and “OK” twice is two answers, not the same request run again.
+  let k = history.length - 2;
+  while (k >= 2 && history[k].role === 'user' && stopped(history[k - 1]) && history[k - 2].role === 'user' && !looksLikeNewTask(history[k].content)) k -= 2;
+  const task = history[k].content.trim();
   // The same request again (Run again), or a new task, is a fresh start — not a reply (and no old checklist).
   if (reply.trim().toLowerCase() === task.toLowerCase() || looksLikeNewTask(reply)) return null;
   const block = last.content.slice(at + STOPPED.length).replace(/\]\s*$/, '').split('\n');
@@ -103,7 +108,7 @@ export function followUpOf(history: ChatMessage[], reply: string): FollowUp | nu
   const request = [
     `My reply to your question: “${reply.trim()}”`,
     '',
-    `Carry on with the task I gave you before (“${task}”) from where you stopped. The browser is as you left it, and the steps listed at the end of your last answer are already done — don't do them again and don't start the task over. Read the page, use my reply where it was needed, do only the steps that are left, then answer. (If my message is a new request rather than a reply, do it as a new task.)`,
+    `Carry on with the task I gave you before (“${task}”) from where you stopped. The browser is as you left it, and the steps listed at the end of your last answer are already done — don't do them again and don't start the task over. Read the page, use my reply where it was needed, do only the steps that are left, then answer. If you asked which button to press and my reply names none of them (“OK” when the choices are “Yes - Add new”, “No - Overwrite All Existing”, “Cancel - Do Nothing”), don't pick one: ask me again, naming them. (If my message is a new request rather than a reply, do it as a new task.)`,
   ].join('\n');
   return { request, task, doneSteps, checklist };
 }

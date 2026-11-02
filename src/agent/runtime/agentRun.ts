@@ -20,7 +20,7 @@ import { APPROVED_DONE, budgetFor, clipToolOutput, compactMessages, estimateToke
 import type { ApprovalAnswer, ApprovalPrompt, RunEvent } from './events';
 import { asksUser, followUpOf, historyForModel, withoutStoppedList } from './followUp';
 import { Checklist, checklistTool } from './checklist';
-import { changedSomething, namedIn, pageState, undoTool, wrongRowClick, type ClickRecord } from './clickGuard';
+import { changedSomething, namedIn, nearlyNamed, pageState, undoTool, wrongRowClick, type ClickRecord } from './clickGuard';
 
 export { namedIn } from './clickGuard';
 
@@ -364,14 +364,17 @@ export class AgentRun {
         continue;
       }
       if (!response.toolCalls.length) {
-        const answer = withoutStoppedList(response.content.trim()) || 'Done.';
+        // The label earlier answers carry for the model (“(Earlier answer — may be out of date)”) is not the user's.
+        const answer = withoutStoppedList(response.content.trim()).replace(EARLIER_LABEL, '').trim() || 'Done.';
         // A reply cut off by the context limit, or narration of a next step, is not a final answer.
         const cutOff = response.finishReason === 'length';
         if ((cutOff || soundsUnfinished(answer)) && nudges < 3 && !checkedAnswer) {
           nudges++;
           if (cutOff) budget = Math.max(3_000, Math.floor(budget * 0.6)); // make room: drop old page snapshots sooner
-          messages.push({ role: 'assistant', content: answer });
-          messages.push({ role: 'user', content: cutOff ? CUT_OFF_PROMPT : CONTINUE_PROMPT });
+          // One line over and over until the limit (a made-up table): not kept, so it isn't continued.
+          const looped = cutOff && repeatsItself(answer);
+          messages.push({ role: 'assistant', content: looped ? `${clip(answer, 300)} …` : answer });
+          messages.push({ role: 'user', content: looped ? LOOPED_PROMPT : cutOff ? CUT_OFF_PROMPT : CONTINUE_PROMPT });
           if (decider) phase = 'decide';
           continue;
         }
@@ -627,7 +630,7 @@ export class AgentRun {
       const several = await this.inFront(ctx, () => this.severalNamed(tool.name, args, ctx));
       if (several) {
         finish({ status: 'skipped', note: 'Several match — asking you' });
-        return `Not clicked: “${several.name}” is on ${several.rows.length} rows of this list:\n${several.rows.map((r) => `- ${r}`).join('\n')}\nThe user didn't say which one. Don't choose — not the first one, and not by anything from an earlier chat. Ask the user which one to open, listing each row (name, date of birth, NHI or what the row shows).`;
+        return `Not clicked: “${several.name}”, or a name only a letter apart, is on ${several.rows.length} rows of this list:\n${several.rows.map((r) => `- ${r}`).join('\n')}\nThe user didn't say which one — a name spelt a letter differently may be the one they mean. Don't choose — not the first one, and not by anything from an earlier chat. Ask the user which one to open, listing each row (name, date of birth, NHI or what the row shows).`;
       }
     }
     // An icon (book, edit, pay, print…) in the row of the record the user named, when they asked to open the record.
@@ -866,13 +869,15 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
     if (!name || !namedIn(this.taskText, name)) return null;
     if (picks.some((p) => namedIn(this.taskText, p))) return null;
     const res = await ctx.browser.send({ kind: 'findText', text: name, limit: 8 }).catch(() => null);
-    const rows = [
-      ...new Set(
-        (res?.matches ?? [])
-          .filter((m) => /^row /.test(m.context ?? '') && m.name.trim().toLowerCase() === name.toLowerCase())
-          .map((m) => m.context!.replace(/^row \d+ /, '')),
-      ),
-    ];
+    const rowOf = (context: string) => context.replace(/^row \d+ /, '');
+    const exact = (res?.matches ?? []).filter((m) => /^row /.test(m.context ?? '') && m.name.trim().toLowerCase() === name.toLowerCase()).map((m) => rowOf(m.context!));
+    // A name a letter apart on another row (“Arya STARKK” beside “Arya STARK”) may be the one the user means: the
+    // page's text search doesn't find it, the list the agent read does.
+    const like = ctx.elements
+      .onPage()
+      .filter((e) => /^row /.test(e.context ?? '') && nearlyNamed(name, e.name))
+      .map((e) => rowOf(e.context!));
+    const rows = [...new Set([...exact, ...like])];
     return rows.length > 1 ? { name, rows } : null;
   }
 
@@ -1131,6 +1136,19 @@ export const formKey = (fields: { label: string; value: string }[]) =>
 const LOOK_TOOLS = new Set(['read_page', 'find_element', 'scroll', 'wait', 'hover', 'read_table']);
 const MAX_LOOKS = 8;
 const CUT_OFF_PROMPT = 'Your last reply was cut off because the conversation got long. Continue the task: call the next tool now, and keep any text short.';
+const LOOPED_PROMPT =
+  'Your last reply was cut off: it wrote the same line over and over. Don’t write it again — it was not from the page. Call read_page (or the tool the task needs) now, and answer only from what the tools show, in a few lines.';
+const EARLIER_LABEL = /^\((?:Earlier answer — may be out of date|Your last answer — you stopped here to ask the user)\)\s*/;
+
+/** A reply that is mostly one line repeated (numbers aside): “| 183 | AI Auto-File — Record filed by AI … |”. */
+export function repeatsItself(text: string): boolean {
+  const lines = text.split('\n').map((l) => l.replace(/\d+/g, '#').replace(/\s+/g, ' ').trim()).filter((l) => l.length > 8);
+  if (lines.length < 12) return false;
+  const counts = new Map<string, number>();
+  for (const l of lines) counts.set(l, (counts.get(l) ?? 0) + 1);
+  const most = Math.max(...counts.values());
+  return most >= 10 && most >= lines.length * 0.5;
+}
 const CONTINUE_PROMPT = 'You have not finished the task yet — you described a next step instead of doing it. Continue by calling the next tool. If the task is truly complete, reply with your final answer for the user.';
 
 /** The server's context window in tokens, when known. */

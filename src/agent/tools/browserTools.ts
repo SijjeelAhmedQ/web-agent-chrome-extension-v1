@@ -369,8 +369,10 @@ const click: AgentTool<{ id: number; name: string; double: boolean }> = {
   touchesPage: true,
   label: (a, ctx) => `${a.double ? 'Double-clicking' : 'Clicking'} ${nameOf(ctx, a.id)}`,
   async assess(a, ctx) {
-    // A never-click button is refused, not offered for approval.
+    // A never-click button is refused, not offered for approval — and so is an id that is another element than
+    // the one named (a guessed id that is “Send Text”, for “Medications”): the user is never asked about it.
     if (await neverClickName(ctx, a.id)) return null;
+    if (wrongTarget(ctx, a.id, a.name)) return null;
     return approvalFor(ctx, a.id, 'click', `Click ${nameOf(ctx, a.id, 'this')}?`);
   },
   async execute(a, ctx) {

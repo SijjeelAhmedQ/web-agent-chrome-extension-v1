@@ -44,6 +44,24 @@ describe('a reply to the agent’s question', () => {
     expect(shown[1].content.startsWith('(Your last answer — you stopped here to ask the user)')).toBe(true);
   });
 
+  it('takes a second reply (“OK” after “OK”) as a reply to the same task, with its checklist', () => {
+    const items = [
+      { text: 'Add task: subject "02-Nov-26 Testing" — save', done: true, note: 'saved' },
+      { text: 'Add recall: Bloods / CBC — save', done: false, saved: true },
+    ];
+    const request = 'on Arya STARK’s consult, add a task and a recall';
+    const history = [
+      { role: 'user' as const, content: request },
+      { role: 'assistant' as const, content: rememberedAnswer('The NZF pop-up is open. Which button should I press — OK or Cancel?', steps, items.map((i) => ({ ...i, done: false }))) },
+      { role: 'user' as const, content: 'OK' },
+      { role: 'assistant' as const, content: rememberedAnswer('2 recalls already exist. Which button should I press — Yes - Add new or Cancel?', steps, items) },
+    ];
+    const f = followUpOf(history, 'OK');
+    expect(f?.task).toBe(request);
+    expect(f?.checklist).toEqual(items);
+    expect(f?.request).toContain(`Carry on with the task I gave you before (“${request}”)`);
+  });
+
   it('leaves a new request alone', () => {
     const history = [
       { role: 'user' as const, content: 'goto patients and select Arya Stark' },

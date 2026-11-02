@@ -65,6 +65,15 @@ describe('OpenAI-compatible adapter', () => {
     expect(res.toolCalls[0]).toMatchObject({ id: 'z', name: 'click', arguments: { id: '4' } });
   });
 
+  it('gives the Kaggle notebook a reply limit, more with thinking', async () => {
+    const fetchMock = mockFetch({ choices: [{ message: { content: 'OK' } }] });
+    const kaggle = (thinking: 'off' | 'high') => provider({ preset: 'kaggle', baseUrl: 'https://x.trycloudflare.com/vllm/v1', thinking });
+    await createClient(kaggle('off')).chat({ model: 'qwen3.8:27b-q4_K_M', messages: conversation, tools, temperature: 0 });
+    await createClient(kaggle('high')).chat({ model: 'qwen3.8:27b-q4_K_M', messages: conversation, tools, temperature: 0 });
+    await createClient(provider({})).chat({ model: 'm', messages: conversation, tools, temperature: 0 });
+    expect(fetchMock.mock.calls.map((c) => JSON.parse(c[1]!.body as string).max_tokens)).toEqual([4096, 16384, undefined]);
+  });
+
   it('sends the thinking level each server understands, and hands OpenRouter’s reasoning back', async () => {
     const reasoning = [{ type: 'reasoning.encrypted', data: 'sig' }];
     const fetchMock = mockFetch({ choices: [{ message: { content: '', reasoning_details: reasoning, tool_calls: [{ id: 'z', function: { name: 'click', arguments: '{}' } }] } }] });

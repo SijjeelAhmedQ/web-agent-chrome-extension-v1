@@ -95,6 +95,9 @@ export class OpenAICompatibleClient implements LlmClient {
     // OpenRouter holds back credit for the model's whole output limit (65k tokens) unless told less — a key with
     // little left then fails every request. A step's reply is far shorter; high thinking gets more room.
     if (/openrouter\.ai/.test(this.provider.baseUrl)) body.max_tokens = thinkingOf(this.provider) === 'high' ? 16_384 : 8_192;
+    // The Kaggle notebook (Ollama underneath) has no limit of its own: a model that fell into repeating one line
+    // wrote 8,000 tokens — ten minutes on a T4 — before it stopped. A step, or an answer, is far shorter.
+    else if (this.provider.preset === 'kaggle') body.max_tokens = { off: 4_096, low: 8_192, high: 16_384 }[thinkingOf(this.provider) ?? 'off'];
     const send = () =>
       requestJson<OpenAIResponse>(joinUrl(this.provider.baseUrl, 'chat/completions'), {
         method: 'POST',
