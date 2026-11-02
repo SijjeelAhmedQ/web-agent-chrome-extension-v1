@@ -342,6 +342,9 @@ function inFront(d: Element): boolean {
 
 /** A table's rows listed before anything else on a page too big to list whole. */
 const ROWS_FIRST = 6;
+/** Text a page shows more than controls a step uses: listed last on a page too big to list whole. */
+const PLAIN_ROLES = /^(span|td|th|cell|gridcell|columnheader|rowheader|h[1-6]|heading|label|p|text|paragraph|strong|em|b|small)$/;
+const LESSER_ROLES = /^(checkbox|switch|div|li|listitem|clickable|section|article)$/;
 
 /** Reads of this document so far, the read each control first showed up in, and those the last read listed. */
 let reads = 0;
@@ -364,11 +367,15 @@ export function snapshot(mode: ReadMode, maxElements: number, maxTextChars: numb
   // A long table's later rows go last: a page's sidebar, form and buttons are what a step uses (Indici's consult —
   // 443 controls, most of them medicine rows — left out “Medications” and “Find Medicine”); read_table reads rows.
   const deepRow = (e: ElementInfo) => Number(e.context?.match(/^row (\d+)/)?.[1] ?? 0) > ROWS_FIRST;
+  // Then what a step clicks or fills — links (a sidebar's “Medications”), buttons, fields, icons — before tick
+  // boxes and generic blocks, and those before plain text (spans, cells, headings, labels): click_text reaches it.
+  const kind = (e: ElementInfo) => (PLAIN_ROLES.test(e.role) ? 2 : LESSER_ROLES.test(e.role) ? 1 : 0);
   const chosen = [...described]
     .sort(
       (a, b) =>
         +inFront.has(b.id) - +inFront.has(a.id) ||
         +deepRow(a) - +deepRow(b) ||
+        kind(a) - kind(b) ||
         +known(b) - +known(a) ||
         (firstSeen.get(b.id) ?? 0) - (firstSeen.get(a.id) ?? 0) ||
         +b.inViewport - +a.inViewport ||

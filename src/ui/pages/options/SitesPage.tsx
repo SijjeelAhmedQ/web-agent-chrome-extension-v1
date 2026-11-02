@@ -29,7 +29,7 @@ const COLORS = ['#0e7490', '#10b981', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6'
 
 const newSite = (name = '', sites: string[] = []): SiteProfile => {
   const now = Date.now();
-  return { id: uid('site_'), name, description: '', color: COLORS[Math.floor(Math.random() * COLORS.length)], sites, enabled: true, providerId: null, model: '', agentIds: [], skillIds: [], disabledSkillIds: [], customToolIds: [], disabledToolIds: [], neverClick: [], askBefore: [], knowledge: [], createdAt: now, updatedAt: now };
+  return { id: uid('site_'), name, description: '', color: COLORS[Math.floor(Math.random() * COLORS.length)], sites, enabled: true, providerId: null, model: '', agentIds: [], skillIds: [], disabledSkillIds: [], customToolIds: [], disabledToolIds: [], neverClick: [], askBefore: [], askPopups: [], knowledge: [], createdAt: now, updatedAt: now };
 };
 
 const newEntry = (kind: KnowledgeKind): KnowledgeEntry => {
@@ -1040,6 +1040,23 @@ function SettingsTab({ site, update }: { site: SiteProfile; update: (patch: Part
           />
           <div className="field-help">
             Controls that change a record the moment they are used — a tick box or a comment box that saves itself, an opt-out: the agent asks you before clicking or typing into them, as it does before a save or delete. Names must match exactly.
+          </div>
+        </div>
+        <div>
+          <FieldLabel>Pop-ups you answer yourself</FieldLabel>
+          <Select
+            mode="tags"
+            style={{ width: '100%' }}
+            value={site.askPopups ?? []}
+            onChange={(v: string[]) => update({ askPopups: v.map((x) => x.trim()).filter(Boolean) })}
+            tokenSeparators={[',']}
+            placeholder="e.g. New Zealand Formulary, already in the active medicines list"
+            open={false}
+            suffixIcon={null}
+            aria-label="Pop-ups you answer yourself"
+          />
+          <div className="field-help">
+            Words of a pop-up’s title or text. The agent presses none of its buttons on its own: you pick which one on an approval card — unless your message already names the button (“OK”).
           </div>
         </div>
         <div>

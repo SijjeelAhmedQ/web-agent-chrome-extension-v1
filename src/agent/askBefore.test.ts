@@ -76,3 +76,41 @@ describe('ask-before controls', () => {
     expect(await type.assess!({ id: 5, text: 'Arya', clear: true, submit: false }, ctxFor('Patient Name', 'textbox', 'input'))).toBeNull();
   });
 });
+
+// Pop-ups the site leaves to the user (an NZF interaction): their buttons are the user's answer.
+describe('pop-ups the user answers', () => {
+  const ctxFor = (name: string, dialogText: string | undefined, userSaid: string) =>
+    ({
+      browser: {
+        send: async (req: { kind: string }) => {
+          if (req.kind === 'describe') return { name, role: 'button', tag: 'button', dialogText, formHasPassword: false, formHasPayment: false, formIsSearch: false, formSubmitLabels: [] };
+          throw new Error(`unexpected ${req.kind}`);
+        },
+        currentTab: async () => ({ url: 'https://pmstraining.vitonta.com/Home/accordionslider' }),
+      },
+      settings: {},
+      signal: new AbortController().signal,
+      elements: new ElementMemory(),
+      skills: [],
+      askBefore: [],
+      askPopups: ['New Zealand Formulary', 'Overwrite All Existing'],
+      userSaid,
+    }) as unknown as ToolContext;
+  const click = BROWSER_TOOLS.find((t) => t.name === 'click')!;
+  const nzf = 'NZF New Zealand Formulary KEY . avoid . adjust Interactions: Panadol … OK Cancel';
+
+  it('asks before pressing one of their buttons', async () => {
+    const ask = await click.assess!({ id: 8015, name: 'OK', double: false }, ctxFor('OK', nzf, 'yes, add a new one anyway'));
+    expect(ask?.detail).toMatch(/leaves to you/);
+  });
+
+  it('presses the button the user named in this message', async () => {
+    expect(await click.assess!({ id: 8015, name: 'OK', double: false }, ctxFor('OK', nzf, 'OK'))).toBeNull();
+  });
+
+  it('leaves other pop-ups and the page alone', async () => {
+    // Medication Advanced Search has an “NZF Details” column: not the NZF pop-up.
+    expect(await click.assess!({ id: 7978, name: 'Panadol', double: false }, ctxFor('Panadol', 'Medication Advanced Search Find Medicine NZF Details Panadol', 'add panadol'))).toBeNull();
+    expect(await click.assess!({ id: 7560, name: 'Medications', double: false }, ctxFor('Medications', undefined, 'add panadol'))).toBeNull();
+  });
+});

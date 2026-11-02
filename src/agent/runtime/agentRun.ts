@@ -288,6 +288,8 @@ export class AgentRun {
       neverClick: toolset.sites.flatMap((s) => s.neverClick ?? []),
       askBefore: toolset.sites.flatMap((s) => s.askBefore ?? []),
       askEveryAction: agent.confirmation === 'always',
+      askPopups: toolset.sites.flatMap((s) => s.askPopups ?? []),
+      userSaid: request,
       // A small context is also a slow model's: every token of a page read is time.
       ...((contextWindowOf(provider) ?? Infinity) <= 32_768 ? { overviewTextChars: 3_000 } : {}),
     };
@@ -493,7 +495,9 @@ export class AgentRun {
         // Only after something was saved, deleted or sent (or when nothing is asked first): an answer that only
         // went somewhere or opened something (“opened Patients”) is not worth a whole call more.
         const changed = this.changedData || agent.confirmation === 'never';
-        if (!verified && changed && agent.verify !== false && byName.has('read_page') && claimsDone(answer) && !asksUser(answer) && !this.justRead) {
+        // After a save, even when the page was read last: an answer read off the page still misquoted a detail (a
+        // recall's due date from an older row).
+        if (!verified && changed && agent.verify !== false && byName.has('read_page') && claimsDone(answer) && !asksUser(answer) && (!this.justRead || this.changedData)) {
           verified = true;
           const page = await this.checkPage(ctx);
           if (page) {
@@ -566,6 +570,13 @@ export class AgentRun {
     });
     this.emit({ type: 'thinking', taskId: this.id, active: false });
     return response.content.trim() || 'Done.';
+  }
+
+  /** The pop-ups showing now, named — a step refused again and again often has one in the way. Empty when none. */
+  private async popupsInTheWay(ctx: ToolContext): Promise<string> {
+    const shown = await this.inFront(ctx, () => ctx.browser.send({ kind: 'dialogs', waitMs: 300, settle: false })).catch(() => null);
+    const titles = (shown?.dialogs ?? []).map((d) => `“${clip(d.title || 'untitled', 80)}”`);
+    return titles.length ? ` A pop-up is showing now: ${titles.join(', ')} — it may be what is in the way; deal with it first.` : '';
   }
 
   /**
@@ -816,7 +827,7 @@ export class AgentRun {
     const sameKey = !pager && !['read_page', 'wait', 'read_records'].includes(tool.name) ? `${tool.name} ${JSON.stringify(args)}` : '';
     if (sameKey && (this.sameActions.get(sameKey) ?? 0) >= 3) {
       finish({ status: 'skipped', note: 'Done 3 times already — not again' });
-      return `Not done: you already did exactly this 3 times in this task (“${step.label}”) and it hasn't got you there. Don't do it again. Read the page and use another control — for a row in a list, its icons in the Actions column (e.g. "Edit") — or tell the user what you can't find.`;
+      return `Not done: you already did exactly this 3 times in this task (“${step.label}”) and it hasn't got you there. Don't do it again. Read the page and use another control — for a row in a list, its icons in the Actions column (e.g. "Edit") — or tell the user what you can't find.${await this.popupsInTheWay(ctx)}`;
     }
     if (sameKey) this.sameActions.set(sameKey, (this.sameActions.get(sameKey) ?? 0) + 1);
 
@@ -834,6 +845,7 @@ export class AgentRun {
           this.hereSites = here;
           ctx.neverClick = [...new Set([...(ctx.neverClick ?? []), ...here.flatMap((s) => s.neverClick ?? [])])];
           ctx.askBefore = [...new Set([...(ctx.askBefore ?? []), ...here.flatMap((s) => s.askBefore ?? [])])];
+          ctx.askPopups = [...new Set([...(ctx.askPopups ?? []), ...here.flatMap((s) => s.askPopups ?? [])])];
         }
       }
       const approvalNeeded = await this.inFront(ctx, () => this.needsApproval(tool, args, ctx, step.label));

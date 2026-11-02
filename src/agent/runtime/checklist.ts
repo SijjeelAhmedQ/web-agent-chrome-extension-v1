@@ -113,7 +113,14 @@ export function checklistTool(list: Checklist, onChange: (done: number | null) =
       if (a.done) {
         const item = list.items[a.done - 1];
         if (!item) return { output: list.size ? `There is no item ${a.done}. The checklist:\n${list.format()}` : 'There is no checklist yet. Make one with items first.', note: 'No such task' };
-        if (item.done) return { output: `Item ${a.done} is already ticked — don't do it again.\n${list.format()}`, note: 'Already ticked' };
+        if (item.done) {
+          // Said with what comes next: told only “already ticked”, a model ticked the same item eight times over.
+          const next = list.pending()[0];
+          return {
+            output: `Item ${a.done} is already ticked — don't tick it again.\n${list.format()}\n${next ? `Next: item ${next} — ${list.items[next - 1].text}. Look at the page for what is in the way (a pop-up?) and carry on with it.` : 'Every item is done: check the page and answer the user.'}`,
+            note: 'Already ticked',
+          };
+        }
         // An item that changes something (add, save, delete…) with nothing saved since the last tick: the record
         // on the page is an older one that looks the same. Ticked only as “already there — not added”.
         if (WRITES.test(item.text) && !item.saved && !NOT_DONE.test(a.note ?? '')) {

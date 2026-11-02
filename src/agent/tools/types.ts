@@ -46,6 +46,10 @@ export interface ToolContext {
   askBefore?: string[];
   /** The agent asks before every action: a tool clicks nothing on its own (open_menu leaves the last item to click). */
   askEveryAction?: boolean;
+  /** Pop-ups only the user answers (words of their title or text): their buttons need the user's OK. */
+  askPopups?: string[];
+  /** What the user wrote in this message — a button it names is the user's answer already. */
+  userSaid?: string;
   /** PDFs already read in this task, by address → their text (or why there is none). */
   pdfTexts?: Map<string, string>;
   /** Lists read with read_records in this task (page and first record → how many records). */

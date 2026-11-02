@@ -159,6 +159,11 @@ export interface SiteProfile {
   neverClick?: string[];
   /** Controls that change a record the moment they are clicked (a tick box that saves itself): asked about first. */
   askBefore?: string[];
+  /**
+   * Pop-ups only the user answers (words of their title or text, e.g. “New Zealand Formulary”): any of their
+   * buttons is pressed only with the user's OK — unless the user's message names that button.
+   */
+  askPopups?: string[];
   knowledge: KnowledgeEntry[];
   createdAt: number;
   updatedAt: number;

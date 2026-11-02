@@ -109,6 +109,11 @@ async function approvalFor(
     verdict = { consequential: true, consequence: kind === 'type' ? 'change the record as you type (this site asks before typing here)' : 'change the record right away' };
     if (kind === 'type' && typed !== undefined) action = `Type “${typed}” into “${info.name}”?`;
   }
+  // A button of a pop-up this site leaves to the user (an NZF interaction, “already in the active medicines list”):
+  // the user's answer — on a card, unless this message of theirs names the button (“OK”).
+  if (!verdict.consequential && kind === 'click' && userDecides(ctx, info)) {
+    verdict = { consequential: true, consequence: 'answer a pop-up this site leaves to you' };
+  }
   if (!verdict.consequential) return null;
   const site = siteOf(await pageUrl(ctx)) || 'this site';
   // A pop-up form with its own finishing buttons (Complete · Save · Reset · Cancel): the user picks one.
@@ -128,6 +133,18 @@ async function approvalFor(
     ...(kind !== 'type' && info.formValues?.length ? { fields: info.formValues } : {}),
     ...(choices ? { choices, target: elementId } : {}),
   };
+}
+
+/** A button of a pop-up the site leaves to the user, not named in the user's message. */
+function userDecides(ctx: ToolContext, info: { name?: string; context?: string; dialogText?: string }): boolean {
+  const popups = (ctx.askPopups ?? []).map(norm).filter(Boolean);
+  // Only a control inside a pop-up (dialogText: the pop-up's own text, Bootstrap and jQuery UI ones included).
+  if (!popups.length || !info.dialogText) return false;
+  const shown = norm(`${info.context ?? ''} ${info.dialogText}`);
+  if (!popups.some((p) => shown.includes(p))) return false;
+  const name = norm(info.name ?? '');
+  const said = ` ${norm(ctx.userSaid ?? '')} `;
+  return !(name && said.includes(` ${name} `));
 }
 
 /** A pop-up's Yes/OK: what the pop-up asks, so the user knows what the yes is to. */
