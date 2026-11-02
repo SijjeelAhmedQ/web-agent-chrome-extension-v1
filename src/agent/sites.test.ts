@@ -114,10 +114,9 @@ describe('site-based setup', () => {
     const budget = knowledgeSection(config.sites, '').text.length - 300;
     const { text, left } = knowledgeSection(config.sites, 'print the invoice', budget);
     expect(text).toMatch(/### Workflow: Print an invoice/);
-    // The patient workflow and the patient page don't match an invoice: their titles only.
-    expect(left).toBe(2);
+    // The patient workflow doesn't match an invoice: its title only (the page notes go in while they fit).
+    expect(left).toBe(1);
     expect(text).toMatch(/call site_knowledge.*“Select a patient from Search & List”/);
-    expect(text).toMatch(/call site_knowledge.*“Patient Search page/);
     expect(searchKnowledge(config.sites, 'select a patient')[0].title).toBe('Select a patient from Search & List');
     // A tight budget keeps the prompt small.
     expect(knowledgeSection(config.sites, 'select arya stark', 400).text.length).toBeLessThan(900);

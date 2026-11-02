@@ -4,7 +4,16 @@ import { DIFF_HEAD } from '../tools/pageDiff';
 const SNAPSHOT_TOOLS = new Set(['read_page']);
 const MAX_TOOL_CHARS = 20_000;
 const PLACEHOLDER = '[Earlier page snapshot removed — its element ids are no longer valid.]';
-const RUNTIME_PROMPT = /^(Before you finish|Not finished yet:|Your last reply was cut off|You have not finished the task yet|Decision \(from)/;
+/**
+ * The head of the page read for the model before its first call (it would spend a whole call asking for it).
+ * A runtime message, not the user's request; a page read like any other, dropped once a newer one is in.
+ */
+export const FIRST_PAGE = '(The page as the task starts — read for you, as read_page would; its ids are valid:)';
+const RUNTIME_PROMPT = /^(Before you finish|Not finished yet:|Your last reply was cut off|You have not finished the task yet|Decision \(from|\(The page as the task starts)/;
+
+/** A message holding a read of the page: a read_page result, or the page read before the first call. */
+export const isPageRead = (m: ChatMessage): boolean =>
+  (m.role === 'tool' && SNAPSHOT_TOOLS.has(m.toolName)) || (m.role === 'user' && m.content.startsWith(FIRST_PAGE));
 const EARLIER_STEP = '[Result of an earlier step — removed to fit; it was done.]';
 /** The first line of a step the user approved: kept however tight the room, so what was done is not forgotten. */
 export const APPROVED_DONE = 'Done with the user’s approval:';
@@ -45,7 +54,7 @@ const size = (messages: ChatMessage[]) => messages.reduce((n, m) => n + tokensOf
 export function compactMessages(messages: ChatMessage[], budgetTokens: number): ChatMessage[] {
   if (size(messages) <= budgetTokens) return messages;
   // The latest full read of a page stays, with the reads of only its changes after it; earlier reads go.
-  const isRead = (m: ChatMessage) => m.role === 'tool' && SNAPSHOT_TOOLS.has(m.toolName) && m.content !== PLACEHOLDER;
+  const isRead = (m: ChatMessage) => isPageRead(m) && !m.content.endsWith(PLACEHOLDER);
   let latest = -1;
   for (let i = messages.length - 1; i >= 0; i--) {
     if (isRead(messages[i]) && !messages[i].content.startsWith(DIFF_HEAD)) {
@@ -54,7 +63,8 @@ export function compactMessages(messages: ChatMessage[], budgetTokens: number): 
     }
   }
   for (let i = 0; i < messages.length; i++) {
-    if (isRead(messages[i]) && i < latest) messages[i] = { ...messages[i], content: PLACEHOLDER };
+    // (The page read before the first call keeps its head: it is the runtime's, not the user's request.)
+    if (isRead(messages[i]) && i < latest) messages[i] = { ...messages[i], content: messages[i].role === 'user' ? `${FIRST_PAGE} ${PLACEHOLDER}` : PLACEHOLDER };
   }
   // The latest look-up of the site's knowledge is how the step now is done (fill “Take”, not “Quantity”):
   // it stays whole like the latest page, until a newer one.

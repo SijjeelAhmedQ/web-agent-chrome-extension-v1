@@ -49,8 +49,8 @@ export const KAGGLE_MODELS: ModelOption[] = [
 
 /** Fast models on OpenRouter for the agent, and Jev Router for its decisions (see each agent's Decision model). */
 export const OPENROUTER_MODELS: ModelOption[] = [
-  { id: 'google/gemini-3.8-flash', label: 'Gemini 3.8 Flash', note: 'Fast, with tools. Thinking Low suits most steps.', tools: true },
-  { id: 'anthropic/claude-haiku-5.5', label: 'Claude Haiku 5.5', note: 'Fast, follows workflows closely. Thinking Low suits most steps.', tools: true },
+  { id: 'google/gemini-3.8-flash', label: 'Gemini 3.8 Flash', note: 'Fast, with tools. Thinking Off is cheapest; Low for harder tasks.', tools: true },
+  { id: 'anthropic/claude-haiku-5.5', label: 'Claude Haiku 5.5', note: 'Fast, follows workflows closely. Thinking Off is cheapest; Low for harder tasks.', tools: true },
   { id: 'typesafe/jev-router', label: 'Jev Router', note: 'Picks a model and its thinking for each request — use it as an agent’s Decision model. Its price varies by request.', tools: true },
 ];
 
@@ -102,7 +102,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     model: 'google/gemini-3.8-flash',
     needsKey: true,
     local: false,
-    thinking: 'low',
+    // Thinking is paid as output (five times the input's price) on every step: off unless the user turns it up.
+    thinking: 'off',
     models: OPENROUTER_MODELS,
     hint: 'One key for hundreds of models. Choose one that supports tools.',
     keyUrl: 'https://openrouter.ai/keys',

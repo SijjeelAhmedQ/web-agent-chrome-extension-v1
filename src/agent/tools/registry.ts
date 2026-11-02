@@ -63,7 +63,8 @@ export function specOf(t: AgentTool<any>): ToolSpec {
   if (!parameters) {
     // JSON Schema 7, not OpenAPI 3: OpenAPI's `"exclusiveMinimum": true` (an id's “> 0”) made DeepSeek
     // on OpenRouter unable to call click or type at all — it fell back to click_text for everything.
-    const { $schema: _ignored, ...schema } = zodToJsonSchema(t.schema, { target: 'jsonSchema7', $refStrategy: 'none' }) as Record<string, unknown>;
+    // No `additionalProperties: false` either: it goes with every call, for every tool, and changes nothing.
+    const { $schema: _ignored, additionalProperties: _closed, ...schema } = zodToJsonSchema(t.schema, { target: 'jsonSchema7', $refStrategy: 'none' }) as Record<string, unknown>;
     parameters = schema;
   }
   return { name: t.name, description: t.description, parameters };

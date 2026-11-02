@@ -2,9 +2,9 @@ import type { KnowledgeEntry, KnowledgeKind, SiteProfile } from '@/shared/types/
 
 /**
  * Turns a site's knowledge base into the part of the system prompt the agent reads on that
- * site. Rules and navigation always go in full (they hold whatever the task); page notes and
- * workflows only when they share a word with the request — the rest is listed by title, for
- * site_knowledge to read when the task needs one. The prompt goes with every call of a task:
+ * site. What matches the request goes first (its rules, pages and workflows), then the site's
+ * navigation, pages and other rules while they fit; workflows that don't match are listed by
+ * title, for site_knowledge to read when the task needs one. The prompt goes with every call of a task:
  * a site's whole knowledge (Indici's: 40,000 characters) in it was most of what “goto patients” cost.
  * A request with no words to match (“OK”) gets everything that fits, as before.
  */
@@ -44,29 +44,48 @@ export const activeKnowledge = (profiles: SiteProfile[]) => profiles.flatMap((p)
 
 /**
  * How many characters of site knowledge fit a model: about a fifth of its context window
- * (16k tokens → ~13k characters), never less than 3,000 or more than 48,000.
+ * (16k tokens → ~9k characters), never less than 3,000 or more than 16,000.
  */
 export function knowledgeBudget(contextTokens: number | undefined): number {
-  // No limit given: a cloud model (DeepSeek, Claude, GPT…) with a large context — room for a site's whole knowledge.
-  if (!contextTokens) return 48_000;
+  // No limit given: a cloud model, paid for every token of every call — what the request needs, not the site's
+  // whole knowledge (the rest is a site_knowledge call away).
+  if (!contextTokens) return MAX_KNOWLEDGE;
   // A small context (Kaggle's 16K) also holds the tools, the instructions and every step: knowledge gets less of it.
   const share = contextTokens <= 32_768 ? 0.55 : 0.8;
-  return Math.min(48_000, Math.max(3_000, Math.round(contextTokens * share)));
+  return Math.min(MAX_KNOWLEDGE, Math.max(3_000, Math.round(contextTokens * share)));
 }
+/** Characters of site knowledge in a prompt at most (was 48,000: Indici's whole knowledge, with every call). */
+const MAX_KNOWLEDGE = 16_000;
 
 /** The prompt section for the sites the agent is on, within about `budget` characters. */
 export function knowledgeSection(profiles: SiteProfile[], request: string, budget = 12_000): { text: string; left: number } {
   const entries = activeKnowledge(profiles);
   if (!entries.length && !profiles.some((p) => p.neverClick?.length)) return { text: '', left: 0 };
-  const ranked = entries
-    .map((e) => ({ e, score: relevance(e, request) }))
-    .sort((a, b) => {
-      const wa = a.e.kind === 'workflow';
-      const wb = b.e.kind === 'workflow';
-      if (wa !== wb) return wa ? 1 : -1;
-      if (wa) return b.score - a.score;
-      return ORDER.indexOf(a.e.kind) - ORDER.indexOf(b.e.kind) || b.score - a.score;
-    });
+  // What the request is about goes in first: entries whose title (or example) shares a word with it — its rules
+  // and pages, then its workflows, best match first — then the entries those name (“Handle the pop-ups as the
+  // "Pop-ups when a consult opens" rule says”), then the site's navigation and other rules while there is room.
+  // Words only in an entry's text don't make it a match: “task” or “patient” is in half a site's entries.
+  // (All rules first filled a small model's room — Kaggle's 9,000 characters — before “goto patients” got its workflow.)
+  const asked = wordsOf(request);
+  // An example's words in two or more examples are sample values (“arya stark”, “aqib”), not what it is about.
+  const inExamples = new Map<string, number>();
+  for (const e of entries) for (const w of wordsOf(e.trigger ?? '')) inExamples.set(w, (inExamples.get(w) ?? 0) + 1);
+  const topicWords = (e: KnowledgeEntry) => new Set([...wordsOf(e.title), ...[...wordsOf(e.trigger ?? '')].filter((w) => (inExamples.get(w) ?? 0) < 2)]);
+  const hits = (e: KnowledgeEntry) => [...topicWords(e)].filter((w) => asked.has(w)).length;
+  const scored = entries.map((e) => {
+    const h = hits(e);
+    return { e, score: h * 2 + [...wordsOf(e.content)].filter((w) => asked.has(w)).length * 0.5, match: h > 0, named: false };
+  });
+  const named = (title: string, text: string) => {
+    const head = title.split(' — ')[0].trim();
+    return head.length > 8 && text.includes(head);
+  };
+  const matching = scored.filter((s) => s.match).map((s) => s.e.content);
+  for (const s of scored) if (!s.match && matching.some((text) => named(s.e.title, text))) s.named = true;
+  // Then, while there is room: navigation, pages (how the site's screens work), rules; other workflows by title.
+  const tier = (s: (typeof scored)[number]) =>
+    s.match ? (s.e.kind === 'workflow' ? 1 : 0) : s.named ? 2 : s.e.kind === 'navigation' ? 3 : s.e.kind === 'page' ? 4 : s.e.kind === 'rule' ? 5 : 6;
+  const ranked = scored.sort((a, b) => tier(a) - tier(b) || (tier(a) === 1 ? 0 : ORDER.indexOf(a.e.kind) - ORDER.indexOf(b.e.kind)) || b.score - a.score);
   const names = profiles.map((p) => p.name).join(', ');
   const lines = [
     `## What the user has taught you about ${names}`,
@@ -78,13 +97,12 @@ export function knowledgeSection(profiles: SiteProfile[], request: string, budge
   }
   let used = lines.join('\n').length;
   const skipped: KnowledgeEntry[] = [];
-  // A request with words to match: page notes and workflows that don't match wait for site_knowledge. A match is a
-  // word of the title or example, or two words of the text — one (“patient”) is in nearly every entry of a site.
-  const matchable = wordsOf(request).size > 0;
-  for (const { e, score } of ranked) {
+  // A request with words to match: workflows that don't match (nor are named by one that does) wait for site_knowledge.
+  const matchable = asked.size > 0;
+  for (const { e, match, named: isNamed } of ranked) {
     const block = formatEntry(e);
-    const always = e.kind === 'rule' || e.kind === 'navigation';
-    if ((always || score >= 1 || !matchable) && used + block.length + 2 <= budget) {
+    const always = e.kind !== 'workflow';
+    if ((always || match || isNamed || !matchable) && used + block.length + 2 <= budget) {
       lines.push('', block);
       used += block.length + 2;
     } else skipped.push(e);

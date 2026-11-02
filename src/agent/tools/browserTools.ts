@@ -15,7 +15,7 @@ import type { AgentTool, ApprovalRequest, ToolContext, ToolOutcome } from './typ
  * works from the page-understanding layer's element ids and plain DOM semantics.
  */
 
-const id = z.coerce.number().int().positive().describe('Element id from the latest read_page or find_element result');
+const id = z.coerce.number().int().positive().describe('Element id from the latest read');
 const bool = (fallback: boolean) =>
   z.preprocess((v) => (typeof v === 'string' ? v.toLowerCase() === 'true' : v), z.boolean().optional().default(fallback));
 
@@ -137,6 +137,9 @@ function popupSays(info: { name: string; dialogText?: string }): string {
   return text ? `The pop-up says: “${text}” ` : '';
 }
 
+/** Controls a page overview lists at most. */
+const OVERVIEW_ELEMENTS = 100;
+
 const readPage: AgentTool<{ mode: 'overview' | 'content'; full: boolean }> = {
   name: 'read_page',
   description:
@@ -150,7 +153,11 @@ const readPage: AgentTool<{ mode: 'overview' | 'content'; full: boolean }> = {
   label: (a) => (a.mode === 'content' ? 'Reading the page content' : 'Reading the page'),
   async execute(a, ctx) {
     const maxTextChars = a.mode === 'overview' && ctx.overviewTextChars ? Math.min(ctx.settings.maxTextChars, ctx.overviewTextChars) : ctx.settings.maxTextChars;
-    const snap = await ctx.browser.send({ kind: 'snapshot', mode: a.mode, maxElements: ctx.settings.maxElements, maxTextChars });
+    // An overview lists the controls a step needs — those in a pop-up in front, new ones, then those on screen —
+    // not every one on a big page (Indici's dashboard: 182, 5,000 tokens with every call after). The rest:
+    // find_element, or mode "content".
+    const maxElements = a.mode === 'overview' ? Math.min(ctx.settings.maxElements, OVERVIEW_ELEMENTS) : ctx.settings.maxElements;
+    const snap = await ctx.browser.send({ kind: 'snapshot', mode: a.mode, maxElements, maxTextChars });
     // A pop-up whose content comes from another site (a formulary in a frame): read that frame too.
     const front = snap.dialogs?.[0];
     if (front?.frames?.length) {
@@ -338,7 +345,7 @@ async function clickAndReport(ctx: ToolContext, elementId: number, double: boole
   };
 }
 
-const double = bool(false).describe('Double-click instead (default false). Only when the user says this app opens items on double-click.');
+const double = bool(false).describe('Only when the user says the app needs a double-click');
 
 /** Clicks again with real mouse input. Returns null when that changed nothing either. */
 async function realClick(ctx: ToolContext, elementId: number, label: string, double: boolean, openedTab: () => chrome.tabs.Tab | null): Promise<ToolOutcome | null> {
@@ -621,8 +628,8 @@ const pathSchema = z.preprocess(
 const openMenu: AgentTool<{ path: string[] }> = {
   name: 'open_menu',
   description:
-    'Open nested menus one level at a time by their visible labels, e.g. ["Products", "Laptops"] — each level is hovered (or clicked if it is a menu button) and the next label is looked for in what opened. Returns the items of the last level with their ids; then click the item you want. Use it for navigation bars with sub-menus.',
-  schema: z.object({ path: pathSchema.describe('Menu labels from the top level down, without the final item to click') }),
+    'Open nested menus by their visible labels and choose the item at the end, e.g. ["Patients", "Search & List"] — each level is hovered (or clicked if it is a menu button), and a last label that is an item, not a menu, is clicked for you (unless clicking it would save, send or delete something: then click it yourself). With only menu labels, returns the items of the last level with their ids. Use it for navigation bars with sub-menus.',
+  schema: z.object({ path: pathSchema.describe('Menu labels from the top level down, ending with the item to choose') }),
   risk: 'read',
   touchesPage: true,
   label: (a) => `Opening ${a.path.map((p) => quote(p)).join(' › ')}`,
@@ -630,6 +637,13 @@ const openMenu: AgentTool<{ path: string[] }> = {
     const res = await ctx.browser.send({ kind: 'menuPath', path: a.path, highlight: ctx.settings.highlightActions });
     ctx.elements.remember([...res.revealed, ...(res.options ?? []), ...(res.item ? [res.item] : [])]);
     const trail = res.opened.length ? res.opened.map((p) => quote(p)).join(' › ') : 'nothing';
+    // The last label is an item: chosen now, as the next step would do — a whole model call saved. Not one the
+    // site never lets the agent click, nor one that would need the user's approval (a save, a send, a delete),
+    // nor anything when the agent asks before every action: those are clicked with click, which asks.
+    if (res.item && !ctx.askEveryAction && !(await neverClickName(ctx, res.item.id)) && !(await approvalFor(ctx, res.item.id, 'click', ''))) {
+      const clicked = await clickById(ctx, res.item.id);
+      return { output: `Opened ${trail} and clicked ${quote(res.item.name || 'the last item')}. ${clicked.output}`, note: clicked.note ?? `Chose “${clip(res.item.name, 30)}”` };
+    }
     if (res.item) {
       return {
         output: `Opened ${trail}. ${quote(res.item.name || 'The last label')} is an item, not a menu — it is showing now as:\n${formatElement(res.item)}\nClick it with click to choose it.`,
@@ -892,25 +906,17 @@ async function popupText(ctx: ToolContext, shown?: { rows?: VisualRow[] }): Prom
 const readRecords: AgentTool<{ first: string; near: string; next: string; close: string; max: number; area: string; status_label: string; normal_values: string; empty_is_normal: boolean }> = {
   name: 'read_records',
   description:
-    'Read a list of records in one go — an inbox, a list of results — instead of opening them one by one: it opens the first record (clicks its text), presses the record viewer\'s "Next" button until the last record, keeps every record\'s text (and its fields), then closes the viewer. It types nothing and saves nothing. Then answer from what it returns.',
+    'Read a list of records (an inbox, results) in one go instead of opening each: opens the first record, presses the viewer\'s "Next" to the last, keeps each record\'s text and fields, then closes the viewer. Saves nothing. Answer from what it returns.',
   schema: z.object({
-    first: z.coerce
-      .string()
-      .optional()
-      .default('')
-      .describe('The text to click to open the first record of the list, e.g. its Subject. With area: leave it empty to start from the record showing now'),
-    near: z.coerce.string().optional().default('').describe('Other text from the same row, if the first text appears more than once'),
-    next: z.coerce.string().optional().default('Next').describe('The viewer button that opens the next record'),
+    first: z.coerce.string().optional().default('').describe('Text to click to open the first record (e.g. its Subject); with area, empty = the record showing now'),
+    near: z.coerce.string().optional().default('').describe('Other text of the same row, when first appears more than once'),
+    next: z.coerce.string().optional().default('Next').describe('The viewer button to the next record'),
     close: z.coerce.string().optional().default('Cancel').describe('The viewer button that closes it without saving'),
-    max: z.coerce.number().int().min(1).max(100).optional().default(30).describe('At most this many records (50 in a pop-up, 100 in the page)'),
-    area: z.coerce
-      .string()
-      .optional()
-      .default('')
-      .describe('When the record opens in the page itself, not in a pop-up: text that is always in the record’s part of the page (the site’s knowledge names it, e.g. "Diagnostic Comment"). Then "Next" is pressed in the page and nothing is closed'),
-    status_label: z.coerce.string().optional().default('').describe('The word before each result’s flag in a record (e.g. "Status"), when the site’s knowledge names one: the tool then works out each record’s normal and abnormal results and counts them'),
+    max: z.coerce.number().int().min(1).max(100).optional().default(30).describe('At most this many records'),
+    area: z.coerce.string().optional().default('').describe('Record opens in the page, not a pop-up: text always in its part of the page (the site knowledge names it)'),
+    status_label: z.coerce.string().optional().default('').describe('The word before each result’s flag (e.g. "Status"), when the site knowledge names one: normal and abnormal are counted'),
     normal_values: z.coerce.string().optional().default('Normal').describe('Flags that mean normal, comma-separated'),
-    empty_is_normal: bool(false).describe('An empty flag counts as normal (when the site’s knowledge says so)'),
+    empty_is_normal: bool(false).describe('An empty flag is normal (when the site knowledge says so)'),
   }),
   risk: 'action',
   touchesPage: true,

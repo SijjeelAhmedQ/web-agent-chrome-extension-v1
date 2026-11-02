@@ -7,7 +7,7 @@ import { createClient } from './llm';
 import type { ChatMessage } from './llm/types';
 import { knowledgeSection } from './planner/siteKnowledge';
 import { DECISION_HEAD, decisionTranscript } from './runtime/agentRun';
-import { budgetFor, CLOUD_BUDGET, estimateTokens } from './runtime/context';
+import { budgetFor, CLOUD_BUDGET, compactMessages, estimateTokens, FIRST_PAGE } from './runtime/context';
 import { meteredClient, promptParts } from './runtime/costLog';
 
 const openrouter: ProviderConfig = { id: 'p', name: 'OpenRouter', kind: 'openai', preset: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', apiKey: 'k', defaultModel: 'm', createdAt: 0 };
@@ -48,12 +48,15 @@ describe('the cost of each call', () => {
     expect(res.usage).toEqual({ inputTokens: 9000, cachedTokens: 6000, outputTokens: 40, reasoningTokens: 12, cost: 0.0021, servedBy: 'z-ai/glm-5.3-flash' });
   });
 
-  it('marks the system prompt for the cache only for Claude through OpenRouter', async () => {
+  it('marks the system prompt for the cache for Claude and Gemini through OpenRouter', async () => {
     let fetchMock = mockFetch({ choices: [{ message: { content: 'ok' } }] });
     await createClient(openrouter).chat({ model: 'anthropic/claude-haiku-5.5', messages: conversation, tools: [], temperature: 0 });
     expect(JSON.parse(fetchMock.mock.calls[0][1]!.body as string).messages[0].content).toEqual([{ type: 'text', text: 'sys', cache_control: { type: 'ephemeral' } }]);
     fetchMock = mockFetch({ choices: [{ message: { content: 'ok' } }] });
     await createClient(openrouter).chat({ model: 'google/gemini-3.8-flash', messages: conversation, tools: [], temperature: 0 });
+    expect(JSON.parse(fetchMock.mock.calls[0][1]!.body as string).messages[0].content[0].cache_control).toEqual({ type: 'ephemeral' });
+    fetchMock = mockFetch({ choices: [{ message: { content: 'ok' } }] });
+    await createClient(openrouter).chat({ model: 'deepseek/deepseek-v4', messages: conversation, tools: [], temperature: 0 });
     expect(JSON.parse(fetchMock.mock.calls[0][1]!.body as string).messages[0].content).toBe('sys');
   });
 
@@ -107,13 +110,28 @@ describe('fewer tokens per call', () => {
   const indici = (): SiteProfile[] => JSON.parse(readFileSync('knowledge/web-agent-restore-indici.json', 'utf8')).sites.slice(0, 1);
 
   it('sends rules and the matching workflows in full, and only the titles of the rest', () => {
-    const { text } = knowledgeSection(indici(), 'goto patients', 48_000);
+    const { text } = knowledgeSection(indici(), 'goto patients', 16_000);
     expect(text).toContain('### Workflow: Select a patient from Search & List');
     expect(text).toContain('### Rule: Open a patient by clicking the name');
     expect(text).not.toContain('### Workflow: Add a medication in the consult');
     expect(text).toMatch(/More knowledge for this site[^\n]*“Add a medication in the consult”/);
     // Was the whole knowledge, about 40,000 characters.
-    expect(text.length).toBeLessThan(20_000);
+    expect(text.length).toBeLessThan(17_000);
+  });
+
+  it('puts what the request is about first — a small model’s room holds the workflow and the rule it names', () => {
+    // Kaggle's 16k context: about 9,000 characters. All the rules used to fill it before the workflow.
+    for (const request of ['goto patients', 'goto patients and select arya STARK']) {
+      const { text } = knowledgeSection(indici(), request, 9_011);
+      expect(text).toContain('### Workflow: Select a patient from Search & List');
+      // Named in the workflow's steps (“as the "Pop-ups when a consult opens" rule says”).
+      expect(text).toContain('### Rule: Pop-ups when a consult opens');
+    }
+  });
+
+  it('doesn’t take an example’s sample names (“arya stark”) for what a workflow is about', () => {
+    const { text } = knowledgeSection(indici(), 'goto patients and select arya STARK', 9_011);
+    expect(text).not.toContain('### Workflow: Search the inbox with filters');
   });
 
   it('matches a word in either form (“patients”, “patient”)', () => {
@@ -145,5 +163,31 @@ describe('fewer tokens per call', () => {
     expect(text).toContain('the page has been read again since');
     expect(text).toContain('Page 2');
     expect(text).toContain('## Your checklist for this task');
+  });
+});
+
+describe('the page read before the first call', () => {
+  const page = (n: number) => `Page ${n}\n${'[1] button "Patients"\n'.repeat(200)}`;
+  const conversation = (): ChatMessage[] => [
+    { role: 'system', content: 'rules' },
+    { role: 'user', content: 'goto patients' },
+    { role: 'user', content: `${FIRST_PAGE}\n${page(1)}` },
+    { role: 'assistant', content: '', toolCalls: [{ id: 'a', name: 'read_page', arguments: {} }] },
+    { role: 'tool', toolName: 'read_page', toolCallId: 'a', content: page(2) },
+  ];
+
+  it('goes once a newer read is in, and is never taken for the request', () => {
+    const msgs = compactMessages(conversation(), 1_000);
+    expect(msgs[1].content).toBe('goto patients');
+    expect(msgs[2].content.startsWith(FIRST_PAGE)).toBe(true);
+    expect(msgs[2].content).not.toContain('Page 1');
+    expect(msgs[4].content).toContain('Page 2');
+  });
+
+  it('is only named for the decision model once the page was read again', () => {
+    const text = decisionTranscript(conversation());
+    expect(text).toContain('[User or runtime] goto patients');
+    expect(text).not.toContain('Page 1');
+    expect(text).toContain('Page 2');
   });
 });

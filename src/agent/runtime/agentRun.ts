@@ -18,7 +18,7 @@ import { buildSystemPrompt } from '../planner/systemPrompt';
 import { knowledgeBudget, knowledgeSection } from '../planner/siteKnowledge';
 import { buildToolset, sitesFor, toolSpecs } from '../tools/registry';
 import { ElementMemory, type AgentTool, type ApprovalRequest, type ToolContext, type ToolOutcome } from '../tools/types';
-import { APPROVED_DONE, budgetFor, clipToolOutput, compactMessages, estimateTokens } from './context';
+import { APPROVED_DONE, budgetFor, clipToolOutput, compactMessages, estimateTokens, FIRST_PAGE, isPageRead } from './context';
 import type { ApprovalAnswer, ApprovalPrompt, RunEvent } from './events';
 import { asksUser, followUpOf, historyForModel, withoutStoppedList } from './followUp';
 import { Checklist, checklistTool } from './checklist';
@@ -285,6 +285,7 @@ export class AgentRun {
       skills: toolset.onDemandSkills,
       neverClick: toolset.sites.flatMap((s) => s.neverClick ?? []),
       askBefore: toolset.sites.flatMap((s) => s.askBefore ?? []),
+      askEveryAction: agent.confirmation === 'always',
       // A small context is also a slow model's: every token of a page read is time.
       ...((contextWindowOf(provider) ?? Infinity) <= 32_768 ? { overviewTextChars: 3_000 } : {}),
     };
@@ -321,6 +322,13 @@ export class AgentRun {
 
     // Models known to lack tool calling (MedGemma on Ollama…) go straight to read-and-answer.
     if (knownModel(model)?.tools === false) return this.answerWithoutTools(client, model, ctx);
+
+    // The page, read before the first call: the model's first step is reading it anyway — a whole call
+    // (the system prompt, the tools, the request) only to ask for it.
+    if (!pageNote && byName.has('read_page')) {
+      const page = await this.runTool({ id: uid('read_'), name: 'read_page', arguments: { mode: 'overview' } }, byName, ctx);
+      if (!/^(Error|Not )/.test(page)) messages.push({ role: 'user', content: `${FIRST_PAGE}\n${page}` });
+    }
 
     let listNudges = 0;
     let pageNudged = false;
@@ -1157,7 +1165,7 @@ const HISTORY_TURNS = 6;
 /** To the agent's model, when a decision model decides its steps. */
 const WORKER_ROLE = [
   '## Who decides',
-  'A decision model decides your steps. First understand the request — make the checklist if it has several things to do, and read the page — then stop: reply in a sentence what you see, and wait for its decision.',
+  'A decision model decides your steps. First understand the request — make the checklist if it has several things to do; the page is read for you below the request (read it again only if it changed) — then stop: reply in a sentence what you see, and wait for its decision.',
   'When a decision comes (“Decision (from …)”), do exactly those steps with your tools, in order. When they are done, or one can’t be done (the element isn’t there, it changed nothing, a pop-up came up), stop and say in a sentence or two what happened. Don’t take other steps of your own.',
 ].join('\n');
 
@@ -1180,13 +1188,15 @@ const DECIDER_ROLE = [
  */
 export function decisionTranscript(messages: ChatMessage[], checklist = ''): string {
   const rest = messages.slice(1);
-  const isFullRead = (m: ChatMessage) => m.role === 'tool' && m.toolName === 'read_page' && !m.content.startsWith(DIFF_HEAD);
+  const isFullRead = (m: ChatMessage) => isPageRead(m) && !m.content.startsWith(DIFF_HEAD);
   const latestRead = rest.findLastIndex(isFullRead);
   const howTo = rest.findLastIndex((m) => m.role === 'tool' && m.toolName === 'site_knowledge');
   const recent = rest.length - 3;
   const lines: string[] = [];
   rest.forEach((m, i) => {
-    if (m.role === 'user') lines.push(m.content.startsWith(DECISION_HEAD) ? `[Your decision] ${m.content}` : `[User or runtime] ${m.content}`);
+    // The page read before the first call, with a newer read after it: named only, like any older read.
+    if (m.role === 'user' && isFullRead(m) && i < latestRead) lines.push(`[The page as the task started — read again since: see the latest read below.]`);
+    else if (m.role === 'user') lines.push(m.content.startsWith(DECISION_HEAD) ? `[Your decision] ${m.content}` : `[User or runtime] ${m.content}`);
     else if (m.role === 'assistant') {
       if (m.content.trim()) lines.push(`[Worker] ${m.content.trim()}`);
       for (const c of m.toolCalls ?? []) lines.push(`[Worker did] ${c.name} ${JSON.stringify(c.arguments)}`);

@@ -91,8 +91,11 @@ export function thinkingFields(provider: ProviderConfig): Record<string, unknown
 }
 
 const isOpenRouter = (url: string) => /openrouter\.ai/.test(url);
-/** Models that cache only what a request marks (Claude); the rest (Gemini, OpenAI, DeepSeek…) cache a repeated prefix themselves. */
-const marksCache = (model: string) => /^anthropic\//i.test(model);
+/**
+ * Models whose prompt cache is asked for by a mark: Claude caches only what is marked; Gemini caches a repeated
+ * prefix by itself only sometimes, a marked one every time. (OpenAI, DeepSeek… cache a repeated prefix themselves.)
+ */
+const marksCache = (model: string) => /^(anthropic|google)\//i.test(model);
 
 const isLocal = (url: string) => /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:|\/|$)/.test(url);
 

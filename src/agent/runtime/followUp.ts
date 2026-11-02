@@ -108,7 +108,7 @@ export function followUpOf(history: ChatMessage[], reply: string): FollowUp | nu
   const request = [
     `My reply to your question: “${reply.trim()}”`,
     '',
-    `Carry on with the task I gave you before (“${task}”) from where you stopped. The browser is as you left it, and the steps listed at the end of your last answer are already done — don't do them again and don't start the task over. Read the page, use my reply where it was needed, do only the steps that are left, then answer. If you asked which button to press and my reply names none of them (“OK” when the choices are “Yes - Add new”, “No - Overwrite All Existing”, “Cancel - Do Nothing”), don't pick one: ask me again, naming them. (If my message is a new request rather than a reply, do it as a new task.)`,
+    `Carry on with the task I gave you before (“${task}”) from where you stopped. The browser is as you left it, and the steps listed at the end of your last answer are already done — don't do them again and don't start the task over. Check the page (it is read for you below), use my reply where it was needed, do only the steps that are left, then answer. If you asked which button to press and my reply names none of them (“OK” when the choices are “Yes - Add new”, “No - Overwrite All Existing”, “Cancel - Do Nothing”), don't pick one: ask me again, naming them. (If my message is a new request rather than a reply, do it as a new task.)`,
   ].join('\n');
   return { request, task, doneSteps, checklist };
 }

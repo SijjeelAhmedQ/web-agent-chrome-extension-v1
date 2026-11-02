@@ -1,6 +1,6 @@
 import type { ModelCallRecord } from '@/shared/types/history';
 import type { ChatMessage, ChatRequest, LlmClient } from '../llm/types';
-import { estimateTokens } from './context';
+import { estimateTokens, isPageRead } from './context';
 
 /**
  * What a prompt is made of, in estimated tokens: the site knowledge, the rest of the system prompt, the tool
@@ -14,7 +14,7 @@ export function promptParts(messages: ChatMessage[], tools: ChatRequest['tools']
       const k = knowledge && m.content.includes(knowledge) ? estimateTokens(knowledge) : 0;
       parts.knowledge += k;
       parts.system += n - k;
-    } else if ((m.role === 'tool' && m.toolName === 'read_page') || (m.role === 'user' && m.content.includes('\nCurrent page:\n'))) parts.pages += n;
+    } else if (isPageRead(m) || (m.role === 'user' && m.content.includes('\nCurrent page:\n'))) parts.pages += n;
     else parts.rest += n;
   }
   return parts;
