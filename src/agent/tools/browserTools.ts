@@ -301,6 +301,11 @@ async function clickAndReport(ctx: ToolContext, elementId: number, double: boole
     }
     effect = (await ctx.browser.send({ kind: 'effect' }).catch(() => undefined)) ?? effect;
   }
+  // A tab that opens a moment after a small change — a tooltip showed (Indici's “Open AI Assisted Inbox” icon) — is
+  // waited for too: else the agent stays on the page it left and has to find the tab itself (three calls).
+  if (!openedTab() && !after.navigated && changed() && (effect?.added.length ?? 0) <= 2 && !effect?.removed) {
+    for (let waited = 0; !openedTab() && waited < 2_500; waited += 300) await sleep(300);
+  }
   const tab = openedTab();
   if (tab) return followNewTab(ctx, tab, label);
 

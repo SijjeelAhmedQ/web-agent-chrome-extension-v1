@@ -345,6 +345,7 @@ const ROWS_FIRST = 6;
 /** Text a page shows more than controls a step uses: listed last on a page too big to list whole. */
 const PLAIN_ROLES = /^(span|td|th|cell|gridcell|columnheader|rowheader|h[1-6]|heading|label|p|text|paragraph|strong|em|b|small)$/;
 const LESSER_ROLES = /^(checkbox|switch|div|li|listitem|clickable|section|article)$/;
+const FIELD_ROLES = /^(textbox|searchbox|combobox|select|listbox|spinbutton|textarea)$/;
 
 /** Reads of this document so far, the read each control first showed up in, and those the last read listed. */
 let reads = 0;
@@ -371,7 +372,9 @@ export function snapshot(mode: ReadMode, maxElements: number, maxTextChars: numb
   const deepRow = (e: ElementInfo) => Number(e.context?.match(/^row (\d+)/)?.[1] ?? 0) > ROWS_FIRST;
   // Then what a step clicks or fills — links (a sidebar's “Medications”), buttons, fields, icons — before tick
   // boxes and generic blocks, and those before plain text (spans, cells, headings, labels): click_text reaches it.
-  const kind = (e: ElementInfo) => (PLAIN_ROLES.test(e.role) ? 2 : LESSER_ROLES.test(e.role) ? 1 : 0);
+  // Fields first of all: a step fills them, and there are few (the Smart Inbox's Patient Name and Status were cut
+  // again and again behind its links).
+  const kind = (e: ElementInfo) => (FIELD_ROLES.test(e.role) ? -1 : PLAIN_ROLES.test(e.role) ? 2 : LESSER_ROLES.test(e.role) ? 1 : 0);
   const chosen = [...described]
     .sort(
       (a, b) =>

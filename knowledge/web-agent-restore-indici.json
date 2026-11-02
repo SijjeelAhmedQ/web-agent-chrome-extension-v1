@@ -438,11 +438,11 @@
           "id": "kb_smart_2",
           "kind": "workflow",
           "title": "Find records — search and filters",
-          "content": "1. Type what the user gave: Patient Name, NHI, Date of birth (DD/MM/YYYY) or Phone; change the Date range only if the user gave dates.\n2. A dropdown (Status, File, Category, Message Subject, Providers, Sender, AI): select_option with the option (\"Abnormal\", \"Unfiled\", \"Lab\"…). Set only those the user named.\n3. Click \"Search\", then read the patient list. \"Reset\" clears every filter.\n4. The counts Normal / Abnormal / Unfiled Records are at the top; say them when the user asks how many.",
+          "content": "1. Type what the user gave: Patient Name, NHI, Date of birth (DD/MM/YYYY) or Phone; change the Date range only if the user gave dates.\n2. A dropdown (Status, File, Category, Message Subject, Providers, Sender, AI): select_option with the option (\"Abnormal\", \"Unfiled\", \"Lab\"…). Set only those the user named.\nSteps 1 and 2 go in one step: fill_form, with text for the typed fields and option for the dropdowns.\n3. Click \"Search\", then read the patient list (it comes with the click's result). \"Reset\" clears every filter.\n4. The counts Normal / Abnormal / Unfiled Records are at the top; say them when the user asks how many.",
           "trigger": "find arya stark’s unfiled abnormal lab results",
           "enabled": true,
           "createdAt": 1792999777295,
-          "updatedAt": 1793087801694
+          "updatedAt": 1793639058446
         },
         {
           "id": "kb_smart_3",
