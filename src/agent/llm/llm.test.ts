@@ -121,7 +121,8 @@ describe('Anthropic adapter', () => {
     const fetchMock = mockFetch({ content: [{ type: 'text', text: 'ok' }, { type: 'tool_use', id: 't1', name: 'click', input: { id: 2 } }], stop_reason: 'tool_use' });
     const res = await createClient(provider({ kind: 'anthropic', baseUrl: 'https://api.anthropic.com', apiKey: 'k' })).chat({ model: 'claude-sonnet-5-5', messages: conversation, tools, temperature: 0 });
     const body = JSON.parse(fetchMock.mock.calls[0][1]!.body as string);
-    expect(body.system).toBe('sys');
+    // Marked for Anthropic's prompt cache: it is the same on every call of a task.
+    expect(body.system).toEqual([{ type: 'text', text: 'sys', cache_control: { type: 'ephemeral' } }]);
     expect(body.messages.map((m: { role: string }) => m.role)).toEqual(['user', 'assistant', 'user']);
     expect(body.messages[2].content[0]).toEqual({ type: 'tool_result', tool_use_id: 'c1', content: 'Clicked.' });
     expect(body.tools[0]).toHaveProperty('input_schema');

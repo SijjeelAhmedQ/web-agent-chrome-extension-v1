@@ -110,6 +110,7 @@ export const DEFAULT_SETTINGS: Settings = {
   maxElements: 250,
   maxTextChars: 12000,
   realClicks: true,
+  maxTaskCost: 0.05,
   voice: { enabled: false, serverUrl: '', key: '', engine: 'whisper', vocabulary: '', autoSend: false, mode: 'handsfree', pauseMs: 1000, livePartials: true, voiceCommands: true },
 };
 

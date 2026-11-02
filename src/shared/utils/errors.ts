@@ -17,6 +17,7 @@ export type ErrorCode =
   | 'page_unreachable'
   | 'cancelled'
   | 'step_limit'
+  | 'cost_limit'
   | 'unknown';
 
 export type RecoveryAction = 'retry' | 'open-models' | 'open-permissions' | 'open-agents';
@@ -84,6 +85,8 @@ export function errorTitle(code: ErrorCode): string {
       return 'This site is off-limits';
     case 'step_limit':
       return 'Took too many steps';
+    case 'cost_limit':
+      return 'Spending limit reached';
     case 'cancelled':
       return 'Stopped';
     default:

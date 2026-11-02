@@ -2,7 +2,9 @@ import { AlertCircle, Check, ChevronDown, CircleSlash, Copy, Pause, Square, X } 
 import { memo, useEffect, useId, useState } from 'react';
 import type { StepRecord, TaskRecord } from '@/shared/types/history';
 import { formatDuration } from '@/shared/utils';
+import { describeCalls, formatCost, summarizeCalls } from '@/shared/utils/cost';
 import { Sparkle } from './Brand';
+import { CostLog } from './CostLog';
 
 /**
  * The “what is the agent doing” timeline. Plain-language steps for everyone; tool names,
@@ -107,13 +109,15 @@ export const ActivityCard = memo(function ActivityCard({ task, thinking, thinkin
   if (!running && steps.length === 0) return null;
 
   const duration = task?.endedAt ? formatDuration(task.endedAt - task.startedAt) : null;
-  const meta = [steps.length ? `${steps.length} step${steps.length === 1 ? '' : 's'}` : null, duration].filter(Boolean).join(' · ');
+  const calls = task?.calls ?? [];
+  const spent = summarizeCalls(calls);
+  const meta = [steps.length ? `${steps.length} step${steps.length === 1 ? '' : 's'}` : null, duration, spent.priced ? formatCost(spent.cost) : null].filter(Boolean).join(' · ');
   const title = running ? 'Working on your request' : status === 'done' ? 'Completed' : status === 'cancelled' ? 'Stopped' : "Couldn't finish";
   const thinkingLabel = doing ?? (steps.length === 0 ? 'Understanding your request' : 'Deciding the next step');
   const waiting = steps.some((s) => s.status === 'waiting');
-  // The steps as text — each step, how it went, and what it found — to paste into a message or a report.
+  // The steps as text — each step, how it went, and what it found — to paste into a message or a report; then the model calls.
   const copySteps = () => {
-    const text = steps.map((s) => [s.label, STATUS_TEXT[s.status], s.note].filter(Boolean).join('\n')).join('\n');
+    const text = [steps.map((s) => [s.label, STATUS_TEXT[s.status], s.note].filter(Boolean).join('\n')).join('\n'), describeCalls(calls)].filter(Boolean).join('\n\n');
     void navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1400);
@@ -152,6 +156,7 @@ export const ActivityCard = memo(function ActivityCard({ task, thinking, thinkin
           )}
         </ol>
       )}
+      {expanded && <CostLog calls={calls} />}
     </section>
   );
 });

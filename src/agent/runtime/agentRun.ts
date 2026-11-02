@@ -3,13 +3,15 @@ import type { ForegroundLock } from '@/extension/browser/foreground';
 import { BUILT_IN_TOOL_IDS } from '@/shared/constants/tools';
 import { upsertTask } from '@/shared/storage/historyStore';
 import type { AgentConfig, AppConfig, ProviderConfig, SiteProfile } from '@/shared/types/config';
-import type { StepRecord, TaskRecord } from '@/shared/types/history';
+import type { ModelCallRecord, StepRecord, TaskRecord } from '@/shared/types/history';
 import { clip, matchesSite, siteOf, uid } from '@/shared/utils';
+import { formatCost, summarizeCalls } from '@/shared/utils/cost';
 import { AgentError, isAbort, toAgentError } from '@/shared/utils/errors';
 import { createClient, type LlmClient } from '../llm';
 import { KAGGLE_CONTEXT_WINDOW, knownModel } from '@/shared/constants/providers';
 import { BROWSER_TOOLS } from '../tools/browserTools';
 import { formatDialogs } from '../tools/format';
+import { DIFF_HEAD } from '../tools/pageDiff';
 import { DEFAULT_CONTEXT_WINDOW } from '../llm/ollama';
 import type { ChatMessage, ToolCall } from '../llm/types';
 import { buildSystemPrompt } from '../planner/systemPrompt';
@@ -20,6 +22,7 @@ import { APPROVED_DONE, budgetFor, clipToolOutput, compactMessages, estimateToke
 import type { ApprovalAnswer, ApprovalPrompt, RunEvent } from './events';
 import { asksUser, followUpOf, historyForModel, withoutStoppedList } from './followUp';
 import { Checklist, checklistTool } from './checklist';
+import { meteredClient } from './costLog';
 import { changedSomething, namedIn, nearlyNamed, pageState, undoTool, wrongRowClick, type ClickRecord } from './clickGuard';
 
 export { namedIn } from './clickGuard';
@@ -114,6 +117,10 @@ export class AgentRun {
   private checklist = new Checklist();
   /** The site knowledge in the prompt — values written there count as the user's. */
   private knowledgeText = '';
+  /** The knowledge section in the system prompt now — the log counts its tokens apart. */
+  private knowledgeNow = '';
+  /** Something the user approved (a save, a delete…) was done in this task: an answer saying so is double-checked. */
+  private changedData = false;
   /** The sites of the tab the agent last worked on — its knowledge goes in the prompt when the task moved there. */
   private hereSites: SiteProfile[] = [];
   /** Set when the task must end now, with this answer. */
@@ -205,6 +212,27 @@ export class AgentRun {
     return this.task;
   }
 
+  /**
+   * The messages of a call with the checklist at the end: shown before every step (early steps may have been
+   * dropped to fit), and kept out of the system prompt so that stays the same — and cached — all task long.
+   */
+  private withChecklist(messages: ChatMessage[]): ChatMessage[] {
+    return this.checklist.size ? [...messages, { role: 'user', content: `(Where you are)\n${this.checklist.section()}` }] : messages;
+  }
+
+  /** Stops the task before a call once it has spent its limit (Settings → Agent behavior); Resume carries it on. */
+  private withinSpendingLimit() {
+    const limit = this.options.config.settings.maxTaskCost ?? 0;
+    if (!(limit > 0)) return;
+    const spent = summarizeCalls(this.task.calls).cost;
+    if (spent >= limit) {
+      throw new AgentError(
+        'cost_limit',
+        `This task has used ${formatCost(spent)} of its ${formatCost(limit)} limit, so I stopped before spending more. Press Resume to carry on, or change the limit in Settings → Agent behavior.`,
+      );
+    }
+  }
+
   private closeOpenSteps(status: 'skipped' | 'failed') {
     for (const s of this.task.steps) {
       if (s.status === 'running' || s.status === 'waiting') this.upsertStep({ ...s, status, durationMs: Date.now() - s.startedAt });
@@ -215,11 +243,15 @@ export class AgentRun {
     const { agent, config, request } = this.options;
     const url = tab?.url ?? '';
     const { provider, model } = resolveProvider(agent, config, url);
-    const client = createClient(provider);
+    // Every call goes in the task's log — what it was for, its tokens, its cost — and none starts past the spending limit.
+    const log = (call: ModelCallRecord) => this.updateTask({ calls: [...(this.task.calls ?? []), call] });
+    const client = meteredClient(createClient(provider), 'worker', () => this.knowledgeNow, log, () => this.withinSpendingLimit());
     // The decision model, when the agent has one, decides each next step; the agent's own model reads the
     // request first, double-checks and writes the answer.
     const decision = resolveDecision(agent, config);
-    const decider = decision ? { client: createClient(decision.provider) as LlmClient, model: decision.model, label: decision.label } : null;
+    const decider = decision
+      ? { client: meteredClient(createClient(decision.provider), 'decider', () => this.knowledgeNow, log, () => this.withinSpendingLimit()), model: decision.model, label: decision.label }
+      : null;
     const toolset = buildToolset(agent, config, url);
     // A reply to the question the last answer asked: carry on from there, don't start over.
     const followUp = followUpOf(this.options.history, request);
@@ -263,6 +295,7 @@ export class AgentRun {
     const systemFor = (sites: SiteProfile[]) => {
       const knowledge = knowledgeSection(sites, followUp ? `${followUp.task}\n${request}` : request, knowledgeBudget(contextWindowOf(provider))).text;
       this.knowledgeText += `\n${knowledge}`;
+      this.knowledgeNow = knowledge;
       return buildSystemPrompt({
         agent,
         toolNames: [...byName.keys()],
@@ -276,8 +309,8 @@ export class AgentRun {
     const siteKey = (sites: SiteProfile[]) => sites.map((s) => s.id).join(',');
     let system = systemFor(toolset.sites);
     let knowledgeOf = siteKey(toolset.sites);
-    // Earlier answers are context, not facts about the page now.
-    const history = historyForModel(this.options.history.slice(-12), followUp);
+    // Earlier answers are context, not facts about the page now. The last few turns: each goes with every call.
+    const history = historyForModel(this.options.history.slice(-HISTORY_TURNS), followUp);
     const messages: ChatMessage[] = [{ role: 'system', content: system }, ...history, { role: 'user', content: followUp?.request ?? request }];
     let verified = false;
     let checkedAnswer: string | null = null;
@@ -300,6 +333,8 @@ export class AgentRun {
     // writes the answer and double-checks it. Without a decision model it is all 'act', as before.
     let phase: 'act' | 'decide' | 'answer' = 'act';
     let acts = 0;
+    // Why the next call is made, when it is one of the runtime's own checks (“Double-check”) — for the log.
+    let nextPurpose: string | null = null;
     const workerLabel = knownModel(model)?.label ?? model;
     const stepLimit = this.stepLimit(agent.maxSteps) * (decider ? 2 : 1);
     for (let step = 0; step < stepLimit; step++) {
@@ -316,14 +351,17 @@ export class AgentRun {
           content: `(The task is on ${names} now. What the user taught you about it is in your instructions now, in place of the site before. Do the steps left${this.checklist.size ? ' on your checklist' : ''} the way it says here — its workflows and its controls — not the way you planned them on the site before. A step that names something of the site before (e.g. opening a patient's consult) means what it is for: do that here, the way this site does it.)`,
         });
       }
-      // The checklist is shown again before every step: early steps may have been dropped to fit.
-      messages[0] = { role: 'system', content: `${system}${decider ? `\n\n${WORKER_ROLE}` : ''}${this.checklist.size ? `\n\n${this.checklist.section()}` : ''}` };
+      // The system prompt stays the same through the task, so the server's prompt cache serves it (and the
+      // tools) at a fraction of the price on every call after the first. What changes — the checklist — goes
+      // at the end of each call instead (`withChecklist`).
+      messages[0] = { role: 'system', content: `${system}${decider ? `\n\n${WORKER_ROLE}` : ''}` };
       // A decision carried out at length without a word back: the decision model looks again.
       if (decider && phase === 'act' && acts >= MAX_ACTS) phase = 'decide';
       let response;
       try {
         if (decider && phase === 'decide') {
-          const decided = await this.decideNext(decider, messages, budget);
+          const decided = await this.decideNext(decider, messages, budget, nextPurpose);
+          nextPurpose = null;
           if (decided.next) {
             messages.push({ role: 'user', content: `${DECISION_HEAD} ${decider.label}) — do these steps, then say in a sentence what happened:\n${decided.text}` });
             phase = 'act';
@@ -333,9 +371,9 @@ export class AgentRun {
           // Done, or a question for the user: the agent's model writes it — without tools, so the decision stands.
           phase = 'answer';
           this.emit({ type: 'thinking', taskId: this.id, active: true, label: `Writing the answer · ${workerLabel}` });
-          const ask: ChatMessage = { role: 'user', content: `${ANSWER_PROMPT}\n\nThe draft:\n${decided.text || '(none)'}` };
+          const ask: ChatMessage = { role: 'user', content: `${ANSWER_PROMPT}\n\nThe draft:\n${decided.text || '(none)'}${this.checklist.size ? `\n\n${this.checklist.section()}` : ''}` };
           const written = await client
-            .chat({ model, messages: [...reasoningFor(compactMessages(messages, budget), model), ask], tools: [], temperature: agent.temperature, signal: this.abort.signal })
+            .chat({ model, purpose: 'Writing the answer', messages: [...reasoningFor(compactMessages(messages, budget), model), ask], tools: [], temperature: agent.temperature, signal: this.abort.signal })
             .catch((err: unknown) => {
               if (this.abort.signal.aborted || isAbort(err)) throw err;
               return null; // the decision model's own words stand
@@ -345,7 +383,16 @@ export class AgentRun {
         } else {
           const label = !decider || step === 0 ? undefined : phase === 'answer' ? `Checking the answer · ${workerLabel}` : `Doing it · ${workerLabel}`;
           this.emit({ type: 'thinking', taskId: this.id, active: true, ...(label ? { label } : {}) });
-          response = await client.chat({ model, messages: reasoningFor(compactMessages(messages, budget), model), tools: specs, temperature: agent.temperature, signal: this.abort.signal });
+          const purpose = nextPurpose ?? (step === 0 ? 'Understanding your request' : phase === 'answer' ? 'Double-check' : 'Doing a step');
+          nextPurpose = null;
+          response = await client.chat({
+            model,
+            purpose,
+            messages: this.withChecklist(reasoningFor(compactMessages(messages, budget), model)),
+            tools: specs,
+            temperature: agent.temperature,
+            signal: this.abort.signal,
+          });
           lastModel = model;
           if (phase === 'act') acts++;
         }
@@ -375,6 +422,7 @@ export class AgentRun {
           const looped = cutOff && repeatsItself(answer);
           messages.push({ role: 'assistant', content: looped ? `${clip(answer, 300)} …` : answer });
           messages.push({ role: 'user', content: looped ? LOOPED_PROMPT : cutOff ? CUT_OFF_PROMPT : CONTINUE_PROMPT });
+          nextPurpose = cutOff ? 'Again: the reply was cut off' : 'Again: the reply only said what comes next';
           if (decider) phase = 'decide';
           continue;
         }
@@ -384,6 +432,7 @@ export class AgentRun {
           listNudges++;
           messages.push({ role: 'assistant', content: answer });
           messages.push({ role: 'user', content: `${NOT_FINISHED_PROMPT} Checklist item${left.length === 1 ? '' : 's'} ${left.join(', ')} ${left.length === 1 ? 'is' : 'are'} not ticked:\n${this.checklist.format()}\nIf you finished one, call task_list with done for it. Otherwise carry on with item ${left[0]}. If one can't be done, tell the user which one and why.` });
+          nextPurpose = 'Again: checklist items not ticked';
           if (decider) phase = 'decide';
           continue;
         }
@@ -392,6 +441,7 @@ export class AgentRun {
           pageNudged = true;
           messages.push({ role: 'assistant', content: answer });
           messages.push({ role: 'user', content: `${NOT_FINISHED_PROMPT} you haven't looked at the page in this task — the tab may have changed since earlier answers. Call read_page now, check the page, and then do the task or answer from what it shows.` });
+          nextPurpose = 'Again: the page was not read';
           if (decider) phase = 'decide';
           continue;
         }
@@ -403,6 +453,7 @@ export class AgentRun {
           if (note) {
             messages.push({ role: 'assistant', content: answer });
             messages.push({ role: 'user', content: `${NOT_FINISHED_PROMPT} ${note}` });
+            nextPurpose = 'Again: pop-ups left open';
             if (decider) phase = 'decide';
             continue;
           }
@@ -415,6 +466,7 @@ export class AgentRun {
           if (unseen.length) {
             messages.push({ role: 'assistant', content: answer });
             messages.push({ role: 'user', content: `${NOT_FINISHED_PROMPT} your answer quotes ${unseen.map((q) => `"${q}"`).join(', ')} as what the page shows, but no tool result in this task and nothing on the page now has ${unseen.length === 1 ? 'it' : 'them'}. Call read_page and answer only from what the page shows — give the user the answer itself, without mentioning this check or your earlier wording.` });
+            nextPurpose = 'Again: words not on the page';
             if (decider) phase = 'decide';
             continue;
           }
@@ -428,13 +480,17 @@ export class AgentRun {
         // A claim that something was done gets checked against the page before the user sees it.
         // An answer that stops to ask the user something isn't the end of the task: no check (it would lose the question).
         // Nor when the model read the page last and did nothing since: it answered from the page as it is now.
-        if (!verified && agent.verify !== false && byName.has('read_page') && claimsDone(answer) && !asksUser(answer) && !this.justRead) {
+        // Only after something was saved, deleted or sent (or when nothing is asked first): an answer that only
+        // went somewhere or opened something (“opened Patients”) is not worth a whole call more.
+        const changed = this.changedData || agent.confirmation === 'never';
+        if (!verified && changed && agent.verify !== false && byName.has('read_page') && claimsDone(answer) && !asksUser(answer) && !this.justRead) {
           verified = true;
           const page = await this.checkPage(ctx);
           if (page) {
             checkedAnswer = answer;
             messages.push({ role: 'assistant', content: answer });
             messages.push({ role: 'user', content: verifyPrompt(page) });
+            nextPurpose = 'Double-check';
             // The double-check is the agent's model's.
             if (decider) phase = 'answer';
             continue;
@@ -490,6 +546,7 @@ export class AgentRun {
     this.emit({ type: 'thinking', taskId: this.id, active: true });
     const response = await client.chat({
       model,
+      purpose: 'Answering from the page (this model has no tools)',
       messages: [{ role: 'system', content: system }, ...this.options.history.slice(-6), { role: 'user', content: user }],
       tools: [],
       temperature: agent.temperature,
@@ -519,14 +576,21 @@ export class AgentRun {
    * The decision model's next decision: the steps for the agent's model to do (`next`), or — done, or a question
    * for the user — the words the answer is written from. Shown in the activity.
    */
-  private async decideNext(decider: { client: LlmClient; model: string; label: string }, messages: ChatMessage[], budget: number): Promise<{ next: boolean; text: string }> {
+  private async decideNext(
+    decider: { client: LlmClient; model: string; label: string },
+    messages: ChatMessage[],
+    budget: number,
+    after: string | null = null,
+  ): Promise<{ next: boolean; text: string }> {
     this.emit({ type: 'thinking', taskId: this.id, active: true, label: `Deciding the next step · ${decider.label}` });
     const started = Date.now();
     const res = await decider.client.chat({
       model: decider.model,
+      purpose: `Deciding the next step${after ? ` (${after.replace(/^Again: /, 'after: ')})` : ''}`,
       messages: [
-        { role: 'system', content: `${messages[0].content}\n\n${DECIDER_ROLE}` },
-        { role: 'user', content: decisionTranscript(compactMessages(messages, budget)) },
+        // The worker's part is not the decision model's; the rest of the prompt (rules, knowledge) is.
+        { role: 'system', content: `${messages[0].content.replace(`\n\n${WORKER_ROLE}`, '')}\n\n${DECIDER_ROLE}` },
+        { role: 'user', content: decisionTranscript(compactMessages(messages, budget), this.checklist.section()) },
       ],
       tools: [],
       temperature: 0,
@@ -803,6 +867,7 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
       // What the user let it do stays in the model's memory when older steps are cut to fit — or, a delete
       // done and forgotten, it looks for the record again and deletes another.
       if (!approvalNeeded) return outcome.output;
+      if (!/^Not saved/.test(outcome.note ?? '')) this.changedData = true;
       if (form && !/^Not saved/.test(outcome.note ?? '')) this.savedForms.add(form);
       // The checklist's item in hand now has a change of its own to show for it.
       if (!/^Not saved/.test(outcome.note ?? '') && this.checklist.size) {
@@ -1086,6 +1151,8 @@ const NOT_FINISHED_PROMPT = 'Not finished yet:';
 export const DECISION_HEAD = 'Decision (from';
 /** The agent's model's calls on one decision before the decision model looks again. */
 const MAX_ACTS = 6;
+/** Earlier messages of the conversation (requests and answers) that go with a task — with every call of it. */
+const HISTORY_TURNS = 6;
 
 /** To the agent's model, when a decision model decides its steps. */
 const WORKER_ROLE = [
@@ -1105,18 +1172,48 @@ const DECIDER_ROLE = [
   'Every save, delete and complete is approved by the user anyway; never guess a value the user didn’t give.',
 ].join('\n');
 
-/** What the decision model reads: the request and every step since, as plain text (it calls no tools). */
-export function decisionTranscript(messages: ChatMessage[]): string {
+/**
+ * What the decision model reads: the request and every step since, as plain text (it calls no tools), and the
+ * checklist. It decides from the page as it is now: a page read with a full read after it is only named (its
+ * ids are gone anyway), and long older results are cut — the latest results, the latest site knowledge and
+ * every approved save stay whole.
+ */
+export function decisionTranscript(messages: ChatMessage[], checklist = ''): string {
+  const rest = messages.slice(1);
+  const isFullRead = (m: ChatMessage) => m.role === 'tool' && m.toolName === 'read_page' && !m.content.startsWith(DIFF_HEAD);
+  const latestRead = rest.findLastIndex(isFullRead);
+  const howTo = rest.findLastIndex((m) => m.role === 'tool' && m.toolName === 'site_knowledge');
+  const recent = rest.length - 3;
   const lines: string[] = [];
-  for (const m of messages.slice(1)) {
+  rest.forEach((m, i) => {
     if (m.role === 'user') lines.push(m.content.startsWith(DECISION_HEAD) ? `[Your decision] ${m.content}` : `[User or runtime] ${m.content}`);
     else if (m.role === 'assistant') {
       if (m.content.trim()) lines.push(`[Worker] ${m.content.trim()}`);
       for (const c of m.toolCalls ?? []) lines.push(`[Worker did] ${c.name} ${JSON.stringify(c.arguments)}`);
-    } else if (m.role === 'tool') lines.push(`[Result of ${m.toolName}]\n${m.content}`);
-  }
-  return `${lines.join('\n\n')}\n\nDecide what the worker does next.`;
+    } else if (m.role === 'tool') {
+      // Whole: the latest steps, the latest page and the reads of its changes after it, what the task read as
+      // data (records, tables: the answer is made of them), the latest site knowledge and every approved save.
+      const keep =
+        i >= recent ||
+        (latestRead >= 0 && i >= latestRead && m.toolName === 'read_page') ||
+        DATA_TOOLS.has(m.toolName) ||
+        i === howTo ||
+        m.content.startsWith(APPROVED_DONE);
+      const content =
+        keep || m.content.length <= DECIDER_OLD_RESULT
+          ? m.content
+          : isFullRead(m) && i < latestRead
+            ? '[A page read — the page has been read again since: see the latest read below.]'
+            : `${m.content.slice(0, DECIDER_OLD_RESULT)}\n[…cut — an earlier result]`;
+      lines.push(`[Result of ${m.toolName}]\n${content}`);
+    }
+  });
+  return `${lines.join('\n\n')}${checklist ? `\n\n${checklist}` : ''}\n\nDecide what the worker does next.`;
 }
+/** Characters of an older step's result the decision model reads. */
+const DECIDER_OLD_RESULT = 800;
+/** Tools whose results are what the task gathers (records, tables), not steps along the way. */
+const DATA_TOOLS = new Set(['read_records', 'read_table']);
 
 /** To the agent's model, when the decision model has decided to answer: it writes the answer, it takes no step. */
 const ANSWER_PROMPT =

@@ -3,11 +3,11 @@ import { thinkingOf } from '@/shared/utils';
 import { AgentError } from '@/shared/utils/errors';
 import { joinUrl, requestJson } from './http';
 import { extractTextToolCalls, parseArguments, stripThinking } from './parse';
-import type { ChatMessage, ChatRequest, ChatResponse, LlmClient, ToolCall } from './types';
+import type { ChatMessage, ChatRequest, ChatResponse, LlmClient, ToolCall, Usage } from './types';
 
 interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string | null;
+  content: string | null | { type: 'text'; text: string; cache_control?: { type: 'ephemeral' } }[];
   tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[];
   tool_call_id?: string;
   name?: string;
@@ -24,11 +24,38 @@ interface OpenAIResponse {
     };
     finish_reason?: string;
   }[];
-  usage?: { prompt_tokens?: number; completion_tokens?: number };
+  /** The model that answered (OpenRouter: a router's pick). */
+  model?: string;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    /** OpenRouter: what the call cost, in dollars. */
+    cost?: number;
+    prompt_tokens_details?: { cached_tokens?: number };
+    completion_tokens_details?: { reasoning_tokens?: number };
+  };
   error?: { message?: string };
 }
 
-function toWire(messages: ChatMessage[]): OpenAIMessage[] {
+/** The usage a reply reports, without the fields it left out. */
+export function usageOf(data: Pick<OpenAIResponse, 'usage' | 'model'>): Usage {
+  const u = data.usage;
+  const usage: Usage = {
+    inputTokens: u?.prompt_tokens,
+    cachedTokens: u?.prompt_tokens_details?.cached_tokens,
+    outputTokens: u?.completion_tokens,
+    reasoningTokens: u?.completion_tokens_details?.reasoning_tokens,
+    cost: typeof u?.cost === 'number' ? u.cost : undefined,
+    servedBy: data.model,
+  };
+  return Object.fromEntries(Object.entries(usage).filter(([, v]) => v !== undefined)) as Usage;
+}
+
+/**
+ * `cacheSystem`: the system prompt is marked for the server's prompt cache (Claude through OpenRouter caches only
+ * what is marked). It stays the same through a task, so every call after the first reads it at a tenth of the price.
+ */
+function toWire(messages: ChatMessage[], cacheSystem = false): OpenAIMessage[] {
   return messages.map((m) => {
     switch (m.role) {
       case 'assistant':
@@ -43,6 +70,8 @@ function toWire(messages: ChatMessage[]): OpenAIMessage[] {
         };
       case 'tool':
         return { role: 'tool', content: m.content, tool_call_id: m.toolCallId, name: m.toolName };
+      case 'system':
+        return cacheSystem ? { role: 'system', content: [{ type: 'text', text: m.content, cache_control: { type: 'ephemeral' } }] } : { role: 'system', content: m.content };
       default:
         return { role: m.role, content: m.content };
     }
@@ -60,6 +89,10 @@ export function thinkingFields(provider: ProviderConfig): Record<string, unknown
   if (provider.preset === 'kaggle') return level === 'off' ? {} : { chat_template_kwargs: { enable_thinking: true } };
   return { reasoning_effort: level === 'off' ? 'none' : level };
 }
+
+const isOpenRouter = (url: string) => /openrouter\.ai/.test(url);
+/** Models that cache only what a request marks (Claude); the rest (Gemini, OpenAI, DeepSeek…) cache a repeated prefix themselves. */
+const marksCache = (model: string) => /^anthropic\//i.test(model);
 
 const isLocal = (url: string) => /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:|\/|$)/.test(url);
 
@@ -84,7 +117,7 @@ export class OpenAICompatibleClient implements LlmClient {
     if (!this.provider.baseUrl) throw new AgentError('no_model', 'This connection has no address. Add one in Models.');
     const body: Record<string, unknown> = {
       model: req.model,
-      messages: toWire(req.messages),
+      messages: toWire(req.messages, isOpenRouter(this.provider.baseUrl) && marksCache(req.model)),
       temperature: req.temperature,
       stream: false,
       ...(req.tools.length
@@ -92,6 +125,8 @@ export class OpenAICompatibleClient implements LlmClient {
         : {}),
     };
     Object.assign(body, thinkingFields(this.provider));
+    // OpenRouter: the reply then says what the call cost and which model answered (kept in the task's log).
+    if (isOpenRouter(this.provider.baseUrl)) body.usage = { include: true };
     // OpenRouter holds back credit for the model's whole output limit (65k tokens) unless told less — a key with
     // little left then fails every request. A step's reply is far shorter; high thinking gets more room.
     if (/openrouter\.ai/.test(this.provider.baseUrl)) body.max_tokens = thinkingOf(this.provider) === 'high' ? 16_384 : 8_192;
@@ -139,7 +174,7 @@ export class OpenAICompatibleClient implements LlmClient {
       content,
       toolCalls,
       finishReason: choice.finish_reason,
-      usage: { inputTokens: data.usage?.prompt_tokens, outputTokens: data.usage?.completion_tokens },
+      usage: usageOf(data),
       ...(choice.message.reasoning_details?.length ? { reasoning: choice.message.reasoning_details } : {}),
     };
   }

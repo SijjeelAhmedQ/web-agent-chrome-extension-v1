@@ -19,7 +19,7 @@ interface WireMessage {
 interface AnthropicResponse {
   content?: Block[];
   stop_reason?: string;
-  usage?: { input_tokens?: number; output_tokens?: number };
+  usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
   error?: { message?: string };
 }
 
@@ -76,7 +76,8 @@ export class AnthropicClient implements LlmClient {
       body: JSON.stringify({
         model: req.model,
         max_tokens: 4096 + budget,
-        system,
+        // The tools and the system prompt stay the same through a task: cached, every call after the first reads them at a tenth of the price.
+        system: system ? [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }] : undefined,
         messages,
         ...(budget ? { thinking: { type: 'enabled', budget_tokens: budget } } : { temperature: req.temperature }),
         ...(req.tools.length ? { tools: req.tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters })) } : {}),
@@ -95,7 +96,12 @@ export class AnthropicClient implements LlmClient {
         .filter((b): b is Extract<Block, { type: 'tool_use' }> => b.type === 'tool_use')
         .map((b) => ({ id: b.id, name: b.name, arguments: b.input ?? {} })),
       finishReason: data.stop_reason,
-      usage: { inputTokens: data.usage?.input_tokens, outputTokens: data.usage?.output_tokens },
+      // Anthropic counts the cached part apart from the rest of the input.
+      usage: {
+        inputTokens: (data.usage?.input_tokens ?? 0) + (data.usage?.cache_read_input_tokens ?? 0) + (data.usage?.cache_creation_input_tokens ?? 0) || undefined,
+        cachedTokens: data.usage?.cache_read_input_tokens,
+        outputTokens: data.usage?.output_tokens,
+      },
       ...(blocks.some((b) => b.type === 'thinking' || b.type === 'redacted_thinking')
         ? { reasoning: blocks.filter((b) => b.type === 'thinking' || b.type === 'redacted_thinking') }
         : {}),

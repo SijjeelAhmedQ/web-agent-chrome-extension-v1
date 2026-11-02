@@ -101,7 +101,7 @@ describe('site-based setup', () => {
     expect(prompt).toContain('### Workflow: Select a patient from Search & List');
   });
 
-  it('sends workflows in full while they fit, even when the request is worded differently', () => {
+  it('sends a workflow in full when a word of its title is in the request, or when the request has no words to match', () => {
     const config = withIndici();
     expect(knowledgeSection(config.sites, 'patient kholo luke ka').text).toMatch(/### Workflow: Select a patient from Search & List/);
     expect(knowledgeSection(config.sites, '').text).toMatch(/### Workflow: Select a patient from Search & List/);
@@ -114,8 +114,10 @@ describe('site-based setup', () => {
     const budget = knowledgeSection(config.sites, '').text.length - 300;
     const { text, left } = knowledgeSection(config.sites, 'print the invoice', budget);
     expect(text).toMatch(/### Workflow: Print an invoice/);
-    expect(left).toBe(1);
+    // The patient workflow and the patient page don't match an invoice: their titles only.
+    expect(left).toBe(2);
     expect(text).toMatch(/call site_knowledge.*“Select a patient from Search & List”/);
+    expect(text).toMatch(/call site_knowledge.*“Patient Search page/);
     expect(searchKnowledge(config.sites, 'select a patient')[0].title).toBe('Select a patient from Search & List');
     // A tight budget keeps the prompt small.
     expect(knowledgeSection(config.sites, 'select arya stark', 400).text.length).toBeLessThan(900);

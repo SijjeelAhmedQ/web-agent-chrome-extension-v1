@@ -31,13 +31,29 @@ export interface ChatRequest {
   tools: ToolSpec[];
   temperature: number;
   signal?: AbortSignal;
+  /** What the call is for, for the task's log (“Doing a step”) — not sent. */
+  purpose?: string;
+}
+
+/** What a call used, as the server reports it. Each field only when the server sends it. */
+export interface Usage {
+  inputTokens?: number;
+  /** Of the input, read from the server's prompt cache (billed at a fraction). */
+  cachedTokens?: number;
+  outputTokens?: number;
+  /** Of the output, the model's thinking. */
+  reasoningTokens?: number;
+  /** In dollars (OpenRouter). */
+  cost?: number;
+  /** The model that answered — a router (Jev Router) picks one per request. */
+  servedBy?: string;
 }
 
 export interface ChatResponse {
   content: string;
   toolCalls: ToolCall[];
   finishReason?: string;
-  usage?: { inputTokens?: number; outputTokens?: number };
+  usage?: Usage;
   /**
    * The model's reasoning as the provider sent it (OpenRouter's reasoning_details, Anthropic's thinking
    * blocks): sent back with this turn, or models that think while calling tools (Gemini 3, Claude) refuse.

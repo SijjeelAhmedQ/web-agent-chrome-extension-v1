@@ -8,6 +8,8 @@ const RUNTIME_PROMPT = /^(Before you finish|Not finished yet:|Your last reply wa
 const EARLIER_STEP = '[Result of an earlier step — removed to fit; it was done.]';
 /** The first line of a step the user approved: kept however tight the room, so what was done is not forgotten. */
 export const APPROVED_DONE = 'Done with the user’s approval:';
+/** A cloud model's room for the conversation, in tokens (it was 56k: a simple task's calls grew to 30k each). */
+export const CLOUD_BUDGET = 24_000;
 /** The least of the latest page the model keeps, in tokens, however tight the budget. */
 const MIN_PAGE_TOKENS = 1_200;
 const SHRUNK_NOTE = '[…page list shortened to fit the model’s memory — use find_element or click_text for something not listed]';
@@ -153,8 +155,9 @@ export function shrinkSnapshot(text: string, tokens: number): string {
 
 /** Room for the conversation, in tokens, given a model's context window: all of it but the reply. */
 export function budgetFor(contextTokens: number | undefined): number {
-  // No limit given: a cloud model with a large context — room for a site's knowledge (up to ~12k tokens) and big pages.
-  if (!contextTokens) return 56_000;
+  // No limit given: a cloud model, paid by the token, with every call carrying the whole conversation. Room for
+  // the instructions, the latest page and the last steps; older page reads go once they don't fit.
+  if (!contextTokens) return CLOUD_BUDGET;
   return Math.max(4_000, contextTokens - 1_500);
 }
 

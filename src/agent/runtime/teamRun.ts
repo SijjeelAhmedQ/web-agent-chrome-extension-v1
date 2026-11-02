@@ -8,6 +8,7 @@ import { AgentError, isAbort, toAgentError } from '@/shared/utils/errors';
 import { createClient } from '../llm';
 import { upcomingDays } from '../planner/systemPrompt';
 import { AgentRun, resolveProvider, type RunOptions } from './agentRun';
+import { meteredClient } from './costLog';
 import type { ApprovalAnswer, RunEvent } from './events';
 
 export interface MemberAssignment {
@@ -212,8 +213,11 @@ export class TeamRun {
     let assignments: { agent: string; task: string }[] = [];
     let notCovered = '';
     try {
-      const res = await createClient(provider).chat({
+      // Logged with the team task; each member's calls are in its own task.
+      const lead = meteredClient(createClient(provider), 'worker', () => '', (call) => this.save({ calls: [...(this.task.calls ?? []), call] }));
+      const res = await lead.chat({
         model,
+        purpose: 'Splitting the request among the team',
         temperature: 0.1,
         signal: this.abort.signal,
         messages: [

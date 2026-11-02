@@ -805,3 +805,75 @@
 .activity-copy:focus-visible {
   opacity: 1;
 }
+
+/* A task's model calls: tokens and cost per call (Activity card). */
+.cost-log {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.cost-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cost-head span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cost-head strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.cost-calls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0 12px 12px;
+  list-style: none;
+  font-size: 12px;
+}
+
+.cost-calls li {
+  padding-left: 8px;
+  border-left: 2px solid var(--border-subtle);
+}
+
+.cost-calls li.decider {
+  border-left-color: var(--accent, var(--text-muted));
+}
+
+.cost-line {
+  display: flex;
+  gap: 8px;
+  color: var(--text);
+}
+
+.cost-purpose {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cost-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.cost-detail {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}

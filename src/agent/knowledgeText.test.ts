@@ -26,7 +26,7 @@ describe('knowledge as text', () => {
   });
 
   it('reads text copied from the preview (header and footer lines ignored)', () => {
-    const preview = knowledgeSection([indici()], 'select arya stark').text + '\n\nMore knowledge for this site (call site_knowledge with a topic to read one): “X”.';
+    const preview = knowledgeSection([indici()], 'select arya stark on the patient search page').text + '\n\nMore knowledge for this site (call site_knowledge with a topic to read one): “X”.';
     const parsed = parseKnowledgeText(preview);
     expect(parsed.entries.map((e) => e.kind).sort()).toEqual(['navigation', 'page', 'rule', 'workflow']);
     expect(parsed.entries.every((e) => !/What the user has taught|More knowledge/.test(e.content))).toBe(true);

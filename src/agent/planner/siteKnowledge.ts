@@ -2,9 +2,11 @@ import type { KnowledgeEntry, KnowledgeKind, SiteProfile } from '@/shared/types/
 
 /**
  * Turns a site's knowledge base into the part of the system prompt the agent reads on that
- * site. Rules, navigation and page notes come first, then workflows — those matching the
- * request first. Everything goes in full while it fits the budget (a request worded unlike a
- * workflow's example must not lose it); what doesn't fit is listed by title for site_knowledge.
+ * site. Rules and navigation always go in full (they hold whatever the task); page notes and
+ * workflows only when they share a word with the request — the rest is listed by title, for
+ * site_knowledge to read when the task needs one. The prompt goes with every call of a task:
+ * a site's whole knowledge (Indici's: 40,000 characters) in it was most of what “goto patients” cost.
+ * A request with no words to match (“OK”) gets everything that fits, as before.
  */
 
 export const KNOWLEDGE_KINDS: Record<KnowledgeKind, { label: string; heading: string }> = {
@@ -18,7 +20,9 @@ const ORDER: KnowledgeKind[] = ['rule', 'navigation', 'page', 'workflow'];
 const STOP = new Set(['the', 'and', 'for', 'with', 'then', 'this', 'that', 'from', 'into', 'goto', 'select', 'click', 'open', 'please', 'karo', 'kar', 'aur', 'par', 'mai', 'mein', 'hai', 'ko', 'ka', 'ki', 'ke']);
 
 const norm = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
-const wordsOf = (s: string) => new Set(norm(s).split(' ').filter((w) => w.length > 2 && !STOP.has(w)));
+/** One form of a word for matching: “patients” and “patient”, “inboxes” and “inbox”, “entries” and “entry”. */
+const stem = (w: string) => (w.length < 5 ? w : w.endsWith('ies') ? `${w.slice(0, -3)}y` : /(x|ch|sh|ss)es$/.test(w) ? w.slice(0, -2) : /[^su]s$/.test(w) ? w.slice(0, -1) : w);
+const wordsOf = (s: string) => new Set(norm(s).split(' ').filter((w) => w.length > 2 && !STOP.has(w)).map(stem));
 
 /** How well an entry matches a request: shared words, title and example count most. */
 export function relevance(entry: KnowledgeEntry, request: string): number {
@@ -74,15 +78,22 @@ export function knowledgeSection(profiles: SiteProfile[], request: string, budge
   }
   let used = lines.join('\n').length;
   const skipped: KnowledgeEntry[] = [];
-  for (const { e } of ranked) {
+  // A request with words to match: page notes and workflows that don't match wait for site_knowledge. A match is a
+  // word of the title or example, or two words of the text — one (“patient”) is in nearly every entry of a site.
+  const matchable = wordsOf(request).size > 0;
+  for (const { e, score } of ranked) {
     const block = formatEntry(e);
-    if (used + block.length + 2 <= budget) {
+    const always = e.kind === 'rule' || e.kind === 'navigation';
+    if ((always || score >= 1 || !matchable) && used + block.length + 2 <= budget) {
       lines.push('', block);
       used += block.length + 2;
     } else skipped.push(e);
   }
   if (skipped.length) {
-    lines.push('', `More knowledge for this site (call site_knowledge with a topic to read one): ${skipped.map((e) => `“${e.title}”`).join(', ')}.`);
+    lines.push(
+      '',
+      `More knowledge for this site (call site_knowledge with a topic to read one): ${skipped.map((e) => `“${e.title}”`).join(', ')}. Before doing one of these here, read it — it is how this site does it.`,
+    );
   }
   return { text: lines.join('\n'), left: skipped.length };
 }

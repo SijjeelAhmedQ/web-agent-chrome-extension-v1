@@ -255,6 +255,11 @@ export interface Settings {
   toolOverrides?: Record<string, ToolOverride>;
   /** When a click does nothing, click again with a real mouse click (Chrome's debugger). */
   realClicks?: boolean;
+  /**
+   * Dollars one task may spend on its models before it stops and waits (Resume carries on). 0: no limit.
+   * Only servers that report a cost count (OpenRouter); Kaggle and local models cost nothing.
+   */
+  maxTaskCost?: number;
 }
 
 export interface AppConfig {

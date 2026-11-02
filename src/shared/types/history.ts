@@ -26,6 +26,35 @@ export interface ChecklistItem {
   saved?: boolean;
 }
 
+/**
+ * One call to a model in a task: what it was for, what went in and what it cost. The task's log of these says
+ * where its tokens and dollars went.
+ */
+export interface ModelCallRecord {
+  at: number;
+  durationMs: number;
+  /** The agent's own model, or its decision model. */
+  role: 'worker' | 'decider';
+  /** What the call was for, e.g. “Doing a step”, “Deciding the next step”, “Double-check”. */
+  purpose: string;
+  model: string;
+  /** The model that answered, when a router (Jev Router) picked another. */
+  servedBy?: string;
+  /** Tokens in, as the server counted them (or estimated, see `estimated`). */
+  inputTokens?: number;
+  /** Of the input, read from the prompt cache — billed at a fraction. */
+  cachedTokens?: number;
+  outputTokens?: number;
+  /** Of the output, the model's thinking. */
+  reasoningTokens?: number;
+  /** In dollars, when the server reports it (OpenRouter). */
+  cost?: number;
+  /** The server sent no token counts: `inputTokens` is our estimate. */
+  estimated?: boolean;
+  /** What the prompt was made of, in estimated tokens. */
+  parts: { system: number; knowledge: number; tools: number; pages: number; rest: number };
+}
+
 export interface TaskRecord {
   id: string;
   request: string;
@@ -46,6 +75,8 @@ export interface TaskRecord {
   steps: StepRecord[];
   /** The agent's checklist, when the request had several things to do. */
   checklist?: ChecklistItem[];
+  /** Every model call of this task, in order. */
+  calls?: ModelCallRecord[];
   /** Set on a team member's task: the team task it belongs to. */
   parentId?: string;
 }

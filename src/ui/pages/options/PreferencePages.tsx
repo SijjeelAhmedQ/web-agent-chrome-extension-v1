@@ -111,6 +111,9 @@ const POLICY_OPTIONS: { value: ConfirmationPolicy; label: string }[] = [
   { value: 'never', label: 'Don’t ask' },
 ];
 
+/** Dollars a task may spend (0: no limit). */
+const SPENDING_LIMITS = [0.01, 0.02, 0.05, 0.1, 0.25, 0.5, 1, 0];
+
 export function BehaviorPage() {
   const [settings, update] = useSettings();
   const agents = useAppSelector((s) => s.config.config.agents);
@@ -125,6 +128,18 @@ export function BehaviorPage() {
         </SettingRow>
         <SettingRow label="Keep activity open" description="Show every step after a task finishes, instead of folding them away.">
           <Switch checked={settings.expandActivity} onChange={(v) => update({ expandActivity: v })} aria-label="Keep activity open" />
+        </SettingRow>
+        <SettingRow
+          label="Spending limit per task"
+          description="A task stops before its next model call once it has cost this much, and Resume carries it on. Counted where the server reports a cost (OpenRouter); every task's calls and cost are under its steps."
+        >
+          <Select
+            style={{ width: 140 }}
+            value={settings.maxTaskCost ?? 0}
+            onChange={(v) => update({ maxTaskCost: v })}
+            aria-label="Spending limit per task"
+            options={SPENDING_LIMITS.map((v) => ({ value: v, label: v ? `$${v.toFixed(2)}` : 'No limit' }))}
+          />
         </SettingRow>
       </Section>
       <Section title="Approvals" description="Choose per agent when it should ask before acting. Purchases, messages, deletions and form submissions are detected automatically.">
