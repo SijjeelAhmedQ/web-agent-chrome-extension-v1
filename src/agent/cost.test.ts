@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderConfig, SiteProfile } from '@/shared/types/config';
 import type { ModelCallRecord } from '@/shared/types/history';
-import { describeCalls, formatCost, summarizeCalls } from '@/shared/utils/cost';
+import { describeCalls, describeEstimate, estimateCost, formatCost, summarizeCalls } from '@/shared/utils/cost';
 import { createClient } from './llm';
 import type { ChatMessage } from './llm/types';
 import { knowledgeSection } from './planner/siteKnowledge';
@@ -103,6 +103,35 @@ describe('the cost of each call', () => {
     expect(text).toMatch(/^Model calls: 3/);
     expect(text).toContain('typesafe/jev-router → anthropic/claude-opus-5');
     expect(text).toContain('cost not reported');
+  });
+
+  it('logs what each reply did, and writes it out with the time it took', async () => {
+    const calls: ModelCallRecord[] = [];
+    const replies = [
+      { content: '', toolCalls: [{ id: 'a', name: 'open_menu', arguments: { path: ['Patients', 'Search & List'] } }] },
+      { content: '', toolCalls: [{ id: 'b', name: 'type', arguments: { id: 12, text: 'Arya STARK', then_click: 13 } }] },
+      { content: 'Two patients match:\nSTARK or STARKK?', toolCalls: [] },
+    ];
+    const inner = { listModels: async () => [], chat: async () => replies.shift()! };
+    const client = meteredClient(inner, 'worker', () => '', (c) => calls.push(c));
+    for (let i = 0; i < 3; i++) await client.chat({ model: 'qwen', messages: conversation, tools: [], temperature: 0 });
+    expect(calls.map((c) => c.did)).toEqual(['open_menu Patients › Search & List', 'type 12 "Arya STARK" then_click 13', 'answer: Two patients match: STARK or STARKK?']);
+    const text = describeCalls(calls.map((c) => ({ ...c, durationMs: 25_000 })));
+    expect(text).toContain('· 25s ·');
+    expect(text).toContain('\n   → open_menu Patients › Search & List');
+  });
+
+  it('says what calls that report no cost would cost on OpenRouter, with and without the cache', () => {
+    // The Kaggle “goto patients and select arya STARK”: three calls, about 9k of each prompt the same all task.
+    const parts = { system: 1970, knowledge: 3155, tools: 3927, pages: 3333, rest: 300 };
+    const calls = [call({ model: 'qwen', inputTokens: 11483, outputTokens: 54, parts }), call({ model: 'qwen', inputTokens: 11777, outputTokens: 77, parts }), call({ model: 'qwen', inputTokens: 10492, outputTokens: 102, parts })];
+    const { plain, cached } = estimateCost(calls);
+    expect(plain).toBeCloseTo((33752 * 0.825 + 233 * 4.125) / 1e6, 6);
+    expect(cached).toBeGreaterThan(0.012);
+    expect(cached).toBeLessThan(0.018);
+    expect(describeCalls(calls)).toMatch(/cost not reported \(on OpenRouter's Gemini 3\.8 Flash about \$0\.0\d+ \(with the cache\) to \$0\.029\)/);
+    // A server that reports the cost needs no guess.
+    expect(describeEstimate([call({ cost: 0.002 })])).toBe('');
   });
 });
 

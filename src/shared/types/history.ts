@@ -51,6 +51,8 @@ export interface ModelCallRecord {
   cost?: number;
   /** The server sent no token counts: `inputTokens` is our estimate. */
   estimated?: boolean;
+  /** What the reply did, in short: the tools it called (“open_menu Patients › Search & List”) or the start of its answer. */
+  did?: string;
   /** What the prompt was made of, in estimated tokens. */
   parts: { system: number; knowledge: number; tools: number; pages: number; rest: number };
 }

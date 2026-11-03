@@ -115,9 +115,12 @@ export const ActivityCard = memo(function ActivityCard({ task, thinking, thinkin
   const title = running ? 'Working on your request' : status === 'done' ? 'Completed' : status === 'cancelled' ? 'Stopped' : "Couldn't finish";
   const thinkingLabel = doing ?? (steps.length === 0 ? 'Understanding your request' : 'Deciding the next step');
   const waiting = steps.some((s) => s.status === 'waiting');
-  // The steps as text — each step, how it went, and what it found — to paste into a message or a report; then the model calls.
+  // The request, then the steps as text — each step, how it went, and what it found — to paste into a message or a
+  // report; then the agent's answer (or what stopped it) and the model calls.
   const copySteps = () => {
-    const text = [steps.map((s) => [s.label, STATUS_TEXT[s.status], s.note].filter(Boolean).join('\n')).join('\n'), describeCalls(calls)].filter(Boolean).join('\n\n');
+    const stepText = steps.map((s) => [s.label, STATUS_TEXT[s.status], s.note].filter(Boolean).join('\n')).join('\n');
+    const outcome = task?.result ? `Answer:\n${task.result}` : task?.error ? `Stopped: ${task.error}` : '';
+    const text = [task?.request ? `Request: ${task.request}` : '', stepText, outcome, describeCalls(calls)].filter(Boolean).join('\n\n');
     void navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1400);

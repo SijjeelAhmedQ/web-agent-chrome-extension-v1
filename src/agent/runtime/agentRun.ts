@@ -395,7 +395,7 @@ export class AgentRun {
         } else {
           const label = !decider || step === 0 ? undefined : phase === 'answer' ? `Checking the answer · ${workerLabel}` : `Doing it · ${workerLabel}`;
           this.emit({ type: 'thinking', taskId: this.id, active: true, ...(label ? { label } : {}) });
-          const purpose = nextPurpose ?? (step === 0 ? 'Understanding your request' : phase === 'answer' ? 'Double-check' : 'Doing a step');
+          const purpose = nextPurpose ?? (step === 0 ? 'First step' : phase === 'answer' ? 'Double-check' : 'Doing a step');
           nextPurpose = null;
           response = await client.chat({
             model,

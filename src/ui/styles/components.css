@@ -877,3 +877,12 @@
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
 }
+
+.cost-estimate {
+  padding: 0 12px 8px;
+  font-size: 12px;
+}
+
+.cost-did {
+  color: var(--text);
+}

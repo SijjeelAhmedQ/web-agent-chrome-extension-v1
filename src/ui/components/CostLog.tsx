@@ -1,7 +1,7 @@
 import { ChevronDown } from 'lucide-react';
 import { memo, useState } from 'react';
 import type { ModelCallRecord } from '@/shared/types/history';
-import { formatCost, formatTokens, summarizeCalls } from '@/shared/utils/cost';
+import { describeEstimate, formatCost, formatTokens, summarizeCalls } from '@/shared/utils/cost';
 import { formatDuration } from '@/shared/utils';
 
 /**
@@ -13,6 +13,7 @@ export const CostLog = memo(function CostLog({ calls }: { calls: ModelCallRecord
   if (!calls.length) return null;
   const s = summarizeCalls(calls);
   const cost = s.priced ? formatCost(s.cost) : 'cost not reported';
+  const estimate = describeEstimate(calls);
   return (
     <section className="cost-log" aria-label="Model calls">
       <button type="button" className="cost-head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
@@ -22,6 +23,7 @@ export const CostLog = memo(function CostLog({ calls }: { calls: ModelCallRecord
         </span>
         <ChevronDown size={14} className={`chev ${open ? 'open' : ''}`} aria-hidden />
       </button>
+      {open && estimate && <div className="cost-detail muted cost-estimate">Not billed here — {estimate}</div>}
       {open && (
         <ol className="cost-calls">
           {calls.map((c, i) => (
@@ -45,6 +47,7 @@ export const CostLog = memo(function CostLog({ calls }: { calls: ModelCallRecord
                 Prompt: knowledge {formatTokens(c.parts.knowledge)} · instructions {formatTokens(c.parts.system)} · tools {formatTokens(c.parts.tools)} · pages {formatTokens(c.parts.pages)} · steps{' '}
                 {formatTokens(c.parts.rest)}
               </div>
+              {c.did && <div className="cost-detail cost-did">→ {c.did}</div>}
             </li>
           ))}
         </ol>

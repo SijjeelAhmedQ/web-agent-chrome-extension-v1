@@ -1,5 +1,5 @@
 import type { ModelCallRecord } from '@/shared/types/history';
-import type { ChatMessage, ChatRequest, LlmClient } from '../llm/types';
+import type { ChatMessage, ChatRequest, ChatResponse, LlmClient } from '../llm/types';
 import { estimateTokens, isPageRead } from './context';
 
 /**
@@ -18,6 +18,28 @@ export function promptParts(messages: ChatMessage[], tools: ChatRequest['tools']
     else parts.rest += n;
   }
   return parts;
+}
+
+/** A tool call's arguments in a few words: `"Arya STARK" then_click 13`, `Patients › Search & List`, `3 fields`. */
+function argsInShort(args: Record<string, unknown>): string {
+  return Object.entries(args)
+    .map(([key, v]) => {
+      if (typeof v === 'string') return `"${v.length > 40 ? `${v.slice(0, 40)}…` : v}"`;
+      if (typeof v === 'number') return key === 'id' ? String(v) : `${key} ${v}`;
+      if (typeof v === 'boolean') return v ? key : '';
+      if (Array.isArray(v)) return v.every((x) => typeof x === 'string') ? v.join(' › ') : `${v.length} ${key}`;
+      return '';
+    })
+    .filter(Boolean)
+    .join(' ');
+}
+
+/** What a reply did, in short: each tool it called with its arguments, or the start of its answer. */
+export function replyInShort(res: ChatResponse): string {
+  const text = res.toolCalls.length
+    ? res.toolCalls.map((c) => [c.name, argsInShort(c.arguments ?? {})].filter(Boolean).join(' ')).join('; ')
+    : `answer: ${res.content.trim().replace(/\s+/g, ' ')}`;
+  return text.length > 140 ? `${text.slice(0, 140)}…` : text;
 }
 
 /**
@@ -54,6 +76,7 @@ export function meteredClient(
         ...(u.reasoningTokens ? { reasoningTokens: u.reasoningTokens } : {}),
         ...(u.cost !== undefined ? { cost: u.cost } : {}),
         ...(estimated ? { estimated } : {}),
+        did: replyInShort(res),
         parts,
       });
       return res;

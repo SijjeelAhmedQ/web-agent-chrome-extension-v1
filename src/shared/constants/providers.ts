@@ -47,6 +47,12 @@ export const KAGGLE_MODELS: ModelOption[] = [
   { id: 'hf.co/unsloth/medgemma-4b-it-GGUF:Q4_K_M', label: 'MedGemma 4B', note: 'Medical knowledge. Can’t use tools — reads the page and answers, but can’t click or type.', tools: false },
 ];
 
+/**
+ * What a task on a server that reports no cost (Kaggle, Ollama) would cost on OpenRouter's default agent model,
+ * in dollars per million tokens — OpenRouter's listed price for Gemini 3.8 Flash, November 2026.
+ */
+export const REFERENCE_PRICE = { model: 'Gemini 3.8 Flash', input: 0.825, cachedInput: 0.0825, output: 4.125 };
+
 /** Fast models on OpenRouter for the agent, and Jev Router for its decisions (see each agent's Decision model). */
 export const OPENROUTER_MODELS: ModelOption[] = [
   { id: 'google/gemini-3.8-flash', label: 'Gemini 3.8 Flash', note: 'Fast, with tools. Thinking Off is cheapest; Low for harder tasks.', tools: true },
