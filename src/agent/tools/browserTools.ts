@@ -695,7 +695,12 @@ const openMenu: AgentTool<{ path: string[] }> = {
     // site never lets the agent click, nor one that would need the user's approval (a save, a send, a delete),
     // nor anything when the agent asks before every action: those are clicked with click, which asks.
     if (res.item && !ctx.askEveryAction && !(await neverClickName(ctx, res.item.id)) && !(await approvalFor(ctx, res.item.id, 'click', ''))) {
+      const hadDialog = !!(await ctx.browser.send({ kind: 'dialogs', waitMs: 0, settle: false }).catch(() => null))?.dialogs.length;
       const clicked = await clickById(ctx, res.item.id);
+      // The menu closing counts as a change, so the click doesn't wait for the form the item opens a moment later
+      // (the Smart AI Inbox's Actions › Create Task): waited for here, the page that comes with this result has it —
+      // or the model spends a wait and another read on it.
+      if (!hadDialog && !/new (page|tab)/i.test(clicked.note ?? '')) await formAfterLoading(ctx);
       return { output: `Opened ${trail} and clicked ${quote(res.item.name || 'the last item')}. ${clicked.output}`, note: clicked.note ?? `Chose “${clip(res.item.name, 30)}”` };
     }
     if (res.item) {
@@ -717,6 +722,21 @@ const openMenu: AgentTool<{ path: string[] }> = {
     return { output: `Opened ${trail}. Items now showing:\n${res.revealed.map(formatElement).join('\n')}\nClick the one you want.`, note: `${res.revealed.length} items showing` };
   },
 };
+
+const LOADING = /^(loading|please wait|processing)\b/i;
+
+/**
+ * Waits for the pop-up a menu item opens — past one that only says it is loading (the Smart AI Inbox's
+ * “Loading Task Data”, three seconds before “Add Task”).
+ */
+export async function formAfterLoading(ctx: ToolContext): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  let shown = await ctx.browser.send({ kind: 'dialogs', waitMs: 3_000, settle: false }).catch(() => null);
+  while (shown?.dialogs.some((d) => LOADING.test(d.title ?? '')) && Date.now() < deadline) {
+    await sleep(400);
+    shown = await ctx.browser.send({ kind: 'dialogs', waitMs: 0, settle: false }).catch(() => null);
+  }
+}
 
 const pressKey: AgentTool<{ key: string; id?: number }> = {
   name: 'press_key',

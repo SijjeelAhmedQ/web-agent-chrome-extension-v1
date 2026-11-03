@@ -72,7 +72,7 @@ try {
     say(`\n>>> ${request}`);
     // The tab the agent works on is the one in front, as beside a real side panel: the newest site tab (a consult
     // or the Smart Inbox opens in a tab of its own) — not this panel's tab, after its approval cards were clicked.
-    if (!sidePanel) await ((await browser.pages()).filter((p) => /vitonta\.com/.test(p.url())).at(-1) ?? site).bringToFront();
+    if (!sidePanel) await ((await browser.pages()).filter((p) => new RegExp(process.env.SITE ?? 'vitonta\\.com').test(p.url())).at(-1) ?? site).bringToFront();
     const before = await panel.$$eval('.turn', (x) => x.length);
     await panel.$eval('#composer-input', (el) => el.focus());
     await panel.keyboard.type(request);

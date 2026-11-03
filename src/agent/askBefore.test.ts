@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BROWSER_TOOLS } from './tools/browserTools';
+import { BROWSER_TOOLS, formAfterLoading } from './tools/browserTools';
 import { ElementMemory, type ToolContext } from './tools/types';
 
 // A site's “ask before” controls change a record as soon as they are used — clicked, or typed into.
@@ -112,5 +112,18 @@ describe('pop-ups the user answers', () => {
     // Medication Advanced Search has an “NZF Details” column: not the NZF pop-up.
     expect(await click.assess!({ id: 7978, name: 'Panadol', double: false }, ctxFor('Panadol', 'Medication Advanced Search Find Medicine NZF Details Panadol', 'add panadol'))).toBeNull();
     expect(await click.assess!({ id: 7560, name: 'Medications', double: false }, ctxFor('Medications', undefined, 'add panadol'))).toBeNull();
+  });
+});
+
+// A menu item's form can come after a pop-up that only says it is loading (the Smart AI Inbox's Create Task).
+describe('the form a menu item opens', () => {
+  it('is waited for past a “Loading …” pop-up', async () => {
+    const shown = ['Loading Task Data', 'Loading Task Data', 'Loading Task Data', 'Add Task'];
+    let asked = 0;
+    const ctx = {
+      browser: { send: async (req: { kind: string }) => (req.kind === 'dialogs' ? { dialogs: [{ title: shown[Math.min(asked++, shown.length - 1)] }] } : null) },
+    } as unknown as ToolContext;
+    await formAfterLoading(ctx);
+    expect(asked).toBe(4);
   });
 });
