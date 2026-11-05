@@ -147,6 +147,18 @@ export interface KnowledgeEntry {
  * Site-based configuration: knowledge, skills, tools and model for one website. Used
  * automatically — on top of the agent's own setup — whenever the agent's tab is on it.
  */
+/** A request the code does on this site by itself, with no model call. */
+export interface SiteShortcut {
+  /** The whole requests that mean it: “goto patients”, “open patients”. */
+  says: string[];
+  /** Tools run in order. If one doesn't work, the model takes the task from where it is. */
+  steps: { tool: string; args: Record<string, unknown> }[];
+  /** Part of the address once there: the steps aren't run from there, and it is checked after them. */
+  here?: string;
+  /** What the user is told. */
+  done: string;
+}
+
 export interface SiteProfile {
   id: string;
   name: string;
@@ -177,6 +189,7 @@ export interface SiteProfile {
    * buttons is pressed only with the user's OK — unless the user's message names that button.
    */
   askPopups?: string[];
+  shortcuts?: SiteShortcut[];
   knowledge: KnowledgeEntry[];
   createdAt: number;
   updatedAt: number;

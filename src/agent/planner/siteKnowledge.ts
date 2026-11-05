@@ -58,7 +58,7 @@ export function knowledgeBudget(contextTokens: number | undefined): number {
 const MAX_KNOWLEDGE = 16_000;
 
 /** The prompt section for the sites the agent is on, within about `budget` characters. */
-export function knowledgeSection(profiles: SiteProfile[], request: string, budget = 12_000): { text: string; left: number } {
+export function knowledgeSection(profiles: SiteProfile[], request: string, budget = 12_000, small = false): { text: string; left: number } {
   const entries = activeKnowledge(profiles);
   if (!entries.length && !profiles.some((p) => p.neverClick?.length)) return { text: '', left: 0 };
   // What the request is about goes in first: entries whose title (or example) shares a word with it — its rules
@@ -114,14 +114,15 @@ export function knowledgeSection(profiles: SiteProfile[], request: string, budge
   let used = lines.join('\n').length;
   const skipped: KnowledgeEntry[] = [];
   // A request with words to match: workflows that don't match (nor are named by one that does) wait for site_knowledge.
-  const matchable = asked.size > 0;
+  // A small task (only clicks) gets what matches and the site's navigation: other rules and pages wait there too.
+  const matchable = asked.size > 0 || small;
   // Room is kept for the workflow the request is most about: a small model's room went to matching rules first.
   const best = bestMatch?.e;
   let held = best ? formatEntry(best).length + 2 : 0;
   if (used + held > budget) held = 0;
   for (const { e, match, named: isNamed } of ranked) {
     const block = formatEntry(e);
-    const always = e.kind !== 'workflow';
+    const always = small ? e.kind === 'navigation' : e.kind !== 'workflow';
     if (e === best) held = 0;
     if ((always || match || isNamed || !matchable) && used + block.length + 2 + held <= budget) {
       lines.push('', block);

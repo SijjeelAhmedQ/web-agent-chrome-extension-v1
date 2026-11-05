@@ -111,6 +111,7 @@ export function normalizeSite(raw: Partial<SiteProfile>): SiteProfile {
     neverClick: Array.isArray(raw.neverClick) ? raw.neverClick : [],
     askBefore: Array.isArray(raw.askBefore) ? raw.askBefore : [],
     askPopups: Array.isArray(raw.askPopups) ? raw.askPopups : [],
+    shortcuts: Array.isArray(raw.shortcuts) ? raw.shortcuts : [],
     knowledge: Array.isArray(raw.knowledge) ? raw.knowledge.map((k) => ({ ...k, enabled: k.enabled ?? true })) : [],
     createdAt: raw.createdAt ?? now,
     updatedAt: raw.updatedAt ?? now,

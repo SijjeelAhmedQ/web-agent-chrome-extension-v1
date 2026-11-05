@@ -22,6 +22,7 @@ import type { ApprovalAnswer, ApprovalPrompt, RunEvent } from './events';
 import { asksUser, followUpOf, historyForModel, withoutStoppedList } from './followUp';
 import { Checklist, checklistTool } from './checklist';
 import { meteredClient } from './costLog';
+import { asksForClick, clickAnswer, namedControl, pageMoved, sameName, shortcutFor, stepFinishes, stepWorked } from './directTask';
 import { choosePrompt, fallbackTier, kindOfTask, parseTier, tierOfModel, tiersFor } from './modelRoute';
 import { FILL_FORM, fieldCall, fillFormSchema, fillFormTool, stopsFilling } from './fillForm';
 import { changedSomething, namedIn, nearlyNamed, pageState, undoTool, wrongRowClick, type ClickRecord } from './clickGuard';
@@ -282,7 +283,7 @@ export class AgentRun {
     }
     // Several fields of a form in one step — for agents that type.
     if (toolset.tools.some((t) => t.name === 'type')) toolset.tools.push(fillFormTool);
-    const specs = toolSpecs(toolset.tools);
+    let specs = toolSpecs(toolset.tools);
     // Room for the conversation: the server's context window minus the tool definitions sent with every call.
     // Tokens for the conversation: the context window minus the reply and the tool definitions sent with every call.
     let budget = budgetFor(contextWindowOf(provider)) - estimateTokens(JSON.stringify(specs));
@@ -303,6 +304,18 @@ export class AgentRun {
       ...((contextWindowOf(provider) ?? Infinity) <= 32_768 ? { overviewTextChars: 3_000 } : {}),
     };
 
+    // A small task the code can do alone: no model, no chooser, nothing to pay. A reply to a question isn't one, and
+    // an agent that asks before every action or a read-only site keeps its own way.
+    if (!followUp && agent.confirmation !== 'always' && !scriptableReason(url) && !matchesSite(url, config.settings.readOnlySites)) {
+      void browser.setPresence(true);
+      const done = await this.doDirectly(toolset.sites, url, byName, ctx);
+      if (done) {
+        const { word } = kindOfTask(request);
+        this.updateTask({ route: { kind: 'code', ...(word ? { word } : {}), tier: 'small' } });
+        return done;
+      }
+    }
+
     // Who does this task: decided before the first step. Clicks need no chooser at all.
     const jev = auto
       ? { client: meteredClient(createClient(provider), 'decider', () => this.knowledgeNow, log, () => this.withinSpendingLimit()), model: auto.chooser, label: knownModel(auto.chooser)?.label ?? auto.chooser }
@@ -321,12 +334,19 @@ export class AgentRun {
       } else model = auto[tier];
       if (kind === 'judged') decider = jev;
     }
+    // Only clicks: only what clicks need goes with each call, and a page's text is cut to what they need. (Stuck, it all comes back.)
+    let small = route?.kind === 'clicks';
+    const overviewBefore = ctx.overviewTextChars;
+    if (small) {
+      specs = toolSpecs(toolset.tools.filter((t) => CLICK_TOOLS.has(t.name)));
+      ctx.overviewTextChars = Math.min(overviewBefore ?? 3_000, 3_000);
+    }
 
     // With a checklist, the ticked items already say what is done.
     this.doneBefore = new Set(this.checklist.size ? [] : (followUp?.doneSteps ?? []));
     const pageNote = scriptableReason(url) ?? undefined;
     const systemFor = (sites: SiteProfile[]) => {
-      const knowledge = knowledgeSection(sites, followUp ? `${followUp.task}\n${request}` : request, knowledgeBudget(contextWindowOf(provider))).text;
+      const knowledge = knowledgeSection(sites, followUp ? `${followUp.task}\n${request}` : request, knowledgeBudget(contextWindowOf(provider)), small).text;
       this.knowledgeText += `\n${knowledge}`;
       this.knowledgeNow = knowledge;
       return buildSystemPrompt({
@@ -337,6 +357,7 @@ export class AgentRun {
         page: { title: tab?.title ?? '', url, note: pageNote ? `${pageNote} Navigate to a website if the task needs one.` : undefined },
         readOnly: matchesSite(url, config.settings.readOnlySites),
         siteKnowledge: knowledge,
+        small,
       });
     };
     const siteKey = (sites: SiteProfile[]) => sites.map((s) => s.id).join(',');
@@ -398,6 +419,12 @@ export class AgentRun {
       // The small model stuck: once, Jev picks a bigger one and decides from here.
       if (auto && jev && route && !decider && !tookOver && this.isStuck(recent, step, stepLimit)) {
         tookOver = true;
+        if (small) {
+          small = false;
+          specs = toolSpecs(toolset.tools);
+          ctx.overviewTextChars = overviewBefore;
+          system = systemFor(this.hereSites.length ? this.hereSites : toolset.sites);
+        }
         const tier = await this.chooseTier(jev, request, ['medium', 'big'], 'medium');
         model = auto[tier];
         workerLabel = knownModel(model)?.label ?? model;
@@ -575,6 +602,11 @@ export class AgentRun {
         recent.push(signature);
         let output = call.name === FILL_FORM ? await this.fillForm(call, byName, ctx) : await this.runTool(call, byName, ctx);
         if (this.endWith) return this.endWith;
+        // That one step was all the request asked: no call only to say so.
+        if (small && !decider && response.toolCalls.length === 1 && !this.changedData && stepFinishes(request, call.name, call.arguments ?? {}, output)) {
+          const title = (await browser.currentTab().catch(() => null))?.title ?? '';
+          return title ? `**${title}** is open.` : 'Done.';
+        }
         if (this.skippedInARow >= 6) {
           return `I got stuck: my last ${this.skippedInARow} steps were all ones I had already tried, so I stopped rather than go round in circles. Tell me what to do next, or say it differently and I'll try again.`;
         }
@@ -659,6 +691,36 @@ export class AgentRun {
       }
     }
     return lines.join('\n');
+  }
+
+  /**
+   * Does the request with no model, if it is that small and sure: a shortcut of the site, or the one control it names,
+   * when exactly one on the page has that exact name. Steps go through runTool, so approvals and the site's rules hold.
+   * Null: the model does it, from wherever the page is now.
+   */
+  private async doDirectly(sites: SiteProfile[], url: string, byName: Map<string, AgentTool<any>>, ctx: ToolContext): Promise<string | null> {
+    const { request } = this.options;
+    const shortcut = shortcutFor(sites, request);
+    if (shortcut) {
+      if (shortcut.here && url.includes(shortcut.here)) return shortcut.done;
+      if (!shortcut.steps.length || shortcut.steps.some((s) => !byName.has(s.tool))) return null;
+      for (const [n, step] of shortcut.steps.entries()) {
+        const output = await this.runTool({ id: uid('code_'), name: step.tool, arguments: step.args }, byName, ctx);
+        if (this.endWith) return this.endWith;
+        if (!stepWorked(output) || (n === shortcut.steps.length - 1 && !pageMoved(output))) return null;
+      }
+      const now = (await ctx.browser.currentTab().catch(() => null))?.url ?? '';
+      return !shortcut.here || now.includes(shortcut.here) ? shortcut.done : null;
+    }
+    const name = namedControl(request);
+    if (!name || !byName.has('click_text')) return null;
+    const found = await this.inFront(ctx, () => ctx.browser.send({ kind: 'findText', text: name, limit: 6 })).catch(() => null);
+    if (found?.total !== 1 || !sameName(found.matches[0].name, name)) return null;
+    const output = await this.runTool({ id: uid('code_'), name: 'click_text', arguments: { text: found.matches[0].name } }, byName, ctx);
+    if (this.endWith) return this.endWith;
+    // Asked to arrive somewhere and it didn't, or something it asked approval for: the model looks.
+    if (!stepWorked(output) || this.changedData || (!asksForClick(request) && !pageMoved(output))) return null;
+    return clickAnswer(found.matches[0].name, output, (await ctx.browser.currentTab().catch(() => null))?.title ?? '');
   }
 
   /**
@@ -1350,6 +1412,9 @@ const WORKER_ROLE = [
 ].join('\n');
 
 /** To the small model, when a bigger one writes the analysis. */
+/** What a task of only clicks can need; the rest of the agent's tools stay callable and all come back if it gets stuck. */
+const CLICK_TOOLS = new Set(['read_page', 'find_element', 'click', 'click_text', 'type', 'select_option', 'scroll', 'hover', 'open_menu', 'press_key', 'wait', 'navigate', 'go_back', 'list_tabs', 'switch_tab', 'undo_click', 'site_knowledge']);
+
 const GATHER_ROLE = [
   '## Who writes the answer',
   'A bigger model writes the analysis from what you gather. Do the clicks and the reading the request needs with your tools, as your instructions say — not the table, the summary or the analysis. When everything needed has been read, reply only READY. If only the user can settle something (which patient), ask in a sentence instead.',

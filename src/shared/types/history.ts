@@ -29,7 +29,7 @@ export interface ChecklistItem {
 /** How big a model is, when models are picked per task. */
 export type ModelTier = 'small' | 'medium' | 'big';
 /** clicks: only UI steps. analysis: reading data and working it out. judged: changes a record, or the words don't say. */
-export type TaskKind = 'clicks' | 'analysis' | 'judged';
+export type TaskKind = 'code' | 'clicks' | 'analysis' | 'judged';
 
 /** Why a task got the models it got: for the log. */
 export interface TaskRoute {

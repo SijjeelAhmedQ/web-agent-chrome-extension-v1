@@ -10,7 +10,19 @@ import { formatDuration } from '@/shared/utils';
  */
 export const CostLog = memo(function CostLog({ calls, route }: { calls: ModelCallRecord[]; route?: TaskRoute }) {
   const [open, setOpen] = useState(false);
-  if (!calls.length) return null;
+  if (!calls.length) {
+    const lines = describeRoute(route);
+    if (!lines.length) return null;
+    return (
+      <section className="cost-log" aria-label="Model calls">
+        {lines.map((line) => (
+          <div key={line} className="cost-detail cost-estimate">
+            {line}
+          </div>
+        ))}
+      </section>
+    );
+  }
   const s = summarizeCalls(calls);
   const cost = s.priced ? formatCost(s.cost) : 'cost not reported';
   const estimate = describeEstimate(calls);

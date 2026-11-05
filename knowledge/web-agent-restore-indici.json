@@ -378,6 +378,65 @@
         "already in the active medicines list",
         "Special Authority Request Form",
         "Overwrite All Existing"
+      ],
+      "shortcuts": [
+        {
+          "says": [
+            "goto patients",
+            "goto patient",
+            "goto pateints",
+            "open patients",
+            "navigate to patients",
+            "patients kholo",
+            "patients par jao",
+            "patients pe jao",
+            "goto patient search",
+            "open patient search",
+            "goto patient list",
+            "open patient list"
+          ],
+          "steps": [
+            {
+              "tool": "open_menu",
+              "args": {
+                "path": [
+                  "Patients",
+                  "Search & List"
+                ]
+              }
+            }
+          ],
+          "here": "/Patient/Patients",
+          "done": "You're on the **Patient Search** page."
+        },
+        {
+          "says": [
+            "goto smart ai inbox",
+            "goto smart inbox",
+            "open smart ai inbox",
+            "open smart inbox",
+            "smart inbox kholo",
+            "smart ai inbox kholo",
+            "goto ai inbox",
+            "open ai inbox"
+          ],
+          "steps": [
+            {
+              "tool": "click_text",
+              "args": {
+                "text": "Home"
+              }
+            },
+            {
+              "tool": "click_text",
+              "args": {
+                "text": "Open AI Assisted Inbox"
+              }
+            }
+          ],
+          "here": "inbox-app-dev.vitonta.com",
+          "done": "The **Smart AI Inbox** is open."
+        }
       ]
     },
     {

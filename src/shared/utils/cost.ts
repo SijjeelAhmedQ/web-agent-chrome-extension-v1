@@ -79,6 +79,7 @@ export function describeRoute(route: TaskRoute | undefined, calls: ModelCallReco
   if (!route) return [];
   const said = route.word ? ` (“${route.word}”)` : '';
   const head = {
+    code: `Small task${said}: the code did it with no model, so 0 tokens and $0.0000.`,
     clicks: `Small task, only UI clicks${said}: the small model did it, without Jev.`,
     analysis: `Data analysis${said}: the small model did the clicks and the reading; Jev chose the ${route.tier} model to write the analysis.`,
     judged: `Changes a record or needs decisions${said}: Jev chose the ${route.tier} model and decided each step.`,
@@ -114,7 +115,7 @@ export function describeCall(c: ModelCallRecord, i: number): string {
 
 /** The whole log as text, with its total first, then why these models and what each part cost. */
 export function describeCalls(calls: ModelCallRecord[] = [], route?: TaskRoute): string {
-  if (!calls.length) return '';
+  if (!calls.length) return describeRoute(route).join('\n');
   const s = summarizeCalls(calls);
   const estimate = describeEstimate(calls);
   const total = `Model calls: ${s.calls} · ${s.inputTokens} tokens in (${s.cachedTokens} cached) · ${s.outputTokens} out · ${s.priced ? formatCost(s.cost) : 'cost not reported'}${estimate ? ` (${estimate})` : ''}`;
