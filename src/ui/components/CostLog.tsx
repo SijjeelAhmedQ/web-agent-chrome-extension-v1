@@ -1,14 +1,14 @@
 import { ChevronDown } from 'lucide-react';
 import { memo, useState } from 'react';
-import type { ModelCallRecord } from '@/shared/types/history';
-import { describeEstimate, formatCost, formatTokens, summarizeCalls } from '@/shared/utils/cost';
+import type { ModelCallRecord, TaskRoute } from '@/shared/types/history';
+import { describeEstimate, describeRoute, formatCost, formatTokens, summarizeCalls } from '@/shared/utils/cost';
 import { formatDuration } from '@/shared/utils';
 
 /**
  * A task's model calls: what each was for, which model answered, its tokens and its cost — and what its prompt
  * was made of. Shows where a task's dollars went.
  */
-export const CostLog = memo(function CostLog({ calls }: { calls: ModelCallRecord[] }) {
+export const CostLog = memo(function CostLog({ calls, route }: { calls: ModelCallRecord[]; route?: TaskRoute }) {
   const [open, setOpen] = useState(false);
   if (!calls.length) return null;
   const s = summarizeCalls(calls);
@@ -23,6 +23,11 @@ export const CostLog = memo(function CostLog({ calls }: { calls: ModelCallRecord
         </span>
         <ChevronDown size={14} className={`chev ${open ? 'open' : ''}`} aria-hidden />
       </button>
+      {describeRoute(route, calls).map((line) => (
+        <div key={line} className="cost-detail cost-estimate">
+          {line}
+        </div>
+      ))}
       {open && estimate && <div className="cost-detail muted cost-estimate">Not billed here — {estimate}</div>}
       {open && (
         <ol className="cost-calls">
@@ -35,7 +40,7 @@ export const CostLog = memo(function CostLog({ calls }: { calls: ModelCallRecord
                 <span className="cost-amount">{typeof c.cost === 'number' ? formatCost(c.cost) : '—'}</span>
               </div>
               <div className="cost-detail">
-                {c.role === 'decider' ? 'Decision model · ' : ''}
+                {c.tier ? `${c.tier === 'chooser' ? 'Jev' : `${c.tier[0].toUpperCase()}${c.tier.slice(1)} model`} · ` : c.role === 'decider' ? 'Decision model · ' : ''}
                 {c.servedBy ? `${c.model} → ${c.servedBy}` : c.model} · {formatDuration(c.durationMs)}
               </div>
               <div className="cost-detail">

@@ -26,6 +26,22 @@ export interface ChecklistItem {
   saved?: boolean;
 }
 
+/** How big a model is, when models are picked per task. */
+export type ModelTier = 'small' | 'medium' | 'big';
+/** clicks: only UI steps. analysis: reading data and working it out. judged: changes a record, or the words don't say. */
+export type TaskKind = 'clicks' | 'analysis' | 'judged';
+
+/** Why a task got the models it got: for the log. */
+export interface TaskRoute {
+  kind: TaskKind;
+  /** The word of the request that said so. */
+  word?: string;
+  /** clicks: the model that did it. analysis: the one that wrote the analysis. judged: the one that did the steps. */
+  tier: ModelTier;
+  /** The small model got stuck: Jev took over with this one. */
+  stuckTier?: ModelTier;
+}
+
 /**
  * One call to a model in a task: what it was for, what went in and what it cost. The task's log of these says
  * where its tokens and dollars went.
@@ -53,6 +69,8 @@ export interface ModelCallRecord {
   estimated?: boolean;
   /** What the reply did, in short: the tools it called (“open_menu Patients › Search & List”) or the start of its answer. */
   did?: string;
+  /** With models picked per task: this call's part. */
+  tier?: ModelTier | 'chooser';
   /** What the prompt was made of, in estimated tokens. */
   parts: { system: number; knowledge: number; tools: number; pages: number; rest: number };
 }
@@ -79,6 +97,8 @@ export interface TaskRecord {
   checklist?: ChecklistItem[];
   /** Every model call of this task, in order. */
   calls?: ModelCallRecord[];
+  /** With models picked per task: which, and why. */
+  route?: TaskRoute;
   /** Set on a team member's task: the team task it belongs to. */
   parentId?: string;
 }

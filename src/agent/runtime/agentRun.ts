@@ -3,7 +3,7 @@ import type { ForegroundLock } from '@/extension/browser/foreground';
 import { BUILT_IN_TOOL_IDS } from '@/shared/constants/tools';
 import { upsertTask } from '@/shared/storage/historyStore';
 import type { AgentConfig, AppConfig, ProviderConfig, SiteProfile } from '@/shared/types/config';
-import type { ModelCallRecord, StepRecord, TaskRecord } from '@/shared/types/history';
+import type { ModelCallRecord, ModelTier, StepRecord, TaskRecord, TaskRoute } from '@/shared/types/history';
 import { clip, matchesSite, siteOf, uid } from '@/shared/utils';
 import { formatCost, summarizeCalls } from '@/shared/utils/cost';
 import { AgentError, isAbort, toAgentError } from '@/shared/utils/errors';
@@ -22,6 +22,7 @@ import type { ApprovalAnswer, ApprovalPrompt, RunEvent } from './events';
 import { asksUser, followUpOf, historyForModel, withoutStoppedList } from './followUp';
 import { Checklist, checklistTool } from './checklist';
 import { meteredClient } from './costLog';
+import { choosePrompt, fallbackTier, kindOfTask, parseTier, tierOfModel, tiersFor } from './modelRoute';
 import { FILL_FORM, fieldCall, fillFormSchema, fillFormTool, stopsFilling } from './fillForm';
 import { changedSomething, namedIn, nearlyNamed, pageState, undoTool, wrongRowClick, type ClickRecord } from './clickGuard';
 
@@ -242,14 +243,21 @@ export class AgentRun {
   private async loop(browser: BrowserController, tab: chrome.tabs.Tab | null): Promise<string> {
     const { agent, config, request } = this.options;
     const url = tab?.url ?? '';
-    const { provider, model } = resolveProvider(agent, config, url);
+    const resolved = resolveProvider(agent, config, url);
+    const { provider } = resolved;
+    let { model } = resolved;
+    // Models picked per task (see modelRoute): only where these models are, on OpenRouter.
+    const auto = agent.autoModels && /openrouter\.ai/.test(provider.baseUrl) ? agent.autoModels : null;
     // Every call goes in the task's log — what it was for, its tokens, its cost — and none starts past the spending limit.
-    const log = (call: ModelCallRecord) => this.updateTask({ calls: [...(this.task.calls ?? []), call] });
+    const log = (call: ModelCallRecord) => {
+      const tier = auto ? tierOfModel(auto, call.model) : undefined;
+      this.updateTask({ calls: [...(this.task.calls ?? []), tier ? { ...call, tier } : call] });
+    };
     const client = meteredClient(createClient(provider), 'worker', () => this.knowledgeNow, log, () => this.withinSpendingLimit());
     // The decision model, when the agent has one, decides each next step; the agent's own model reads the
     // request first, double-checks and writes the answer.
-    const decision = resolveDecision(agent, config);
-    const decider = decision
+    const decision = auto ? null : resolveDecision(agent, config);
+    let decider = decision
       ? { client: meteredClient(createClient(decision.provider), 'decider', () => this.knowledgeNow, log, () => this.withinSpendingLimit()), model: decision.model, label: decision.label }
       : null;
     const toolset = buildToolset(agent, config, url);
@@ -294,6 +302,25 @@ export class AgentRun {
       // A small context is also a slow model's: every token of a page read is time.
       ...((contextWindowOf(provider) ?? Infinity) <= 32_768 ? { overviewTextChars: 3_000 } : {}),
     };
+
+    // Who does this task: decided before the first step. Clicks need no chooser at all.
+    const jev = auto
+      ? { client: meteredClient(createClient(provider), 'decider', () => this.knowledgeNow, log, () => this.withinSpendingLimit()), model: auto.chooser, label: knownModel(auto.chooser)?.label ?? auto.chooser }
+      : null;
+    let route: TaskRoute | null = null;
+    // Analysis: the model that writes it, when another one does the clicks and the reading.
+    let writer: { model: string; label: string } | null = null;
+    if (auto && jev) {
+      const { kind, word } = kindOfTask(request);
+      const tier = kind === 'clicks' ? 'small' : await this.chooseTier(jev, request, tiersFor(kind), fallbackTier(kind));
+      route = { kind, ...(word ? { word } : {}), tier };
+      this.updateTask({ route });
+      if (kind === 'analysis') {
+        writer = { model: auto[tier], label: knownModel(auto[tier])?.label ?? auto[tier] };
+        model = auto.small;
+      } else model = auto[tier];
+      if (kind === 'judged') decider = jev;
+    }
 
     // With a checklist, the ticked items already say what is done.
     this.doneBefore = new Set(this.checklist.size ? [] : (followUp?.doneSteps ?? []));
@@ -348,8 +375,9 @@ export class AgentRun {
     let acts = 0;
     // Why the next call is made, when it is one of the runtime's own checks (“Double-check”) — for the log.
     let nextPurpose: string | null = null;
-    const workerLabel = knownModel(model)?.label ?? model;
-    const stepLimit = this.stepLimit(agent.maxSteps) * (decider ? 2 : 1);
+    let workerLabel = knownModel(model)?.label ?? model;
+    let stepLimit = this.stepLimit(agent.maxSteps) * (decider ? 2 : 1);
+    let tookOver = false;
     for (let step = 0; step < stepLimit; step++) {
       this.throwIfCancelled();
       // The task moved to another site (Indici → its Smart Inbox, in a new tab): the knowledge of that site, as if
@@ -367,7 +395,19 @@ export class AgentRun {
       // The system prompt stays the same through the task, so the server's prompt cache serves it (and the
       // tools) at a fraction of the price on every call after the first. What changes — the checklist — goes
       // at the end of each call instead (`withChecklist`).
-      messages[0] = { role: 'system', content: `${system}${decider ? `\n\n${WORKER_ROLE}` : ''}` };
+      // The small model stuck: once, Jev picks a bigger one and decides from here.
+      if (auto && jev && route && !decider && !tookOver && this.isStuck(recent, step, stepLimit)) {
+        tookOver = true;
+        const tier = await this.chooseTier(jev, request, ['medium', 'big'], 'medium');
+        model = auto[tier];
+        workerLabel = knownModel(model)?.label ?? model;
+        decider = jev;
+        phase = 'decide';
+        stepLimit *= 2;
+        route = { ...route, stuckTier: tier };
+        this.updateTask({ route });
+      }
+      messages[0] = { role: 'system', content: `${system}${decider ? `\n\n${WORKER_ROLE}` : writer ? `\n\n${GATHER_ROLE}` : ''}` };
       // A decision carried out at length without a word back: the decision model looks again.
       if (decider && phase === 'act' && acts >= MAX_ACTS) phase = 'decide';
       let response;
@@ -384,15 +424,20 @@ export class AgentRun {
           // Done, or a question for the user: the agent's model writes it — without tools, so the decision stands.
           phase = 'answer';
           this.emit({ type: 'thinking', taskId: this.id, active: true, label: `Writing the answer · ${workerLabel}` });
-          const ask: ChatMessage = { role: 'user', content: `${ANSWER_PROMPT}\n\nThe draft:\n${decided.text || '(none)'}${this.checklist.size ? `\n\n${this.checklist.section()}` : ''}` };
-          const written = await client
-            .chat({ model, purpose: 'Writing the answer', messages: [...reasoningFor(compactMessages(messages, budget), model), ask], tools: [], temperature: agent.temperature, signal: this.abort.signal })
-            .catch((err: unknown) => {
-              if (this.abort.signal.aborted || isAbort(err)) throw err;
-              return null; // the decision model's own words stand
-            });
-          response = written?.content.trim() ? { ...written, toolCalls: [] } : { content: decided.text, toolCalls: [] };
-          lastModel = model;
+          if (writer) {
+            response = { content: await this.writeAnalysis(client, writer, model, messages, budget, decided.text, agent.temperature), toolCalls: [] };
+            lastModel = writer.model;
+          } else {
+            const ask: ChatMessage = { role: 'user', content: `${ANSWER_PROMPT}\n\nThe draft:\n${decided.text || '(none)'}${this.checklist.size ? `\n\n${this.checklist.section()}` : ''}` };
+            const written = await client
+              .chat({ model, purpose: 'Writing the answer', messages: [...reasoningFor(compactMessages(messages, budget), model), ask], tools: [], temperature: agent.temperature, signal: this.abort.signal })
+              .catch((err: unknown) => {
+                if (this.abort.signal.aborted || isAbort(err)) throw err;
+                return null; // the decision model's own words stand
+              });
+            response = written?.content.trim() ? { ...written, toolCalls: [] } : { content: decided.text, toolCalls: [] };
+            lastModel = model;
+          }
         } else {
           const label = !decider || step === 0 ? undefined : phase === 'answer' ? `Checking the answer · ${workerLabel}` : `Doing it · ${workerLabel}`;
           this.emit({ type: 'thinking', taskId: this.id, active: true, ...(label ? { label } : {}) });
@@ -422,6 +467,15 @@ export class AgentRun {
         if (response.content.trim()) messages.push({ role: 'assistant', content: response.content.trim() });
         phase = 'decide';
         continue;
+      }
+      // The small model has what the analysis needs: the bigger one writes it. A question for the user is its own to ask.
+      if (writer && !decider && !response.toolCalls.length && response.finishReason !== 'length') {
+        const said = response.content.trim();
+        const ready = /^\W*ready\b/i.test(said);
+        if (ready || (!asksUser(said) && !soundsUnfinished(said))) {
+          const written = await this.writeAnalysis(client, writer, model, messages, budget, ready ? '' : said, agent.temperature);
+          return withoutStoppedList(written).replace(EARLIER_LABEL, '').trim() || 'Done.';
+        }
       }
       if (!response.toolCalls.length) {
         // The label earlier answers carry for the model (“(Earlier answer — may be out of date)”) is not the user's.
@@ -642,6 +696,65 @@ export class AgentRun {
       this.upsertStep({ ...step, status: 'skipped', note: 'Couldn’t read the page', durationMs: Date.now() - step.startedAt });
       return null;
     }
+  }
+
+  /** Jev's pick of a model for this task, shown in the activity. Its answer unusable, or Jev out of reach: `fallback`. */
+  private async chooseTier(jev: { client: LlmClient; model: string; label: string }, request: string, tiers: ModelTier[], fallback: ModelTier): Promise<ModelTier> {
+    this.emit({ type: 'thinking', taskId: this.id, active: true, label: `Choosing the model · ${jev.label}` });
+    const started = Date.now();
+    const reply = await jev.client
+      .chat({ model: jev.model, purpose: 'Choosing the model', messages: [{ role: 'user', content: choosePrompt(request, tiers) }], tools: [], temperature: 0, signal: this.abort.signal })
+      .then((res) => res.content)
+      .catch((err: unknown) => {
+        if (this.abort.signal.aborted || isAbort(err) || (err instanceof AgentError && err.code === 'cost_limit')) throw err;
+        return '';
+      });
+    const picked = parseTier(reply, tiers);
+    this.upsertStep({
+      id: uid('step_'),
+      label: picked ? `Chose the ${picked} model · ${jev.label}` : `Used the ${fallback} model · ${jev.label} gave no answer`,
+      status: 'done',
+      tool: 'decision',
+      startedAt: started,
+      durationMs: Date.now() - started,
+    });
+    return picked ?? fallback;
+  }
+
+  /** The same step three times, three steps in a row that failed, or close to the step limit. */
+  private isStuck(recent: string[], step: number, stepLimit: number): boolean {
+    const last = recent.slice(-3);
+    if (last.length === 3 && last.every((s) => s === last[0])) return true;
+    const steps = this.task.steps.filter((s) => s.tool !== 'decision').slice(-3);
+    if (steps.length === 3 && steps.every((s) => s.status === 'failed' || s.status === 'skipped')) return true;
+    return stepLimit > 6 && step >= stepLimit - 3;
+  }
+
+  /**
+   * The analysis, by the bigger model: from the steps as plain text, whole for what they read as data — no tool
+   * definitions and no steps along the way in full. The bigger model failing: the model that did the steps writes it.
+   */
+  private async writeAnalysis(client: LlmClient, writer: { model: string; label: string }, doer: string, messages: ChatMessage[], budget: number, draft: string, temperature: number): Promise<string> {
+    this.emit({ type: 'thinking', taskId: this.id, active: true, label: `Writing the analysis · ${writer.label}` });
+    const system = messages[0].content.replace(`\n\n${GATHER_ROLE}`, '').replace(`\n\n${WORKER_ROLE}`, '');
+    const call = (model: string, room: number, purpose: string) =>
+      client.chat({
+        model,
+        purpose,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: decisionTranscript(compactMessages(messages, room), this.checklist.section(), `${WRITE_ANALYSIS}${draft ? `\n\nWhat the model that did the steps said:\n${draft}` : ''}`) },
+        ],
+        tools: [],
+        temperature,
+        signal: this.abort.signal,
+      });
+    const first = await call(writer.model, budget, 'Writing the analysis').catch((err: unknown) => {
+      if (this.abort.signal.aborted || isAbort(err) || (err instanceof AgentError && err.code === 'cost_limit')) throw err;
+      return call(doer, budget, 'Writing the analysis (the bigger model failed)');
+    });
+    const res = first.finishReason === 'length' ? await call(writer.model, Math.max(3_000, Math.floor(budget * 0.6)), 'Again: the analysis was cut off') : first;
+    return res.content.trim() || draft;
   }
 
   /**
@@ -1236,6 +1349,15 @@ const WORKER_ROLE = [
   'When a decision comes (“Decision (from …)”), do exactly those steps with your tools, in order. When they are done, or one can’t be done (the element isn’t there, it changed nothing, a pop-up came up), stop and say in a sentence or two what happened. Don’t take other steps of your own.',
 ].join('\n');
 
+/** To the small model, when a bigger one writes the analysis. */
+const GATHER_ROLE = [
+  '## Who writes the answer',
+  'A bigger model writes the analysis from what you gather. Do the clicks and the reading the request needs with your tools, as your instructions say — not the table, the summary or the analysis. When everything needed has been read, reply only READY. If only the user can settle something (which patient), ask in a sentence instead.',
+].join('\n');
+
+/** To the bigger model, with the steps as plain text. */
+const WRITE_ANALYSIS = 'The steps are done: write the answer for the user now, from the results above, in the form your instructions give for this request. No more steps. Only the answer, nothing about this note.';
+
 /** To the decision model: it decides, the agent's model acts. */
 const DECIDER_ROLE = [
   '## Your part: you decide, another model acts',
@@ -1253,7 +1375,7 @@ const DECIDER_ROLE = [
  * ids are gone anyway), and long older results are cut — the latest results, the latest site knowledge and
  * every approved save stay whole.
  */
-export function decisionTranscript(messages: ChatMessage[], checklist = ''): string {
+export function decisionTranscript(messages: ChatMessage[], checklist = '', closing = 'Decide what the worker does next.'): string {
   const rest = messages.slice(1);
   const latestRead = rest.findLastIndex(isFullRead);
   const howTo = rest.findLastIndex((m) => m.role === 'tool' && m.toolName === 'site_knowledge');
@@ -1287,7 +1409,7 @@ export function decisionTranscript(messages: ChatMessage[], checklist = ''): str
       lines.push(`[Result of ${m.toolName}]\n${content}`);
     }
   });
-  return `${lines.join('\n\n')}${checklist ? `\n\n${checklist}` : ''}\n\nDecide what the worker does next.`;
+  return `${lines.join('\n\n')}${checklist ? `\n\n${checklist}` : ''}\n\n${closing}`;
 }
 /** Characters of an older step's result the decision model reads. */
 const DECIDER_OLD_RESULT = 800;

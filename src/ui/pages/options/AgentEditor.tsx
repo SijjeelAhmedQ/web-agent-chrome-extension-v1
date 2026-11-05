@@ -2,6 +2,7 @@ import { AutoComplete, Button, Checkbox, Drawer, Input, InputNumber, Select, Sli
 import { RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/agent/llm';
+import { DEFAULT_AUTO_MODELS } from '@/agent/runtime/modelRoute';
 import { AGENT_COLORS, AGENT_ICONS } from '@/shared/constants/defaults';
 import { BUILT_IN_TOOLS, CUSTOM_PREFIX, TOOL_CATEGORIES, type ToolCategory } from '@/shared/constants/tools';
 import { knownModel, presetById } from '@/shared/constants/providers';
@@ -222,6 +223,20 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
                       {knownModel(draft.model || provider?.defaultModel || '')!.label} can’t use tools: this agent will read the page and answer, but can’t click, type or navigate.
                     </div>
                   )}
+                </div>
+                <div>
+                  <FieldLabel hint="Optional">Pick the model per task</FieldLabel>
+                  <Switch checked={!!draft.autoModels} onChange={(on) => set({ autoModels: on ? DEFAULT_AUTO_MODELS : null })} aria-label="Pick the model per task" />
+                  {draft.autoModels &&
+                    (['small', 'medium', 'big', 'chooser'] as const).map((tier) => (
+                      <div key={tier} style={{ marginTop: 8 }}>
+                        <FieldLabel>{tier === 'chooser' ? 'Chooser (picks and decides)' : `${tier[0].toUpperCase()}${tier.slice(1)} model`}</FieldLabel>
+                        <Input value={draft.autoModels![tier]} onChange={(e) => set({ autoModels: { ...draft.autoModels!, [tier]: e.target.value } })} aria-label={`${tier} model`} />
+                      </div>
+                    ))}
+                  <div className="field-help">
+                    On an OpenRouter connection. UI clicks (go to, click, search): the small model, without Jev. Data analysis (summary, trend, issues): the small model clicks and reads, and Jev picks who writes it. Changing a record: Jev picks the model and decides each step. The small model stuck: Jev takes over. The log says which and what each cost. Replaces the model and decision model here.
+                  </div>
                 </div>
                 <div>
                   <FieldLabel hint="Optional">Decision model</FieldLabel>

@@ -120,7 +120,7 @@ export const ActivityCard = memo(function ActivityCard({ task, thinking, thinkin
   const copySteps = () => {
     const stepText = steps.map((s) => [s.label, STATUS_TEXT[s.status], s.note].filter(Boolean).join('\n')).join('\n');
     const outcome = task?.result ? `Answer:\n${task.result}` : task?.error ? `Stopped: ${task.error}` : '';
-    const text = [task?.request ? `Request: ${task.request}` : '', stepText, outcome, describeCalls(calls)].filter(Boolean).join('\n\n');
+    const text = [task?.request ? `Request: ${task.request}` : '', stepText, outcome, describeCalls(calls, task?.route)].filter(Boolean).join('\n\n');
     void navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1400);
@@ -159,7 +159,7 @@ export const ActivityCard = memo(function ActivityCard({ task, thinking, thinkin
           )}
         </ol>
       )}
-      {expanded && <CostLog calls={calls} />}
+      {expanded && <CostLog calls={calls} route={task?.route} />}
     </section>
   );
 });

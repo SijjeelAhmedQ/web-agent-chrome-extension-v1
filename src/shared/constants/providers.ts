@@ -56,6 +56,7 @@ export const REFERENCE_PRICE = { model: 'Gemini 3.8 Flash', input: 0.825, cached
 /** Fast models on OpenRouter for the agent, and Jev Router for its decisions (see each agent's Decision model). */
 export const OPENROUTER_MODELS: ModelOption[] = [
   { id: 'google/gemini-3.8-flash', label: 'Gemini 3.8 Flash', note: 'Fast, with tools. Thinking Off is cheapest; Low for harder tasks.', tools: true },
+  { id: '~deepseek/deepseek-flash-latest', label: 'DeepSeek Flash', note: 'Cheapest here, with tools: good for clicks and going to pages. The whole conversation is cached.', tools: true },
   { id: 'anthropic/claude-haiku-5.5', label: 'Claude Haiku 5.5', note: 'Fast, follows workflows closely. Thinking Off is cheapest; Low for harder tasks.', tools: true },
   { id: 'typesafe/jev-router', label: 'Jev Router', note: 'Picks a model and its thinking for each request — use it as an agent’s Decision model. Its price varies by request.', tools: true },
 ];

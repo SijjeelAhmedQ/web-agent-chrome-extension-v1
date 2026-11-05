@@ -62,6 +62,13 @@ export interface TeamConfig {
   tidyUp: boolean;
 }
 
+export interface AutoModels {
+  small: string;
+  medium: string;
+  big: string;
+  chooser: string;
+}
+
 export interface AgentConfig {
   id: string;
   name: string;
@@ -78,6 +85,12 @@ export interface AgentConfig {
    * request first, double-checks and writes the answer. The user still approves every save. Unset → off.
    */
   decision?: { providerId: string | null; model: string } | null;
+  /**
+   * Models picked per task, on an OpenRouter connection: plain clicks go to `small` with no chooser; data analysis:
+   * `small` does the clicks and reading, `chooser` picks who writes it; anything else: `chooser` picks the model and
+   * decides each step. Replaces the model and decision model above. Unset → off.
+   */
+  autoModels?: AutoModels | null;
   temperature: number;
   maxSteps: number;
   /** Before reporting that something was done, re-read the page and check the claim (default on). */
