@@ -71,10 +71,22 @@ export function knowledgeSection(profiles: SiteProfile[], request: string, budge
   const inExamples = new Map<string, number>();
   for (const e of entries) for (const w of wordsOf(e.trigger ?? '')) inExamples.set(w, (inExamples.get(w) ?? 0) + 1);
   const topicWords = (e: KnowledgeEntry) => new Set([...wordsOf(e.title), ...[...wordsOf(e.trigger ?? '')].filter((w) => (inExamples.get(w) ?? 0) < 2)]);
-  const hits = (e: KnowledgeEntry) => [...topicWords(e)].filter((w) => asked.has(w)).length;
+  const hits = (e: KnowledgeEntry) => [...topicWords(e)].filter((w) => asked.has(w));
+  // A word in the titles of many entries (“record”, “this patient”) doesn't say which: while another word of the
+  // request does, an entry that shares only such words is no match — “add a task against this record” pulled in
+  // eleven workflows, with every call.
+  const inTopics = new Map<string, number>();
+  for (const e of entries) for (const w of topicWords(e)) inTopics.set(w, (inTopics.get(w) ?? 0) + 1);
+  const common = (w: string) => (inTopics.get(w) ?? 0) > Math.max(3, entries.length * 0.15);
+  const anySpecific = entries.some((e) => hits(e).some((w) => !common(w)));
   const scored = entries.map((e) => {
     const h = hits(e);
-    return { e, score: h * 2 + [...wordsOf(e.content)].filter((w) => asked.has(w)).length * 0.5, match: h > 0, named: false };
+    return {
+      e,
+      score: h.length * 2 + [...wordsOf(e.content)].filter((w) => asked.has(w)).length * 0.5,
+      match: anySpecific ? h.some((w) => !common(w)) : h.length > 0,
+      named: false,
+    };
   });
   const named = (title: string, text: string) => {
     const head = title.split(' — ')[0].trim();
@@ -83,13 +95,17 @@ export function knowledgeSection(profiles: SiteProfile[], request: string, budge
   const matching = scored.filter((s) => s.match).map((s) => s.e.content);
   for (const s of scored) if (!s.match && matching.some((text) => named(s.e.title, text))) s.named = true;
   // Then, while there is room: navigation, pages (how the site's screens work), rules; other workflows by title.
+  // The workflow the request is most about, then what it names, then the other matches: a small model's room goes
+  // to them in that order.
+  const bestMatch = scored.filter((s) => s.match && s.e.kind === 'workflow').sort((a, b) => b.score - a.score)[0];
+  const namedByBest = (s: (typeof scored)[number]) => !!bestMatch && s.named && named(s.e.title, bestMatch.e.content);
   const tier = (s: (typeof scored)[number]) =>
-    s.match ? (s.e.kind === 'workflow' ? 1 : 0) : s.named ? 2 : s.e.kind === 'navigation' ? 3 : s.e.kind === 'page' ? 4 : s.e.kind === 'rule' ? 5 : 6;
-  const ranked = scored.sort((a, b) => tier(a) - tier(b) || (tier(a) === 1 ? 0 : ORDER.indexOf(a.e.kind) - ORDER.indexOf(b.e.kind)) || b.score - a.score);
+    s === bestMatch ? 1 : namedByBest(s) ? 1.2 : s.match ? (s.e.kind === 'workflow' ? 1.5 : 0) : s.named ? 2 : s.e.kind === 'navigation' ? 3 : s.e.kind === 'page' ? 4 : s.e.kind === 'rule' ? 5 : 6;
+  const ranked = scored.sort((a, b) => tier(a) - tier(b) || (tier(a) === 1.5 ? 0 : ORDER.indexOf(a.e.kind) - ORDER.indexOf(b.e.kind)) || b.score - a.score);
   const names = profiles.map((p) => p.name).join(', ');
   const lines = [
     `## What the user has taught you about ${names}`,
-    'This comes from the user and is correct for this website. Follow it over your own guesses. When a workflow matches the request, follow its steps in order.',
+    "This comes from the user and is correct for this website. Follow it over your own guesses. When a workflow matches the request, follow its steps in order. What is below is complete: don't call site_knowledge for anything shown here.",
   ];
   const never = [...new Set(profiles.flatMap((p) => p.neverClick ?? []).map((n) => n.trim()).filter(Boolean))];
   if (never.length) {
@@ -99,10 +115,15 @@ export function knowledgeSection(profiles: SiteProfile[], request: string, budge
   const skipped: KnowledgeEntry[] = [];
   // A request with words to match: workflows that don't match (nor are named by one that does) wait for site_knowledge.
   const matchable = asked.size > 0;
+  // Room is kept for the workflow the request is most about: a small model's room went to matching rules first.
+  const best = bestMatch?.e;
+  let held = best ? formatEntry(best).length + 2 : 0;
+  if (used + held > budget) held = 0;
   for (const { e, match, named: isNamed } of ranked) {
     const block = formatEntry(e);
     const always = e.kind !== 'workflow';
-    if ((always || match || isNamed || !matchable) && used + block.length + 2 <= budget) {
+    if (e === best) held = 0;
+    if ((always || match || isNamed || !matchable) && used + block.length + 2 + held <= budget) {
       lines.push('', block);
       used += block.length + 2;
     } else skipped.push(e);

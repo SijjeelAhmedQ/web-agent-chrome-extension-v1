@@ -240,3 +240,25 @@ describe('the page added to an action that changed it', () => {
     expect(msgs[5].content).toContain('Page 2');
   });
 });
+
+describe('site knowledge in the prompt', () => {
+  const entry = (id: string, title: string, trigger = '') => ({ id, kind: 'workflow' as const, title, trigger, content: `Steps of ${title}.`, enabled: true, createdAt: 1, updatedAt: 1 });
+  const site = (titles: string[]) => [{ id: 's', name: 'site', urlPatterns: [], knowledge: titles.map((t, i) => entry(`e${i}`, t)) }] as never;
+
+  it('leaves out entries that share only a word many titles have, while another word says which', () => {
+    const titles = ['Open a record', 'File records', 'Read a record', 'Copy a record', 'Print a record', 'Add a task'];
+    const { text } = knowledgeSection(site(titles), 'Add a task against this record', 16_000);
+    expect(text).toContain('### Workflow: Add a task');
+    expect(text).not.toContain('### Workflow: File records');
+  });
+
+  it('keeps them when the request has no other word', () => {
+    const titles = ['Open a record', 'File records', 'Read a record', 'Copy a record', 'Print a record', 'Add a task'];
+    expect(knowledgeSection(site(titles), 'record', 16_000).text).toContain('### Workflow: File records');
+  });
+
+  it('puts the workflow most asked about first, even in a small room', () => {
+    const { text } = knowledgeSection(site(['Add a task']), 'add a task', 500);
+    expect(text).toContain('### Workflow: Add a task');
+  });
+});

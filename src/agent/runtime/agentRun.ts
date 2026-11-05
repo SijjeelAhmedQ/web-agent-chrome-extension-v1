@@ -289,6 +289,7 @@ export class AgentRun {
       askBefore: toolset.sites.flatMap((s) => s.askBefore ?? []),
       askEveryAction: agent.confirmation === 'always',
       askPopups: toolset.sites.flatMap((s) => s.askPopups ?? []),
+      knowledgeInPrompt: () => this.knowledgeNow,
       userSaid: request,
       // A small context is also a slow model's: every token of a page read is time.
       ...((contextWindowOf(provider) ?? Infinity) <= 32_768 ? { overviewTextChars: 3_000 } : {}),
@@ -613,11 +614,11 @@ export class AgentRun {
    */
   private async pageAfter(call: ToolCall, output: string, byName: Map<string, AgentTool<any>>, ctx: ToolContext): Promise<string> {
     const tool = byName.get(call.name);
-    const acted = !!tool && ((tool.risk !== 'read' && tool.touchesPage) || tool.name === 'open_menu');
+    const acted = !!tool && ((tool.risk !== 'read' && tool.touchesPage) || PAGE_COMES_WITH.has(tool.name));
     if (!acted || this.endWith || !byName.has('read_page') || !/read_page|New on the page:/.test(output) || /^(Not |Error|Stopped|Cancelled)/.test(output)) return output;
     // A new page or tab may still be filling in (Indici's consult: 148 controls at first, 445 a few seconds later,
     // its pop-ups last): read it once it has gone quiet, or the model reads it again — a call more.
-    if (/new tab or window|opens in a new tab|The page changed — now/.test(output)) {
+    if (/new tab or window|opens in a new tab|The page changed — now/.test(output) || tool.name === 'navigate' || tool.name === 'switch_tab') {
       await this.inFront(ctx, () => ctx.browser.send({ kind: 'settle', quietMs: 1_000, timeoutMs: 8_000 })).catch(() => null);
     }
     const page = await this.runTool({ id: uid('read_'), name: 'read_page', arguments: { mode: 'overview' } }, byName, ctx);
@@ -1221,6 +1222,8 @@ const NOT_FINISHED_PROMPT = 'Not finished yet:';
 /** Tools that only look at the page; this many in a row without an action is searching in circles. */
 /** How a decision reaches the agent's model (and how compaction tells it from the user's request). */
 export const DECISION_HEAD = 'Decision (from';
+/** Tools marked read-only that still bring another page: reading it is the model's next step anyway. */
+const PAGE_COMES_WITH = new Set(['open_menu', 'navigate', 'switch_tab']);
 /** The agent's model's calls on one decision before the decision model looks again. */
 const MAX_ACTS = 6;
 /** Earlier messages of the conversation (requests and answers) that go with a task — with every call of it. */

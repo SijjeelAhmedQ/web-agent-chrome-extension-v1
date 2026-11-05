@@ -23,15 +23,19 @@ export function knowledgeTool(sites: SiteProfile[], here?: (ctx: ToolContext) =>
       const fromHere = moved.length ? searchKnowledge(moved, a.topic) : [];
       const found = fromHere.length ? fromHere : searchKnowledge(sites, a.topic);
       if (!found.length) return { output: `Nothing in the ${names} knowledge base about “${a.topic}”. Work it out from the page.`, note: 'Nothing saved about this' };
+      // Already in the instructions, word for word: not again in the steps, where it would go with every later call.
+      const prompt = ctx.knowledgeInPrompt?.() ?? '';
+      const newHere = found.filter((e) => !prompt.includes(formatEntry(e)));
+      if (!newHere.length) return { output: `“${found[0].title.trim()}” is already in your instructions, in full. Follow it there.`, note: 'Already in the instructions' };
       // A small context (a slow local model): the best entry in full, the others by name — a page of
       // workflows would push out the steps the task is on.
-      const [best, ...rest] = found;
+      const [best, ...rest] = newHere;
       const output =
         ctx.overviewTextChars && rest.length
           ? `${formatEntry(best)}\n\nAlso saved: ${rest.map((e) => `“${e.title.trim()}”`).join(', ')} — look one up by its name if you need it.`
-          : found.map(formatEntry).join('\n\n');
+          : newHere.map(formatEntry).join('\n\n');
       const from = fromHere.length ? moved.map((s) => s.name).join(', ') : names;
-      return { output, note: `${found.length} ${found.length === 1 ? 'entry' : 'entries'} · ${from}` };
+      return { output, note: `${newHere.length} ${newHere.length === 1 ? 'entry' : 'entries'} · ${from}` };
     },
   };
 }

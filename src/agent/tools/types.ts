@@ -48,6 +48,8 @@ export interface ToolContext {
   askEveryAction?: boolean;
   /** Pop-ups only the user answers (words of their title or text): their buttons need the user's OK. */
   askPopups?: string[];
+  /** The site knowledge in the current instructions: what site_knowledge need not repeat. */
+  knowledgeInPrompt?: () => string;
   /** What the user wrote in this message — a button it names is the user's answer already. */
   userSaid?: string;
   /** PDFs already read in this task, by address → their text (or why there is none). */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BROWSER_TOOLS, formAfterLoading } from './tools/browserTools';
+import { BROWSER_TOOLS, formAfterLoading, tabPatience } from './tools/browserTools';
 import { ElementMemory, type ToolContext } from './tools/types';
 
 // A site's “ask before” controls change a record as soon as they are used — clicked, or typed into.
@@ -125,5 +125,17 @@ describe('the form a menu item opens', () => {
     } as unknown as ToolContext;
     await formAfterLoading(ctx);
     expect(asked).toBe(4);
+  });
+});
+
+// “Open AI Assisted Inbox” shows its tooltip, and its tab comes up to eleven seconds later.
+describe('the tab an “Open …” control opens', () => {
+  it('is waited for longer when only its own tooltip showed', () => {
+    expect(tabPatience('Open AI Assisted Inbox', ['Open AI Assisted Inbox'])).toBe(12_000);
+  });
+  it('is not when anything else changed, or for other controls', () => {
+    expect(tabPatience('Open result: CBC', ['Haemoglobin 96'])).toBe(2_500);
+    expect(tabPatience('Save', ['Save'])).toBe(2_500);
+    expect(tabPatience('Open AI actions', [])).toBe(2_500);
   });
 });

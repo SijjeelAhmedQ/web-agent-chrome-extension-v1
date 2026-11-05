@@ -253,6 +253,12 @@ async function followNewTab(ctx: ToolContext, tab: chrome.tabs.Tab, label: strin
   };
 }
 
+/** How long a click whose only effect is a small change gets to open a tab, in milliseconds. */
+export function tabPatience(name: string, added: string[]): number {
+  const own = name.trim().toLowerCase();
+  return /^open\b/.test(own) && added.length > 0 && added.every((l) => l.trim().toLowerCase() === own) ? 12_000 : 2_500;
+}
+
 async function clickAndReport(ctx: ToolContext, elementId: number, double: boolean, openedTab: () => chrome.tabs.Tab | null): Promise<ToolOutcome> {
   const before = await pageUrl(ctx);
   let res;
@@ -304,7 +310,9 @@ async function clickAndReport(ctx: ToolContext, elementId: number, double: boole
   // A tab that opens a moment after a small change — a tooltip showed (Indici's “Open AI Assisted Inbox” icon) — is
   // waited for too: else the agent stays on the page it left and has to find the tab itself (three calls).
   if (!openedTab() && !after.navigated && changed() && (effect?.added.length ?? 0) <= 2 && !effect?.removed) {
-    for (let waited = 0; !openedTab() && waited < 2_500; waited += 300) await sleep(300);
+    // “Open …” with only its own tooltip showing has done nothing yet: the Smart AI Inbox's tab took up to eleven seconds.
+    const patience = tabPatience(res.element.name ?? '', effect?.added ?? []);
+    for (let waited = 0; !openedTab() && waited < patience; waited += 300) await sleep(300);
   }
   const tab = openedTab();
   if (tab) return followNewTab(ctx, tab, label);
@@ -1085,7 +1093,7 @@ const readRecords: AgentTool<{ first: string; near: string; next: string; close:
       return {
         output: inPage
           ? `${a.first.trim() ? `Clicked “${a.first}”, but no` : 'No'} record with “${a.area}” showed on the page. Read the page to see what it did.`
-          : `Clicked “${a.first}”, but no record viewer (pop-up) opened. Read the page to see what it did.`,
+          : `Clicked “${a.first}”, but no record viewer (pop-up) opened. If the record now shows in the page itself, call read_records again with area = the text the site knowledge names for that part of the page, and first empty; don't read the page first. Otherwise read the page to see what it did.`,
         note: 'No record viewer opened',
       };
     }
