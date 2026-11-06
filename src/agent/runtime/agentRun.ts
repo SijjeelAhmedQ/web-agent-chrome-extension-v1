@@ -2,7 +2,7 @@ import { BrowserController, PageError, scriptableReason } from '@/extension/brow
 import type { ForegroundLock } from '@/extension/browser/foreground';
 import { BUILT_IN_TOOL_IDS } from '@/shared/constants/tools';
 import { upsertTask } from '@/shared/storage/historyStore';
-import type { AgentConfig, AppConfig, ProviderConfig, SiteProfile } from '@/shared/types/config';
+import type { AgentConfig, AppConfig, ProviderConfig, SiteProfile, SiteShortcut } from '@/shared/types/config';
 import type { ModelCallRecord, ModelTier, StepRecord, TaskRecord, TaskRoute } from '@/shared/types/history';
 import { clip, matchesSite, siteOf, sleep, uid } from '@/shared/utils';
 import { formatCost, summarizeCalls } from '@/shared/utils/cost';
@@ -22,7 +22,7 @@ import type { ApprovalAnswer, ApprovalPrompt, RunEvent } from './events';
 import { asksUser, followUpOf, historyForModel, withoutStoppedList } from './followUp';
 import { Checklist, checklistTool } from './checklist';
 import { meteredClient } from './costLog';
-import { asksForClick, clickAnswer, namedControl, openedItsMenu, pageFilledIn, pageMoved, sameName, shortcutFor, stepFinishes, stepWorked } from './directTask';
+import { asksForClick, clickAnswer, leadingShortcut, namedControl, openedItsMenu, pageFilledIn, pageMoved, sameName, shortcutFor, stepFinishes, stepWorked } from './directTask';
 import { choosePrompt, fallbackTier, kindOfTask, parseTier, tierOfModel, tiersFor } from './modelRoute';
 import { FILL_FORM, fieldCall, fillFormSchema, fillFormTool, stopsFilling } from './fillForm';
 import { changedSomething, namedIn, nearlyNamed, pageState, undoTool, wrongRowClick, type ClickRecord } from './clickGuard';
@@ -306,6 +306,10 @@ export class AgentRun {
 
     // A small task the code can do alone: no model, no chooser, nothing to pay. A reply to a question isn't one, and
     // an agent that asks before every action or a read-only site keeps its own way.
+    // A longer request that starts with one: that part done here, so the model starts on the site it works on — no call
+    // there with the knowledge of the site before, and no prompt cache to fill twice.
+    let doneFirst: string | null = null;
+    let tabNow = tab;
     if (!followUp && agent.confirmation !== 'always' && !scriptableReason(url) && !matchesSite(url, config.settings.readOnlySites)) {
       void browser.setPresence(true);
       const done = await this.doDirectly(toolset.sites, url, byName, ctx);
@@ -313,6 +317,15 @@ export class AgentRun {
         const { word } = kindOfTask(request);
         this.updateTask({ route: { kind: 'code', ...(word ? { word } : {}), tier: 'small' } });
         return done;
+      }
+      const leading = leadingShortcut(toolset.sites, request);
+      if (leading) {
+        doneFirst = await this.runShortcut(leading, url, byName, ctx);
+        if (this.endWith) return this.endWith;
+        if (doneFirst) {
+          await this.pageReady(ctx, true);
+          tabNow = await browser.currentTab().catch(() => tab);
+        }
       }
     }
 
@@ -354,7 +367,7 @@ export class AgentRun {
         toolNames: [...byName.keys()],
         alwaysSkills: toolset.alwaysSkills,
         onDemandSkills: toolset.onDemandSkills,
-        page: { title: tab?.title ?? '', url, note: pageNote ? `${pageNote} Navigate to a website if the task needs one.` : undefined },
+        page: { title: tabNow?.title ?? '', url: tabNow?.url ?? url, note: pageNote ? `${pageNote} Navigate to a website if the task needs one.` : undefined },
         readOnly: matchesSite(url, config.settings.readOnlySites),
         siteKnowledge: knowledge,
         small,
@@ -369,6 +382,7 @@ export class AgentRun {
     let verified = false;
     let checkedAnswer: string | null = null;
     let nudges = 0;
+    if (doneFirst) messages.push({ role: 'user', content: `(Already done: ${doneFirst})` });
 
     void browser.setPresence(true);
     const recent: string[] = [];
@@ -702,22 +716,7 @@ export class AgentRun {
   private async doDirectly(sites: SiteProfile[], url: string, byName: Map<string, AgentTool<any>>, ctx: ToolContext): Promise<string | null> {
     const { request } = this.options;
     const shortcut = shortcutFor(sites, request);
-    if (shortcut) {
-      if (shortcut.here && url.includes(shortcut.here)) return shortcut.done;
-      if (!shortcut.steps.length || shortcut.steps.some((s) => !byName.has(s.tool))) return null;
-      for (const [n, step] of shortcut.steps.entries()) {
-        const { unlessShown } = step;
-        if (unlessShown && (await this.inFront(ctx, () => ctx.browser.send({ kind: 'findText', text: unlessShown, limit: 1 })).catch(() => null))?.total) continue;
-        const run = () => this.runTool({ id: uid('code_'), name: step.tool, arguments: step.args }, byName, ctx);
-        let output = await run();
-        if (openedItsMenu(output)) output = await run();
-        if (this.endWith) return this.endWith;
-        if (!stepWorked(output) || (n === shortcut.steps.length - 1 && !pageMoved(output))) return null;
-        if (unlessShown) await this.inFront(ctx, () => ctx.browser.send({ kind: 'waitForText', text: unlessShown, timeoutMs: 8_000 })).catch(() => null);
-      }
-      const now = (await ctx.browser.currentTab().catch(() => null))?.url ?? '';
-      return !shortcut.here || now.includes(shortcut.here) ? shortcut.done : null;
-    }
+    if (shortcut) return this.runShortcut(shortcut, url, byName, ctx);
     const name = namedControl(request);
     if (!name || !byName.has('click_text')) return null;
     const found = await this.inFront(ctx, () => ctx.browser.send({ kind: 'findText', text: name, limit: 6 })).catch(() => null);
@@ -727,6 +726,31 @@ export class AgentRun {
     // Asked to arrive somewhere and it didn't, or something it asked approval for: the model looks.
     if (!stepWorked(output) || this.changedData || (!asksForClick(request) && !pageMoved(output))) return null;
     return clickAnswer(found.matches[0].name, output, (await ctx.browser.currentTab().catch(() => null))?.title ?? '');
+  }
+
+  /** Until a page that just opened has gone quiet and filled in. Quiet isn't filled in: an app in a new tab starts, then fetches its data, and takes longer to start than a page does. */
+  private async pageReady(ctx: ToolContext, newTab: boolean): Promise<void> {
+    await this.inFront(ctx, () => ctx.browser.send({ kind: 'settle', quietMs: 1_000, timeoutMs: 8_000 })).catch(() => null);
+    const count = () => this.inFront(ctx, () => ctx.browser.send({ kind: 'snapshot', mode: 'overview', maxElements: 1, maxTextChars: 0 })).then((s) => s.elements.length + s.omitted, () => 0);
+    await pageFilledIn(count, (ms) => sleep(ms, ctx.signal), newTab ? 3_000 : 1_500);
+  }
+
+  /** A site's shortcut, step by step: what the user is told, or null if a step didn't work (the model goes on from there). */
+  private async runShortcut(shortcut: SiteShortcut, url: string, byName: Map<string, AgentTool<any>>, ctx: ToolContext): Promise<string | null> {
+    if (shortcut.here && url.includes(shortcut.here)) return shortcut.done;
+    if (!shortcut.steps.length || shortcut.steps.some((s) => !byName.has(s.tool))) return null;
+    for (const [n, step] of shortcut.steps.entries()) {
+      const { unlessShown } = step;
+      if (unlessShown && (await this.inFront(ctx, () => ctx.browser.send({ kind: 'findText', text: unlessShown, limit: 1 })).catch(() => null))?.total) continue;
+      const run = () => this.runTool({ id: uid('code_'), name: step.tool, arguments: step.args }, byName, ctx);
+      let output = await run();
+      if (openedItsMenu(output)) output = await run();
+      if (this.endWith) return this.endWith;
+      if (!stepWorked(output) || (n === shortcut.steps.length - 1 && !pageMoved(output))) return null;
+      if (unlessShown) await this.inFront(ctx, () => ctx.browser.send({ kind: 'waitForText', text: unlessShown, timeoutMs: 8_000 })).catch(() => null);
+    }
+    const now = (await ctx.browser.currentTab().catch(() => null))?.url ?? '';
+    return !shortcut.here || now.includes(shortcut.here) ? shortcut.done : null;
   }
 
   /**
@@ -741,10 +765,7 @@ export class AgentRun {
     // A new page or tab may still be filling in (Indici's consult: 148 controls at first, 445 a few seconds later,
     // its pop-ups last): read it once it has gone quiet, or the model reads it again — a call more.
     if (/new tab or window|opens in a new tab|The page changed — now/.test(output) || tool.name === 'navigate' || tool.name === 'switch_tab') {
-      await this.inFront(ctx, () => ctx.browser.send({ kind: 'settle', quietMs: 1_000, timeoutMs: 8_000 })).catch(() => null);
-      // Quiet isn't filled in: an app in a new tab starts, then fetches its data. It takes longer to start than a page does.
-      const count = () => this.inFront(ctx, () => ctx.browser.send({ kind: 'snapshot', mode: 'overview', maxElements: 1, maxTextChars: 0 })).then((s) => s.elements.length + s.omitted, () => 0);
-      await pageFilledIn(count, (ms) => sleep(ms, ctx.signal), /new tab or window|opens in a new tab/.test(output) ? 3_000 : 1_500);
+      await this.pageReady(ctx, /new tab or window|opens in a new tab/.test(output));
     }
     const page = await this.runTool({ id: uid('read_'), name: 'read_page', arguments: { mode: 'overview' } }, byName, ctx);
     if (/^(Error|Not )/.test(page)) return output;

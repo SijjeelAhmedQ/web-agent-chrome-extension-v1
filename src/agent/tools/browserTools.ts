@@ -253,10 +253,13 @@ async function followNewTab(ctx: ToolContext, tab: chrome.tabs.Tab, label: strin
   };
 }
 
+/** A control that says it opens something: a tab it opens can take its time. */
+export const saysOpen = (name: string) => /^open\b/i.test(name.trim());
+
 /** How long a click whose only effect is a small change gets to open a tab, in milliseconds. */
 export function tabPatience(name: string, added: string[]): number {
   const own = name.trim().toLowerCase();
-  return /^open\b/.test(own) && added.length > 0 && added.every((l) => l.trim().toLowerCase() === own) ? 12_000 : 2_500;
+  return saysOpen(name) && added.length > 0 && added.every((l) => l.trim().toLowerCase() === own) ? 12_000 : 2_500;
 }
 
 async function clickAndReport(ctx: ToolContext, elementId: number, double: boolean, openedTab: () => chrome.tabs.Tab | null): Promise<ToolOutcome> {
@@ -313,6 +316,21 @@ async function clickAndReport(ctx: ToolContext, elementId: number, double: boole
     // “Open …” with only its own tooltip showing has done nothing yet: the Smart AI Inbox's tab took up to eleven seconds.
     const patience = tabPatience(res.element.name ?? '', effect?.added ?? []);
     for (let waited = 0; !openedTab() && waited < patience; waited += 300) await sleep(300);
+  }
+  // “Open …” that changed nothing, or only its look: its tab may still come. None by then: the click didn't take (Indici's
+  // “Open AI Assisted Inbox” at times only selects on the first), so once more — or the model looks for the tab, waits and
+  // finds the icon again (five calls) to do just this.
+  if (!openedTab() && !changed() && saysOpen(res.element.name ?? '')) {
+    const tabIn = async (ms: number) => {
+      for (let waited = 0; !openedTab() && waited < ms; waited += 300) await sleep(300);
+    };
+    await tabIn(12_000);
+    if (!openedTab()) {
+      await ctx.browser.send({ kind: 'click', id: elementId, highlight: false, double }).catch(() => null);
+      after = await ctx.browser.settleAfterAction(before, ctx.signal);
+      effect = after.navigated ? undefined : after.effect;
+      if (!changed()) await tabIn(12_000);
+    }
   }
   const tab = openedTab();
   if (tab) return followNewTab(ctx, tab, label);

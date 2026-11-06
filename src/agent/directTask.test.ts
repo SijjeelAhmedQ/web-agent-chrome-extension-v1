@@ -8,7 +8,9 @@ import { knowledgeSection } from './planner/siteKnowledge';
 import { buildSystemPrompt } from './planner/systemPrompt';
 import type { ChatMessage } from './llm/types';
 import { dropEarlierPages, FIRST_PAGE, PAGE_AFTER } from './runtime/context';
-import { asksForClick, clickAnswer, namedControl, openedItsMenu, pageFilledIn, pageMoved, sameName, shortcutFor, stepFinishes, stepWorked } from './runtime/directTask';
+import { foundSoon } from '@/extension/content/hover';
+import { saysOpen } from './tools/browserTools';
+import { asksForClick, clickAnswer, leadingShortcut, namedControl, openedItsMenu, pageFilledIn, pageMoved, sameName, shortcutFor, stepFinishes, stepWorked } from './runtime/directTask';
 
 const restore = JSON.parse(readFileSync(join(process.cwd(), 'knowledge', 'web-agent-restore-indici.json'), 'utf8')) as { sites: SiteProfile[] };
 const indici = restore.sites.filter((s) => s.name === 'indici training');
@@ -32,6 +34,14 @@ describe('a shortcut of the site', () => {
       { tool: 'click_text', args: { text: 'Home' }, unlessShown: 'Open AI Assisted Inbox' },
       { tool: 'click_text', args: { text: 'Open AI Assisted Inbox' } },
     ]);
+  });
+
+  it.each(['goto smart AI inbox and select arya STARK patient and show me the trend of CBC of this patient.', 'open smart inbox then open arya', 'goto the smart inbox aur arya kholo'])('%s: the inbox first, the model after', (request) => {
+    expect(leadingShortcut(indici, request)?.here).toBe('inbox-app-dev.vitonta.com');
+  });
+
+  it.each(['goto smart AI inbox', 'goto smart AI inboxes and more', 'goto patients and select arya STARK', 'show me the trend and goto smart AI inbox'])('%s: starts with none that leads', (request) => {
+    expect(leadingShortcut(indici, request)).toBeNull();
   });
 
   it('clicks a menu trigger again, and only that', () => {
@@ -149,6 +159,25 @@ describe('a page still filling in', () => {
   });
 });
 
+describe('what comes a moment later', () => {
+  it('waits for a control that says it opens something, and no other', () => {
+    expect(saysOpen('Open AI Assisted Inbox')).toBe(true);
+    expect(saysOpen(' open result: CBC')).toBe(true);
+    expect(saysOpen('Reopen')).toBe(false);
+    expect(saysOpen('Search')).toBe(false);
+    expect(saysOpen('')).toBe(false);
+  });
+
+  it('finds a menu’s item that shows late, and gives up after a second and a half', async () => {
+    let looks = 0;
+    const pause = async () => {};
+    await expect(foundSoon(() => (++looks === 3 ? 'item' : null), pause)).resolves.toBe('item');
+    looks = 0;
+    await expect(foundSoon(() => (++looks, null), pause)).resolves.toBeNull();
+    expect(looks).toBe(5);
+  });
+});
+
 describe('moving to another site', () => {
   const page = (name: string) => `Page: ${name}`;
 
@@ -182,6 +211,10 @@ describe('the knowledge for reaching a patient’s trend', () => {
     expect(text).toContain('### Workflow: Open a patient and a record');
     expect(text).toContain('click it at once');
     expect(text).toContain('Never press Search with nothing typed');
+  });
+
+  it('says which records are flagged, not all of them', () => {
+    expect(knowledgeSection(smart, request, 16_000).text).toContain('not "the records" as a whole');
   });
 
   it('tells Indici not to press Home on its dashboard', () => {

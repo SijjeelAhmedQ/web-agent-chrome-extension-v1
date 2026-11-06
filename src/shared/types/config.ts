@@ -162,6 +162,8 @@ export interface SiteShortcut {
   here?: string;
   /** What the user is told. */
   done: string;
+  /** It may start a longer request (“goto smart AI inbox and open arya stark”): done first, and the model does the rest. */
+  leads?: boolean;
 }
 
 export interface SiteProfile {

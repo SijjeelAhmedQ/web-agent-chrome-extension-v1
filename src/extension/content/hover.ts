@@ -164,6 +164,16 @@ function bestMatch(candidates: Element[], label: string): Element | null {
   return scored[0]?.el ?? null;
 }
 
+/** What `find` finds within a second and a half, looking every 300 ms; else null. */
+export async function foundSoon<T>(find: () => T | null, pause: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): Promise<T | null> {
+  for (let waited = 0; waited < 1_500; waited += 300) {
+    await pause(300);
+    const found = find();
+    if (found) return found;
+  }
+  return null;
+}
+
 /**
  * Opens nested menus along `path` (e.g. ["Products", "Laptops"]). Each label is looked for
  * first among the items the previous level revealed. Returns what the last level shows.
@@ -173,8 +183,15 @@ export async function openMenu(path: string[], show: boolean): Promise<MenuResul
   let scope: Element[] | null = null;
   for (const [level, label] of path.entries()) {
     const last = level === path.length - 1;
-    const all = collectInteractive().elements;
-    const target = (scope?.length ? bestMatch(scope, label) : null) ?? bestMatch(all, label);
+    let all = collectInteractive().elements;
+    let target = (scope?.length ? bestMatch(scope, label) : null) ?? bestMatch(all, label);
+    // A menu can show a moment after its trigger is hovered (a patient just opened): not there yet isn't not there.
+    if (!target && level > 0) {
+      target = await foundSoon(() => {
+        all = collectInteractive().elements;
+        return bestMatch(all, label);
+      });
+    }
     if (!target) {
       return { opened, failedAt: label, revealed: [], options: describeAll(scope?.length ? scope : all, 30) };
     }

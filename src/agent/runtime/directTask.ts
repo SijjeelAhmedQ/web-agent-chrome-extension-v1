@@ -26,6 +26,12 @@ export function shortcutFor(sites: SiteProfile[], request: string): SiteShortcut
   return sites.flatMap((s) => s.shortcuts ?? []).find((c) => c.says.some((say) => plain(say) === asked)) ?? null;
 }
 
+/** The shortcut this request starts with, when more follows that a model does from there. */
+export function leadingShortcut(sites: SiteProfile[], request: string): SiteShortcut | null {
+  const asked = plain(request);
+  return sites.flatMap((s) => s.shortcuts ?? []).find((c) => c.leads && c.says.some((say) => new RegExp(`^${plain(say)} (and|then|aur|phir) \\S`).test(asked))) ?? null;
+}
+
 const NAMES_ONE = /^(?:please\s+)?(?:click|press|tap|go ?to|navigate to)\s+(?:on\s+)?(?:the\s+)?(.+)$/i;
 const NAMES_ONE_URDU = /^(.+?)\s+(?:(?:par|pe)\s+)?(?:click karo|dabao)$/i;
 const MORE_THAN_ONE = /\b(and|then|aur|phir|or|after|before|if|near|next to)\b|[,;:?]/i;
