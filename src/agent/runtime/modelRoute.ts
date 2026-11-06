@@ -19,12 +19,21 @@ const CHANGES = /\b(add|create|save|dismiss|delete|remove|file|unfile|update|edi
 const ANALYSIS = /\b(summar\w*|trends?|analy[sz]\w*|issues?|abnormal\w*|why|compare\w*|explain\w*|review\w*|interpret\w*|findings?|what|how many|kitne|kitni|kyun|kya)\b/i;
 const CLICKS = /\b(go ?to|open|click|press|select|choose|search|find|navigate|scroll|back|close|show|switch|hover|tick|untick|type|list|kholo|jao|dabao|dhoondo|dikhao|chuno)\b/i;
 
+/** Asks to see a list (“show all abnormal records”): that word only names a filter, and nothing is analysed. */
+const ONLY_SHOWS = /\b(show|list|filter|dikhao)\b.*\b(abnormal|normal|filed|unfiled)\s+(records?|results?)\b|\b(abnormal|normal|filed|unfiled)\s+(records?|results?)\b.*\b(dikhao|show karo)\b/i;
+/** Asks how many records there are: the page's own counts say, with nothing read. */
+const ONLY_COUNTS = /\b(how many|kitne|kitni)\b.*\b(records?|results?|reports?)\b/i;
+
 /** What a request is, from its words alone, and the word that says so. A request none of them fits goes to the chooser. */
 export function kindOfTask(request: string): { kind: TaskKind; word?: string } {
   const change = request.match(CHANGES);
   if (change) return { kind: 'judged', word: change[0] };
-  const analysis = request.match(ANALYSIS);
+  const counts = request.match(ONLY_COUNTS);
+  // What is left when the words of a filter or a count are taken out: “summarize” there is still analysis.
+  const rest = counts || ONLY_SHOWS.test(request) ? request.replace(/\babnormal\b/gi, ' ').replace(/\b(how many|kitne|kitni)\b/gi, ' ') : request;
+  const analysis = rest.match(ANALYSIS);
   if (analysis) return { kind: 'analysis', word: analysis[0] };
+  if (counts) return { kind: 'clicks', word: counts[1] };
   const click = request.match(CLICKS);
   return click ? { kind: 'clicks', word: click[0] } : { kind: 'judged' };
 }

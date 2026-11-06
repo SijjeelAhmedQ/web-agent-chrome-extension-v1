@@ -9,6 +9,7 @@ import { chatActions } from '@/store/chatSlice';
 import { IconButton } from '../../components/IconButton';
 import { RuntimeBar } from '../../components/RuntimeBar';
 import { useActiveTab } from '../../hooks/useActiveTab';
+import { usePatientHere } from '../../hooks/usePatientHere';
 import { useAgentRunner } from '../../hooks/useAgentRunner';
 import { openConfiguration } from '../../utils/navigation';
 import { AgentSwitcher } from './AgentSwitcher';
@@ -36,7 +37,9 @@ export function SidePanel() {
   const multiAgent = new Set(turns.map((t) => t.agentId)).size > 1;
 
   // On a site with its own agents, the site's first agent takes over when you arrive there.
-  const siteHere = sitesFor(config, tab.url)[0];
+  const sitesHere = sitesFor(config, tab.url);
+  const siteHere = sitesHere[0];
+  const patient = usePatientHere(tab, sitesHere, running);
   const siteAgents = siteHere?.agentIds.filter((id) => agents.some((a) => a.id === id)) ?? [];
   // …and only the site's agents are offered there (elsewhere, every agent).
   const offered = siteAgents.length ? siteAgents.map((id) => agents.find((a) => a.id === id)!) : agents;
@@ -146,6 +149,12 @@ export function SidePanel() {
         </IconButton>
       </header>
       {providers.length > 0 && <RuntimeBar agent={agent} config={config} url={tab.url} running={running} />}
+      {patient && (
+        <div className="patient-here" role="status">
+          Patient: <strong>{patient.name}</strong>
+          {patient.nhi ? ` · NHI ${patient.nhi}` : ''}
+        </div>
+      )}
 
       {view === 'history' ? (
         <HistoryView onBack={() => setView('chat')} onRunAgain={onSend} onResume={(task) => { setView('chat'); void resume(task); }} busy={running} />

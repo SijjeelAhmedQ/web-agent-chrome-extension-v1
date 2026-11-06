@@ -1,4 +1,4 @@
-import type { SiteProfile, SiteShortcut } from '@/shared/types/config';
+import type { PatientPage, SiteProfile, SiteShortcut } from '@/shared/types/config';
 import { kindOfTask } from './modelRoute';
 
 /**
@@ -19,17 +19,82 @@ const plain = (s: string) =>
 
 export const sameName = (a: string, b: string) => !!plain(a) && plain(a) === plain(b);
 
-/** The shortcut this whole request is: “goto patients and select arya” is more than one, and goes to the model. */
-export function shortcutFor(sites: SiteProfile[], request: string): SiteShortcut | null {
+/** A patient's name in a shortcut's words: “show abnormal records of {patient}”. */
+const SLOT = '{patient}';
+/** What a name never is: “of this patient”, “of today”, or more than one thing. */
+const NOT_A_NAME = /\b(this|that|these|those|his|her|their|my|patients?|today|aaj|yesterday|kal|week|month|and|then|aur|phir|or|records?|results?)\b/i;
+const escaped = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** The name in the slot of `say`, as the user wrote it, if the request is those words around a name. */
+function nameIn(say: string, asked: string, source: string): string | null {
+  const pattern = `^${escaped(plain(say.replace(SLOT, ' xslotx '))).replace('xslotx', '(.+)')}$`;
+  const name = asked.match(new RegExp(pattern))?.[1]?.trim();
+  if (!name || name.split(' ').length > 4 || NOT_A_NAME.test(name)) return null;
+  const written = source.replace(/[^\p{L}\p{N}\s]/gu, ' ').match(new RegExp(name.split(' ').map(escaped).join('\\s+'), 'i'));
+  return written?.[0] ?? name;
+}
+
+const withName = (c: SiteShortcut, name: string): SiteShortcut => {
+  const put = (s: string) => s.split(SLOT).join(name);
+  return {
+    ...c,
+    done: put(c.done),
+    steps: c.steps.map((step) => ({ ...step, args: Object.fromEntries(Object.entries(step.args).map(([k, v]) => [k, typeof v === 'string' ? put(v) : v])) })),
+  };
+};
+
+/**
+ * The shortcut this whole request is: “goto patients and select arya” is more than one, and goes to the model.
+ * `source`: where a name's capitals are, when the request was cut out of a longer one.
+ */
+export function shortcutFor(sites: SiteProfile[], request: string, source = request): SiteShortcut | null {
   const asked = plain(request);
   if (!asked) return null;
-  return sites.flatMap((s) => s.shortcuts ?? []).find((c) => c.says.some((say) => plain(say) === asked)) ?? null;
+  for (const c of sites.flatMap((s) => s.shortcuts ?? [])) {
+    for (const say of c.says) {
+      if (!say.includes(SLOT)) {
+        if (plain(say) === asked) return c;
+        continue;
+      }
+      const name = nameIn(say, asked, source);
+      if (name) return withName(c, name);
+    }
+  }
+  return null;
 }
 
 /** The shortcut this request starts with, when more follows that a model does from there. */
 export function leadingShortcut(sites: SiteProfile[], request: string): SiteShortcut | null {
   const asked = plain(request);
   return sites.flatMap((s) => s.shortcuts ?? []).find((c) => c.leads && c.says.some((say) => new RegExp(`^${plain(say)} (and|then|aur|phir) \\S`).test(asked))) ?? null;
+}
+
+/** What a request says after the shortcut it starts with: “goto smart inbox and show abnormal records” → “show abnormal records”. */
+export function restAfter(shortcut: SiteShortcut, request: string): string {
+  const asked = plain(request);
+  for (const say of shortcut.says) {
+    const rest = asked.match(new RegExp(`^${escaped(plain(say))} (?:and|then|aur|phir) (.+)$`))?.[1];
+    if (rest) return rest;
+  }
+  return '';
+}
+
+/** The patient a page shows, from its controls' names and places; null if it doesn't say. */
+export function patientFrom(page: PatientPage, controls: { name?: string; context?: string }[]): { name: string; nhi?: string } | null {
+  const texts = controls.flatMap((c) => [c.context ?? '', c.name ?? '']).filter(Boolean);
+  const first = (source?: string) => {
+    if (!source) return undefined;
+    const pattern = new RegExp(source);
+    for (const t of texts) {
+      const value = t.match(pattern)?.[1]?.trim();
+      if (value) return value;
+    }
+    return undefined;
+  };
+  const name = first(page.name);
+  if (!name) return null;
+  const nhi = first(page.nhi);
+  return nhi ? { name, nhi } : { name };
 }
 
 const NAMES_ONE = /^(?:please\s+)?(?:click|press|tap|go ?to|navigate to)\s+(?:on\s+)?(?:the\s+)?(.+)$/i;
@@ -50,7 +115,7 @@ export function namedControl(request: string): string | null {
 export const asksForClick = (request: string) => /^\s*(?:please\s+)?(click|press|tap)\b|(click karo|dabao)\s*[.!]*\s*$/i.test(request);
 
 /** A step's result said it clicked what it was sent to, and nothing is in the way now (a pop-up, a refused form). */
-export const stepWorked = (output: string) => /^(Clicked|Double-clicked|Opened .* and clicked)\b/.test(output) && !/NOT saved|NOT submitted|A dialog is showing/.test(output);
+export const stepWorked = (output: string) => /^(Clicked|Double-clicked|Opened .* and clicked|Selected|Typed)\b/.test(output) && !/NOT saved|NOT submitted|A dialog is showing/.test(output);
 
 /** The page answered the click. */
 export const pageMoved = (output: string) => !/nothing on the page changed|Only its look changed/i.test(output);

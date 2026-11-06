@@ -9,7 +9,7 @@ const PLACEHOLDER = '[Earlier page snapshot removed — its element ids are no l
  * A runtime message, not the user's request; a page read like any other, dropped once a newer one is in.
  */
 export const FIRST_PAGE = '(The page as the task starts — read for you, as read_page would; its ids are valid:)';
-const RUNTIME_PROMPT = /^(Before you finish|Not finished yet:|Your last reply was cut off|You have not finished the task yet|Decision \(from|\(The page as the task starts|\(Already done)/;
+const RUNTIME_PROMPT = /^(Before you finish|Not finished yet:|Your last reply was cut off|You have not finished the task yet|Decision \(from|\(The page as the task starts|\(Already done|\(Patient open in the consult)/;
 
 /**
  * The head of the page read for the model after an action that changed it, added to that action's result

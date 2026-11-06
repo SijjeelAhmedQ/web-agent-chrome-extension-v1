@@ -157,6 +157,10 @@ export interface SiteShortcut {
     args: Record<string, unknown>;
     /** Not run when the page already shows this text (“Home”, on the page that has what comes next). */
     unlessShown?: string;
+    /** Run only when the page shows this text (“Expand search controls”: the search bar closes by itself). */
+    onlyIfShown?: string;
+    /** The exact name of the control this step acts on: its id goes in the arguments. */
+    control?: string;
   }[];
   /** Part of the address once there: the steps aren't run from there, and it is checked after them. */
   here?: string;
@@ -164,6 +168,17 @@ export interface SiteShortcut {
   done: string;
   /** It may start a longer request (“goto smart AI inbox and open arya stark”): done first, and the model does the rest. */
   leads?: boolean;
+  /** It only narrows a list: the last step finding the same list is still done. */
+  filters?: boolean;
+}
+
+/** Where a site shows the patient it has open, read from the page with no model. */
+export interface PatientPage {
+  /** Part of the address of such a page. */
+  at: string;
+  /** Regular expressions over the page's control names and places; the first group is the value. */
+  name: string;
+  nhi?: string;
 }
 
 export interface SiteProfile {
@@ -197,6 +212,7 @@ export interface SiteProfile {
    */
   askPopups?: string[];
   shortcuts?: SiteShortcut[];
+  patientPage?: PatientPage;
   knowledge: KnowledgeEntry[];
   createdAt: number;
   updatedAt: number;
@@ -289,6 +305,8 @@ export interface Settings {
   voice: VoiceSettings;
   /** Built-in tools that existed when this config was last saved (new ones get added to agents). */
   knownToolIds?: string[];
+  /** Which version of the setup that comes with the extension is in here (see builtIn). */
+  builtInStamp?: string;
   /** Edited descriptions and approval settings of built-in tools, by tool id. */
   toolOverrides?: Record<string, ToolOverride>;
   /** When a click does nothing, click again with a real mouse click (Chrome's debugger). */

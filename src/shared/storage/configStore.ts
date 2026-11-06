@@ -1,3 +1,4 @@
+import { BUILT_IN_AGENTS, BUILT_IN_SITES, BUILT_IN_SKILLS, BUILT_IN_STAMP } from '../constants/builtIn';
 import { defaultConfig, DEFAULT_SETTINGS } from '../constants/defaults';
 import { BUILT_IN_TOOL_IDS, BUILT_IN_TOOLS, LEGACY_TOOL_IDS } from '../constants/tools';
 import type { AppConfig, SiteProfile } from '../types/config';
@@ -24,7 +25,8 @@ export function stripKeys(config: AppConfig): AppConfig {
  * Settings, existing connections and their keys are left as they are.
  */
 export function mergeConfig(current: AppConfig, raw: Partial<AppConfig>): { config: AppConfig; added: Record<'agents' | 'skills' | 'customTools' | 'sites', number> } {
-  const incoming = normalizeConfig({ ...raw, agents: raw.agents ?? [] });
+  // Only what the file holds: the setup that comes with the extension isn't in it.
+  const incoming = normalizeConfig({ ...raw, agents: raw.agents ?? [] }, false);
   const byId = <T extends { id: string }>(mine: T[], theirs: T[]) => {
     const out = [...mine];
     for (const t of theirs) {
@@ -56,12 +58,37 @@ export function mergeConfig(current: AppConfig, raw: Partial<AppConfig>): { conf
     sites: byId(current.sites, incoming.sites.map((s) => ({ ...s, providerId: provider(s.providerId) }))),
     providers: [...current.providers.map((p) => (keys.has(p.id) ? { ...p, apiKey: keys.get(p.id)! } : p)), ...newProviders],
   };
-  return { config: normalizeConfig(config), added: { agents: fromFile(raw.agents), skills: fromFile(raw.skills), customTools: fromFile(raw.customTools), sites: fromFile(raw.sites) } };
+  return { config: normalizeConfig(config, false), added: { agents: fromFile(raw.agents), skills: fromFile(raw.skills), customTools: fromFile(raw.customTools), sites: fromFile(raw.sites) } };
 }
 
-export function normalizeConfig(raw: Partial<AppConfig> | undefined): AppConfig {
+/**
+ * Brings in the setup that comes with the extension, once per version of it: its sites and agents are added or
+ * brought up to date. What the user chose stays: the connection, the model, “Pick the model per task”, a site turned off.
+ */
+function withBuiltIns(config: AppConfig): AppConfig {
+  if (config.settings.builtInStamp === BUILT_IN_STAMP) return config;
+  const sites = [...config.sites];
+  for (const built of BUILT_IN_SITES) {
+    const site = normalizeSite(built);
+    const i = sites.findIndex((s) => s.id === site.id);
+    if (i >= 0) sites[i] = { ...site, providerId: sites[i].providerId, model: sites[i].model, enabled: sites[i].enabled };
+    else sites.push(site);
+  }
+  const agents = [...config.agents];
+  for (const built of BUILT_IN_AGENTS) {
+    const i = agents.findIndex((a) => a.id === built.id);
+    if (i >= 0) {
+      const { name, description, avatar, instructions } = built;
+      agents[i] = { ...agents[i], name, description, avatar, instructions, toolIds: [...new Set([...built.toolIds, ...agents[i].toolIds])] };
+    } else agents.push(built);
+  }
+  const skills = [...config.skills.filter((s) => !BUILT_IN_SKILLS.some((b) => b.id === s.id)), ...BUILT_IN_SKILLS];
+  return { ...config, sites, agents, skills, settings: { ...config.settings, builtInStamp: BUILT_IN_STAMP } };
+}
+
+export function normalizeConfig(raw: Partial<AppConfig> | undefined, builtIns = true): AppConfig {
   const base = defaultConfig();
-  if (!raw || typeof raw !== 'object') return base;
+  if (!raw || typeof raw !== 'object') return builtIns ? withBuiltIns(base) : base;
   const config: AppConfig = {
     version: 1,
     providers: Array.isArray(raw.providers) ? raw.providers : base.providers,
@@ -88,7 +115,7 @@ export function normalizeConfig(raw: Partial<AppConfig> | undefined): AppConfig 
   if (config.settings.defaultProviderId && !config.providers.some((p) => p.id === config.settings.defaultProviderId)) {
     config.settings.defaultProviderId = config.providers[0]?.id ?? null;
   }
-  return config;
+  return builtIns ? withBuiltIns(config) : config;
 }
 
 /** A site profile with every field present (older or hand-edited files may miss some). */
@@ -112,6 +139,7 @@ export function normalizeSite(raw: Partial<SiteProfile>): SiteProfile {
     askBefore: Array.isArray(raw.askBefore) ? raw.askBefore : [],
     askPopups: Array.isArray(raw.askPopups) ? raw.askPopups : [],
     shortcuts: Array.isArray(raw.shortcuts) ? raw.shortcuts : [],
+    ...(raw.patientPage ? { patientPage: raw.patientPage } : {}),
     knowledge: Array.isArray(raw.knowledge) ? raw.knowledge.map((k) => ({ ...k, enabled: k.enabled ?? true })) : [],
     createdAt: raw.createdAt ?? now,
     updatedAt: raw.updatedAt ?? now,

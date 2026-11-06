@@ -22,7 +22,7 @@ import type { ApprovalAnswer, ApprovalPrompt, RunEvent } from './events';
 import { asksUser, followUpOf, historyForModel, withoutStoppedList } from './followUp';
 import { Checklist, checklistTool } from './checklist';
 import { meteredClient } from './costLog';
-import { asksForClick, clickAnswer, leadingShortcut, namedControl, openedItsMenu, pageFilledIn, pageMoved, sameName, shortcutFor, stepFinishes, stepWorked } from './directTask';
+import { asksForClick, clickAnswer, leadingShortcut, namedControl, openedItsMenu, pageFilledIn, pageMoved, patientFrom, restAfter, sameName, shortcutFor, stepFinishes, stepWorked } from './directTask';
 import { choosePrompt, fallbackTier, kindOfTask, parseTier, tierOfModel, tiersFor } from './modelRoute';
 import { FILL_FORM, fieldCall, fillFormSchema, fillFormTool, stopsFilling } from './fillForm';
 import { changedSomething, namedIn, nearlyNamed, pageState, undoTool, wrongRowClick, type ClickRecord } from './clickGuard';
@@ -310,6 +310,8 @@ export class AgentRun {
     // there with the knowledge of the site before, and no prompt cache to fill twice.
     let doneFirst: string | null = null;
     let tabNow = tab;
+    // The patient whose consult is open: read now, as the steps below may leave that page.
+    const patient = followUp ? null : await this.patientHere(toolset.sites, url, ctx);
     if (!followUp && agent.confirmation !== 'always' && !scriptableReason(url) && !matchesSite(url, config.settings.readOnlySites)) {
       void browser.setPresence(true);
       const done = await this.doDirectly(toolset.sites, url, byName, ctx);
@@ -325,6 +327,15 @@ export class AgentRun {
         if (doneFirst) {
           await this.pageReady(ctx, true);
           tabNow = await browser.currentTab().catch(() => tab);
+          // What follows may be a shortcut of the site it is on now: that part costs nothing either.
+          const next = shortcutFor(sitesFor(config, tabNow?.url ?? ''), restAfter(leading, request), request);
+          const finished = next && (await this.runShortcut(next, tabNow?.url ?? '', byName, ctx));
+          if (this.endWith) return this.endWith;
+          if (finished) {
+            const { word } = kindOfTask(request);
+            this.updateTask({ route: { kind: 'code', ...(word ? { word } : {}), tier: 'small' } });
+            return finished;
+          }
         }
       }
     }
@@ -383,6 +394,7 @@ export class AgentRun {
     let checkedAnswer: string | null = null;
     let nudges = 0;
     if (doneFirst) messages.push({ role: 'user', content: `(Already done: ${doneFirst})` });
+    if (patient) messages.push({ role: 'user', content: `(Patient open in the consult: ${patient.name}${patient.nhi ? `, NHI ${patient.nhi}` : ''}. “This patient” means them.)` });
 
     void browser.setPresence(true);
     const recent: string[] = [];
@@ -735,18 +747,37 @@ export class AgentRun {
     await pageFilledIn(count, (ms) => sleep(ms, ctx.signal), newTab ? 3_000 : 1_500);
   }
 
+  /** The patient this page shows, on a page its site says shows one. Read by code, with no model. */
+  private async patientHere(sites: SiteProfile[], url: string, ctx: ToolContext): Promise<{ name: string; nhi?: string } | null> {
+    const page = sites.find((s) => s.patientPage && url.includes(s.patientPage.at))?.patientPage;
+    if (!page) return null;
+    const read = await this.inFront(ctx, () => ctx.browser.send({ kind: 'snapshot', mode: 'overview', maxElements: 250, maxTextChars: 0 })).catch(() => null);
+    return read ? patientFrom(page, read.elements) : null;
+  }
+
   /** A site's shortcut, step by step: what the user is told, or null if a step didn't work (the model goes on from there). */
   private async runShortcut(shortcut: SiteShortcut, url: string, byName: Map<string, AgentTool<any>>, ctx: ToolContext): Promise<string | null> {
     if (shortcut.here && url.includes(shortcut.here)) return shortcut.done;
     if (!shortcut.steps.length || shortcut.steps.some((s) => !byName.has(s.tool))) return null;
     for (const [n, step] of shortcut.steps.entries()) {
-      const { unlessShown } = step;
-      if (unlessShown && (await this.inFront(ctx, () => ctx.browser.send({ kind: 'findText', text: unlessShown, limit: 1 })).catch(() => null))?.total) continue;
-      const run = () => this.runTool({ id: uid('code_'), name: step.tool, arguments: step.args }, byName, ctx);
+      const { unlessShown, onlyIfShown, control } = step;
+      const shows = (text: string) => this.inFront(ctx, () => ctx.browser.send({ kind: 'findText', text, limit: 1 })).then((r) => r.total > 0, () => false);
+      if (unlessShown && (await shows(unlessShown))) continue;
+      if (onlyIfShown && !(await shows(onlyIfShown))) continue;
+      let args = step.args;
+      if (control) {
+        // By its exact name: this is no model looking at the page, so nothing less sure.
+        const found = await this.inFront(ctx, () => ctx.browser.send({ kind: 'find', query: control, limit: 20 })).catch(() => null);
+        const named = found?.matches.filter((m) => m.name.trim() === control) ?? [];
+        if (named.length !== 1) return null;
+        ctx.elements.remember(named);
+        args = { ...args, id: named[0].id };
+      }
+      const run = () => this.runTool({ id: uid('code_'), name: step.tool, arguments: args }, byName, ctx);
       let output = await run();
       if (openedItsMenu(output)) output = await run();
       if (this.endWith) return this.endWith;
-      if (!stepWorked(output) || (n === shortcut.steps.length - 1 && !pageMoved(output))) return null;
+      if (!stepWorked(output) || (n === shortcut.steps.length - 1 && !shortcut.filters && !pageMoved(output))) return null;
       if (unlessShown) await this.inFront(ctx, () => ctx.browser.send({ kind: 'waitForText', text: unlessShown, timeoutMs: 8_000 })).catch(() => null);
     }
     const now = (await ctx.browser.currentTab().catch(() => null))?.url ?? '';

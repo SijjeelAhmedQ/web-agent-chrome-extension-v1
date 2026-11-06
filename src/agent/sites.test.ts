@@ -128,7 +128,7 @@ describe('site-based setup', () => {
     const loaded = normalizeConfig(raw);
     expect(loaded.sites[0]).toMatchObject({ name: 'Old', enabled: true, skillIds: [], customToolIds: [], disabledToolIds: [], providerId: null, model: '' });
     expect(loaded.sites[0].knowledge[0].enabled).toBe(true);
-    expect(normalizeConfig({ ...config, sites: undefined } as unknown as AppConfig).sites).toEqual([]);
+    expect(normalizeConfig({ ...config, sites: undefined } as unknown as AppConfig, false).sites).toEqual([]);
   });
 
   it('deleting a site deletes its own skills and tools, not shared ones', () => {

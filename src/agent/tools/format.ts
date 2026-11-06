@@ -15,7 +15,7 @@ export function formatElement(e: ElementInfo): string {
 }
 
 /** An element as one line; in a list, one in the same table row as the line above says so instead of repeating the row. */
-function elementLine(e: ElementInfo, sameRowAsAbove: boolean): string {
+function elementLine(e: ElementInfo, samePlaceAsAbove: boolean): string {
   const parts = [`[${e.id}]`, e.role === 'clickable' ? e.tag : e.role, e.name ? q(e.name) : '(no label — unknown action)'];
   if (e.type && !IMPLIED_TYPES.has(e.type) && e.type !== e.role) parts.push(`type=${e.type}`);
   if (e.value !== undefined && e.value !== '' && e.role !== 'link') parts.push(`value=${q(e.value)}`);
@@ -24,7 +24,7 @@ function elementLine(e: ElementInfo, sameRowAsAbove: boolean): string {
   if (e.placeholder) parts.push(`placeholder=${q(e.placeholder)}`);
   if (e.checked !== undefined) parts.push(e.checked ? '(checked)' : '(unchecked)');
   if (e.selected) parts.push('(selected)');
-  if (e.hasMenu) parts.push('(opens a menu on hover — use hover or open_menu)');
+  if (e.hasMenu) parts.push('(hover menu: open_menu)');
   else if (e.expanded !== undefined) parts.push(e.expanded ? '(expanded)' : '(collapsed)');
   if (e.disabled) parts.push('(disabled)');
   if (e.required) parts.push('(required)');
@@ -32,7 +32,7 @@ function elementLine(e: ElementInfo, sameRowAsAbove: boolean): string {
   if (e.inBlockingPopup) parts.push('(in a pop-up that can’t be closed — type only what the user tells you now)');
   if (e.options?.length) parts.push(`options: ${e.options.join(' | ')}`);
   if (e.href) parts.push(`→ ${e.href}`);
-  if (e.context) parts.push(sameRowAsAbove ? '(same row)' : `in ${e.context}`);
+  if (e.context) parts.push(samePlaceAsAbove ? (/^row /.test(e.context) ? '(same row)' : '(same place)') : `in ${e.context}`);
   if (!e.inViewport) parts.push('↓');
   return parts.join(' ');
 }
@@ -71,15 +71,18 @@ export function formatSnapshot(s: PageSnapshot, mode: 'overview' | 'content'): s
 
   lines.push('Interactive elements (↓ = outside the visible area):');
   if (!s.elements.length) lines.push('(none found — the page may still be loading)');
-  // A table row's icons (details, edit, task, payment…) share its context: say it once per row.
-  s.elements.forEach((e, i) => lines.push(elementLine(e, !!e.context && /^row /.test(e.context) && s.elements[i - 1]?.context === e.context)));
+  // A table row's icons (details, edit, task, payment…) or a pop-up's fields share their place: say it once.
+  s.elements.forEach((e, i) => lines.push(elementLine(e, !!e.context && s.elements[i - 1]?.context === e.context)));
   if (s.omitted > 0) lines.push(`(+${s.omitted} more not listed — a long table's later rows among them: use find_element, read_table or scroll)`);
 
   if (s.headings.length && mode === 'overview') {
     lines.push('', 'Headings:', ...s.headings);
   }
-  if (s.text) {
-    lines.push('', mode === 'content' ? 'Page text:' : 'Visible text (start):', s.text);
+  // The start of a page's text is mostly its controls' names, listed above. Reading (content) keeps every line: a value in a table may be one.
+  const named = new Set(s.elements.map((e) => e.name.trim()));
+  const text = mode === 'overview' ? s.text.split('\n').filter((l) => !named.has(l.trim())).join('\n') : s.text;
+  if (text.trim()) {
+    lines.push('', mode === 'content' ? 'Page text:' : 'Visible text (start):', text);
     if (s.textTruncated) lines.push(mode === 'content' ? '(text truncated — scroll and read again for more)' : '(more text available — use read_page with mode "content")');
   }
   return lines.join('\n');

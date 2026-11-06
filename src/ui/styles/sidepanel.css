@@ -1063,3 +1063,9 @@ body {
   font-style: normal;
   color: var(--text-muted);
 }
+
+.patient-here {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border, rgba(127, 127, 127, 0.25));
+}
