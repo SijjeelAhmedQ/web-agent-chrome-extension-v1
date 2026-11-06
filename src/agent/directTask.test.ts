@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { SiteProfile } from '@/shared/types/config';
-import { normalizeSite } from '@/shared/storage/configStore';
 import { describeCalls, describeRoute } from '@/shared/utils/cost';
 import { knowledgeSection } from './planner/siteKnowledge';
 import { buildSystemPrompt } from './planner/systemPrompt';
@@ -10,49 +9,11 @@ import type { ChatMessage } from './llm/types';
 import { dropEarlierPages, FIRST_PAGE, PAGE_AFTER } from './runtime/context';
 import { foundSoon } from '@/extension/content/hover';
 import { saysOpen } from './tools/browserTools';
-import { asksForClick, clickAnswer, leadingShortcut, namedControl, openedItsMenu, pageFilledIn, pageMoved, sameName, shortcutFor, stepFinishes, stepWorked } from './runtime/directTask';
+import { namedControl, pageFilledIn, pageMoved, stepFinishes, stepWorked } from './runtime/directTask';
 
 const restore = JSON.parse(readFileSync(join(process.cwd(), 'knowledge', 'web-agent-restore-indici.json'), 'utf8')) as { sites: SiteProfile[] };
 const indici = restore.sites.filter((s) => s.name === 'indici training');
 const smart = restore.sites.filter((s) => s.name === 'indici smart inbox');
-
-describe('a shortcut of the site', () => {
-  it.each(['goto patients', 'Go to patients', 'GOTO PATIENTS.', 'please goto the patients page', 'open patients', 'patients kholo', 'goto pateints'])('%s: the Patient Search menu, no model', (request) => {
-    expect(shortcutFor(indici, request)?.steps).toEqual([{ tool: 'open_menu', args: { path: ['Patients', 'Search & List'] } }]);
-  });
-
-  it.each(['goto patients and select arya STARK', 'goto patients then search', 'patients', 'goto appointments', ''])('%s: not one', (request) => {
-    expect(shortcutFor(indici, request)).toBeNull();
-  });
-
-  it('knows the Smart AI Inbox', () => {
-    expect(shortcutFor(indici, 'goto smart AI inbox')?.here).toBe('inbox-app-dev.vitonta.com');
-  });
-
-  it('reaches the Smart AI Inbox without Home when the dashboard shows it', () => {
-    expect(shortcutFor(indici, 'goto smart AI inbox')?.steps).toEqual([
-      { tool: 'click_text', args: { text: 'Home' }, unlessShown: 'Open AI Assisted Inbox' },
-      { tool: 'click_text', args: { text: 'Open AI Assisted Inbox' } },
-    ]);
-  });
-
-  it.each(['goto smart AI inbox and select arya STARK patient and show me the trend of CBC of this patient.', 'open smart inbox then open arya', 'goto the smart inbox aur arya kholo'])('%s: the inbox first, the model after', (request) => {
-    expect(leadingShortcut(indici, request)?.here).toBe('inbox-app-dev.vitonta.com');
-  });
-
-  it.each(['goto smart AI inbox', 'goto smart AI inboxes and more', 'goto patients and select arya STARK', 'show me the trend and goto smart AI inbox'])('%s: starts with none that leads', (request) => {
-    expect(leadingShortcut(indici, request)).toBeNull();
-  });
-
-  it('clicks a menu trigger again, and only that', () => {
-    expect(openedItsMenu('“Home” opens a menu on hover, so I opened the menu instead of clicking. Items now showing:')).toBe(true);
-    expect(openedItsMenu('Clicked “Home”. The page changed — now “Provider Dashboard”.')).toBe(false);
-  });
-
-  it('survives being loaded', () => {
-    expect(normalizeSite(indici[0]).shortcuts?.length).toBe(2);
-  });
-});
 
 describe('a request that names one control', () => {
   it.each([
@@ -73,16 +34,6 @@ describe('a request that names one control', () => {
     },
   );
 
-  it('takes only the exact name, whatever its case', () => {
-    expect(sameName('Search', 'search')).toBe(true);
-    expect(sameName('Search Vault', 'search')).toBe(false);
-  });
-
-  it('tells a click from going somewhere', () => {
-    expect(asksForClick('click search button')).toBe(true);
-    expect(asksForClick('search button dabao')).toBe(true);
-    expect(asksForClick('goto appointments')).toBe(false);
-  });
 });
 
 describe('what a step’s result means', () => {
@@ -123,12 +74,6 @@ describe('what a step’s result means', () => {
     expect(stepFinishes('goto appointments', 'read_page', {}, apps)).toBe(false);
   });
 
-  it('answers with the result’s facts, not its advice to the model', () => {
-    const answer = clickAnswer('Search', 'Clicked “Search”. New on the page: “3 results”. The page may have updated; call read_page if you need to see the result.', 'Patient Search');
-    expect(answer).toBe('Clicked **Search**. The page now shows: “3 results”.');
-    expect(clickAnswer('Reports', 'Clicked “Reports”. The page changed — now “Reports” (https://x). Call read_page before acting on it.', 'Reports')).toBe('Clicked **Reports**. **Reports** is open.');
-    expect(clickAnswer('Clear', 'Clicked “Clear”. Nothing on the page changed — fine', 'x')).toBe('Clicked **Clear**. Nothing on the page changed.');
-  });
 });
 
 describe('a page still filling in', () => {

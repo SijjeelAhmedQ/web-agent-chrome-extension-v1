@@ -147,31 +147,6 @@ export interface KnowledgeEntry {
  * Site-based configuration: knowledge, skills, tools and model for one website. Used
  * automatically — on top of the agent's own setup — whenever the agent's tab is on it.
  */
-/** A request the code does on this site by itself, with no model call. */
-export interface SiteShortcut {
-  /** The whole requests that mean it: “goto patients”, “open patients”. */
-  says: string[];
-  /** Tools run in order. If one doesn't work, the model takes the task from where it is. */
-  steps: {
-    tool: string;
-    args: Record<string, unknown>;
-    /** Not run when the page already shows this text (“Home”, on the page that has what comes next). */
-    unlessShown?: string;
-    /** Run only when the page shows this text (“Expand search controls”: the search bar closes by itself). */
-    onlyIfShown?: string;
-    /** The exact name of the control this step acts on: its id goes in the arguments. */
-    control?: string;
-  }[];
-  /** Part of the address once there: the steps aren't run from there, and it is checked after them. */
-  here?: string;
-  /** What the user is told. */
-  done: string;
-  /** It may start a longer request (“goto smart AI inbox and open arya stark”): done first, and the model does the rest. */
-  leads?: boolean;
-  /** It only narrows a list: the last step finding the same list is still done. */
-  filters?: boolean;
-}
-
 /** Where a site shows the patient it has open, read from the page with no model. */
 export interface PatientPage {
   /** Part of the address of such a page. */
@@ -211,7 +186,6 @@ export interface SiteProfile {
    * buttons is pressed only with the user's OK — unless the user's message names that button.
    */
   askPopups?: string[];
-  shortcuts?: SiteShortcut[];
   patientPage?: PatientPage;
   knowledge: KnowledgeEntry[];
   createdAt: number;
