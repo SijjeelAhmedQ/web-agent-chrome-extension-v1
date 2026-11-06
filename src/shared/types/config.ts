@@ -152,7 +152,12 @@ export interface SiteShortcut {
   /** The whole requests that mean it: “goto patients”, “open patients”. */
   says: string[];
   /** Tools run in order. If one doesn't work, the model takes the task from where it is. */
-  steps: { tool: string; args: Record<string, unknown> }[];
+  steps: {
+    tool: string;
+    args: Record<string, unknown>;
+    /** Not run when the page already shows this text (“Home”, on the page that has what comes next). */
+    unlessShown?: string;
+  }[];
   /** Part of the address once there: the steps aren't run from there, and it is checked after them. */
   here?: string;
   /** What the user is told. */

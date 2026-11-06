@@ -39,6 +39,17 @@ function withoutPage(m: ChatMessage): ChatMessage {
   const at = m.content.indexOf(`\n\n${PAGE_AFTER}\n`);
   return { ...m, content: at < 0 ? PLACEHOLDER : `${m.content.slice(0, at)}\n${PLACEHOLDER}` };
 }
+/**
+ * The task moved to another site: the pages of the site before go, all but the latest read, or they go with every
+ * call there. The instructions changed at that moment, so the server's prompt cache has nothing to lose. Mutates.
+ */
+export function dropEarlierPages(messages: ChatMessage[]): void {
+  const latest = messages.findLastIndex(isFullRead);
+  for (let i = 0; i < latest; i++) {
+    if (isPageRead(messages[i]) && !messages[i].content.endsWith(PLACEHOLDER)) messages[i] = withoutPage(messages[i]);
+  }
+}
+
 const EARLIER_STEP = '[Result of an earlier step — removed to fit; it was done.]';
 /** The first line of a step the user approved: kept however tight the room, so what was done is not forgotten. */
 export const APPROVED_DONE = 'Done with the user’s approval:';

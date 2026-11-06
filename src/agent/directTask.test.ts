@@ -6,10 +6,13 @@ import { normalizeSite } from '@/shared/storage/configStore';
 import { describeCalls, describeRoute } from '@/shared/utils/cost';
 import { knowledgeSection } from './planner/siteKnowledge';
 import { buildSystemPrompt } from './planner/systemPrompt';
-import { asksForClick, clickAnswer, namedControl, pageMoved, sameName, shortcutFor, stepFinishes, stepWorked } from './runtime/directTask';
+import type { ChatMessage } from './llm/types';
+import { dropEarlierPages, FIRST_PAGE, PAGE_AFTER } from './runtime/context';
+import { asksForClick, clickAnswer, namedControl, openedItsMenu, pageFilledIn, pageMoved, sameName, shortcutFor, stepFinishes, stepWorked } from './runtime/directTask';
 
 const restore = JSON.parse(readFileSync(join(process.cwd(), 'knowledge', 'web-agent-restore-indici.json'), 'utf8')) as { sites: SiteProfile[] };
 const indici = restore.sites.filter((s) => s.name === 'indici training');
+const smart = restore.sites.filter((s) => s.name === 'indici smart inbox');
 
 describe('a shortcut of the site', () => {
   it.each(['goto patients', 'Go to patients', 'GOTO PATIENTS.', 'please goto the patients page', 'open patients', 'patients kholo', 'goto pateints'])('%s: the Patient Search menu, no model', (request) => {
@@ -22,6 +25,18 @@ describe('a shortcut of the site', () => {
 
   it('knows the Smart AI Inbox', () => {
     expect(shortcutFor(indici, 'goto smart AI inbox')?.here).toBe('inbox-app-dev.vitonta.com');
+  });
+
+  it('reaches the Smart AI Inbox without Home when the dashboard shows it', () => {
+    expect(shortcutFor(indici, 'goto smart AI inbox')?.steps).toEqual([
+      { tool: 'click_text', args: { text: 'Home' }, unlessShown: 'Open AI Assisted Inbox' },
+      { tool: 'click_text', args: { text: 'Open AI Assisted Inbox' } },
+    ]);
+  });
+
+  it('clicks a menu trigger again, and only that', () => {
+    expect(openedItsMenu('“Home” opens a menu on hover, so I opened the menu instead of clicking. Items now showing:')).toBe(true);
+    expect(openedItsMenu('Clicked “Home”. The page changed — now “Provider Dashboard”.')).toBe(false);
   });
 
   it('survives being loaded', () => {
@@ -103,6 +118,74 @@ describe('what a step’s result means', () => {
     expect(answer).toBe('Clicked **Search**. The page now shows: “3 results”.');
     expect(clickAnswer('Reports', 'Clicked “Reports”. The page changed — now “Reports” (https://x). Call read_page before acting on it.', 'Reports')).toBe('Clicked **Reports**. **Reports** is open.');
     expect(clickAnswer('Clear', 'Clicked “Clear”. Nothing on the page changed — fine', 'x')).toBe('Clicked **Clear**. Nothing on the page changed.');
+  });
+});
+
+describe('a page still filling in', () => {
+  const wait = async (counts: number[], hold: number) => {
+    let at = 0;
+    let waited = 0;
+    await pageFilledIn(
+      async () => counts[Math.min(at++, counts.length - 1)],
+      async (ms) => {
+        waited += ms;
+      },
+      hold,
+    );
+    return waited;
+  };
+
+  it('waits past the app starting and fetching its data', () => {
+    return expect(wait([1, 1, 1, 30, 30, 157, 157, 157, 157, 157, 157, 157], 3_000)).resolves.toBe(5_500);
+  });
+
+  it('asks only a moment of a page already there', () => {
+    return expect(wait([217], 1_500)).resolves.toBe(1_500);
+  });
+
+  it('gives up on a page that stays nearly empty, or never holds', async () => {
+    await expect(wait([1], 3_000)).resolves.toBe(15_000);
+    await expect(wait(Array.from({ length: 40 }, (_, i) => 10 + i), 3_000)).resolves.toBe(15_000);
+  });
+});
+
+describe('moving to another site', () => {
+  const page = (name: string) => `Page: ${name}`;
+
+  it('drops the pages of the site before, and keeps what was done', () => {
+    const messages: ChatMessage[] = [
+      { role: 'system', content: 'rules' },
+      { role: 'user', content: 'trend' },
+      { role: 'user', content: `${FIRST_PAGE}\n${page('dashboard')}` },
+      { role: 'tool', toolCallId: '1', toolName: 'read_page', content: page('dashboard again') },
+      { role: 'tool', toolCallId: '2', toolName: 'click_text', content: `Clicked “Open”.\n\n${PAGE_AFTER}\n${page('inbox')}` },
+    ];
+    dropEarlierPages(messages);
+    const text = messages.map((m) => m.content).join('\n');
+    expect(text).not.toContain('dashboard');
+    expect(text).toContain('trend');
+    expect(messages[4].content).toContain(page('inbox'));
+  });
+
+  it('keeps the only page there is', () => {
+    const messages: ChatMessage[] = [{ role: 'tool', toolCallId: '1', toolName: 'read_page', content: page('inbox') }];
+    dropEarlierPages(messages);
+    expect(messages[0].content).toBe(page('inbox'));
+  });
+});
+
+describe('the knowledge for reaching a patient’s trend', () => {
+  const request = 'goto smart AI inbox and select arya STARK patient and show me the trend of CBC of this patient.';
+
+  it('tells the Smart AI Inbox to click the name, not search', () => {
+    const text = knowledgeSection(smart, request, 16_000).text;
+    expect(text).toContain('### Workflow: Open a patient and a record');
+    expect(text).toContain('click it at once');
+    expect(text).toContain('Never press Search with nothing typed');
+  });
+
+  it('tells Indici not to press Home on its dashboard', () => {
+    expect(knowledgeSection(indici, request, 16_000).text).toContain('Page title "Provider Dashboard": you are on Indici\'s dashboard, so don\'t click Home');
   });
 });
 

@@ -49,6 +49,25 @@ export const stepWorked = (output: string) => /^(Clicked|Double-clicked|Opened .
 /** The page answered the click. */
 export const pageMoved = (output: string) => !/nothing on the page changed|Only its look changed/i.test(output);
 
+/** A click on a menu trigger opened its menu: clicked again, with the menu open, it really clicks. */
+export const openedItsMenu = (output: string) => /opens a menu on hover/.test(output);
+
+/**
+ * Waits for a page that has just opened to fill in, from its number of controls every half second: done once that
+ * number holds for `hold` milliseconds, and isn't next to nothing (the Smart AI Inbox: 1, then 30, then 157). Fifteen
+ * seconds at most. Each read of it too soon was a call: wait, read, wait, read.
+ */
+export async function pageFilledIn(count: () => Promise<number>, pause: (ms: number) => Promise<void>, hold: number): Promise<void> {
+  let last = await count();
+  let held = 0;
+  for (let waited = 0; waited < 15_000 && (last <= 3 || held < hold); waited += 500) {
+    await pause(500);
+    const now = await count();
+    held = now === last ? held + 500 : 0;
+    last = now;
+  }
+}
+
 /** What the small model's one step was aimed at, in words: the menu's path, the text or the control's name. */
 function aimOf(tool: string, args: Record<string, unknown>): string {
   if (tool === 'open_menu') return Array.isArray(args.path) ? args.path.join(' ') : String(args.path ?? '');

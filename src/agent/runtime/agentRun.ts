@@ -4,7 +4,7 @@ import { BUILT_IN_TOOL_IDS } from '@/shared/constants/tools';
 import { upsertTask } from '@/shared/storage/historyStore';
 import type { AgentConfig, AppConfig, ProviderConfig, SiteProfile } from '@/shared/types/config';
 import type { ModelCallRecord, ModelTier, StepRecord, TaskRecord, TaskRoute } from '@/shared/types/history';
-import { clip, matchesSite, siteOf, uid } from '@/shared/utils';
+import { clip, matchesSite, siteOf, sleep, uid } from '@/shared/utils';
 import { formatCost, summarizeCalls } from '@/shared/utils/cost';
 import { AgentError, isAbort, toAgentError } from '@/shared/utils/errors';
 import { createClient, type LlmClient } from '../llm';
@@ -17,12 +17,12 @@ import { buildSystemPrompt } from '../planner/systemPrompt';
 import { knowledgeBudget, knowledgeSection } from '../planner/siteKnowledge';
 import { buildToolset, sitesFor, toolSpecs } from '../tools/registry';
 import { ElementMemory, type AgentTool, type ApprovalRequest, type ToolContext, type ToolOutcome } from '../tools/types';
-import { APPROVED_DONE, budgetFor, clipToolOutput, compactMessages, estimateTokens, FIRST_PAGE, isFullRead, isPageRead, PAGE_AFTER, pageIn } from './context';
+import { APPROVED_DONE, budgetFor, clipToolOutput, compactMessages, dropEarlierPages, estimateTokens, FIRST_PAGE, isFullRead, isPageRead, PAGE_AFTER, pageIn } from './context';
 import type { ApprovalAnswer, ApprovalPrompt, RunEvent } from './events';
 import { asksUser, followUpOf, historyForModel, withoutStoppedList } from './followUp';
 import { Checklist, checklistTool } from './checklist';
 import { meteredClient } from './costLog';
-import { asksForClick, clickAnswer, namedControl, pageMoved, sameName, shortcutFor, stepFinishes, stepWorked } from './directTask';
+import { asksForClick, clickAnswer, namedControl, openedItsMenu, pageFilledIn, pageMoved, sameName, shortcutFor, stepFinishes, stepWorked } from './directTask';
 import { choosePrompt, fallbackTier, kindOfTask, parseTier, tierOfModel, tiersFor } from './modelRoute';
 import { FILL_FORM, fieldCall, fillFormSchema, fillFormTool, stopsFilling } from './fillForm';
 import { changedSomething, namedIn, nearlyNamed, pageState, undoTool, wrongRowClick, type ClickRecord } from './clickGuard';
@@ -406,6 +406,7 @@ export class AgentRun {
       if (this.hereSites.length && siteKey(this.hereSites) !== knowledgeOf) {
         knowledgeOf = siteKey(this.hereSites);
         system = systemFor(this.hereSites);
+        dropEarlierPages(messages);
         // Steps planned on the site before (“open the patient's consult”) mean something else here.
         const names = this.hereSites.map((s) => s.name).join(', ');
         messages.push({
@@ -705,9 +706,14 @@ export class AgentRun {
       if (shortcut.here && url.includes(shortcut.here)) return shortcut.done;
       if (!shortcut.steps.length || shortcut.steps.some((s) => !byName.has(s.tool))) return null;
       for (const [n, step] of shortcut.steps.entries()) {
-        const output = await this.runTool({ id: uid('code_'), name: step.tool, arguments: step.args }, byName, ctx);
+        const { unlessShown } = step;
+        if (unlessShown && (await this.inFront(ctx, () => ctx.browser.send({ kind: 'findText', text: unlessShown, limit: 1 })).catch(() => null))?.total) continue;
+        const run = () => this.runTool({ id: uid('code_'), name: step.tool, arguments: step.args }, byName, ctx);
+        let output = await run();
+        if (openedItsMenu(output)) output = await run();
         if (this.endWith) return this.endWith;
         if (!stepWorked(output) || (n === shortcut.steps.length - 1 && !pageMoved(output))) return null;
+        if (unlessShown) await this.inFront(ctx, () => ctx.browser.send({ kind: 'waitForText', text: unlessShown, timeoutMs: 8_000 })).catch(() => null);
       }
       const now = (await ctx.browser.currentTab().catch(() => null))?.url ?? '';
       return !shortcut.here || now.includes(shortcut.here) ? shortcut.done : null;
@@ -736,6 +742,9 @@ export class AgentRun {
     // its pop-ups last): read it once it has gone quiet, or the model reads it again — a call more.
     if (/new tab or window|opens in a new tab|The page changed — now/.test(output) || tool.name === 'navigate' || tool.name === 'switch_tab') {
       await this.inFront(ctx, () => ctx.browser.send({ kind: 'settle', quietMs: 1_000, timeoutMs: 8_000 })).catch(() => null);
+      // Quiet isn't filled in: an app in a new tab starts, then fetches its data. It takes longer to start than a page does.
+      const count = () => this.inFront(ctx, () => ctx.browser.send({ kind: 'snapshot', mode: 'overview', maxElements: 1, maxTextChars: 0 })).then((s) => s.elements.length + s.omitted, () => 0);
+      await pageFilledIn(count, (ms) => sleep(ms, ctx.signal), /new tab or window|opens in a new tab/.test(output) ? 3_000 : 1_500);
     }
     const page = await this.runTool({ id: uid('read_'), name: 'read_page', arguments: { mode: 'overview' } }, byName, ctx);
     if (/^(Error|Not )/.test(page)) return output;
