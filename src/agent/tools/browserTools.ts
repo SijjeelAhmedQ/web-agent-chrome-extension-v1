@@ -623,8 +623,12 @@ const type: AgentTool<{ id: number; text: string; clear: boolean; submit: boolea
           note: "The date didn't take",
         };
       }
+      // Another date than asked (not the one it held): say it — a search with it would show the wrong records.
+      const other = res.dateNotTaken.before !== undefined && res.value.trim() !== res.dateNotTaken.before.trim();
       return {
-        output: `${field} did not take ${quote(a.text)} — the date is allowed there, but it put back ${quote(res.value)}. Try once more; if it is put back again, don't search: tell the user ${which} couldn't be set.`,
+        output: other
+          ? `${field} did not take ${quote(a.text)}: it now holds ${quote(res.value)} — another date. Don't search with it: set ${which} once more; if it is wrong again, tell the user ${which} couldn't be set, and what it shows.`
+          : `${field} did not take ${quote(a.text)} — it put back ${quote(res.value)}. Try once more; if it is put back again, don't search: tell the user ${which} couldn't be set.`,
         note: "The date didn't take",
       };
     }

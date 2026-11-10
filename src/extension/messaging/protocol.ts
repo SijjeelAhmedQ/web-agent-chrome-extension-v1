@@ -107,7 +107,7 @@ export interface TypeResult {
    * or it is outside the field's min / max), 'format' (written unlike its dates), 'unknown'. `box`: its
    * placeholder (From, To).
    */
-  dateNotTaken?: { box: string; why: 'disabled' | 'format' | 'unknown'; /** The dates it allows, when the field says (“from 2025-11-10 up to 2026-11-10”). */ allowed?: string };
+  dateNotTaken?: { box: string; why: 'disabled' | 'format' | 'unknown'; /** What it held before. */ before?: string; /** The dates it allows, when the field says (“from 2025-11-10 up to 2026-11-10”). */ allowed?: string };
 }
 
 export interface SelectResult {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dateCell, sameDate } from '@/extension/content/actions';
+import { dateOrder, isoOf, sameDate } from '@/extension/content/actions';
 import { BROWSER_TOOLS } from './tools/browserTools';
 import { ElementMemory, type ToolContext } from './tools/types';
 
@@ -13,29 +13,36 @@ describe('a date field that took the date', () => {
   });
 });
 
-describe('the calendar cell of a typed date', () => {
-  // Ant's range calendar: two months, cells titled YYYY-MM-DD; days after today disabled; a few days of the
-  // months around (not in view) as well.
-  document.body.innerHTML = `<div class="ant-picker-dropdown"><table>
-    <tr><td title="2026-09-30" class="ant-picker-cell"></td><td title="2026-10-01" class="ant-picker-cell ant-picker-cell-in-view"></td></tr>
-    <tr><td title="2026-11-10" class="ant-picker-cell ant-picker-cell-in-view"></td><td title="2026-11-11" class="ant-picker-cell ant-picker-cell-in-view ant-picker-cell-disabled"></td></tr>
-    <tr><td title="2026-12-01" class="ant-picker-cell ant-picker-cell-disabled"></td></tr>
-  </table></div>`;
-  const popup = document.querySelector('.ant-picker-dropdown')!;
+describe('a typed date, read in the order the field writes its dates', () => {
+  // Ant's range calendar marks the range's days (cells titled YYYY-MM-DD).
+  const calendar = (marked: string) => {
+    document.body.innerHTML = `<div class="ant-picker-dropdown"><table><tr>
+      <td title="${marked}" class="ant-picker-cell ant-picker-cell-in-view ant-picker-cell-range-start"></td>
+    </tr></table></div>`;
+    return document.querySelector('.ant-picker-dropdown')!;
+  };
 
-  it('01/10/2026 is 1 October, allowed', () => {
-    const cell = dateCell(popup, '01/10/2026')!;
-    expect(cell.getAttribute('title')).toBe('2026-10-01');
-    expect(cell.matches('.ant-picker-cell-disabled')).toBe(false);
+  it('10/11/2025 shown, 10 November marked: day first — 01/10/2026 is 1 October, not 10 January', () => {
+    const order = dateOrder(calendar('2025-11-10'), '10/11/2025');
+    expect(order).toBe('dmy');
+    expect(isoOf('01/10/2026', order)).toBe('2026-10-01');
   });
 
-  it('a day after today shows disabled', () => {
-    expect(dateCell(popup, '11/11/2026')!.matches('.ant-picker-cell-disabled')).toBe(true);
+  it('month first, when the field writes them so', () => {
+    const order = dateOrder(calendar('2025-10-11'), '10/11/2025');
+    expect(order).toBe('mdy');
+    expect(isoOf('01/10/2026', order)).toBe('2026-01-10');
   });
 
-  it('a month not in view: no cell', () => {
-    expect(dateCell(popup, '01/01/2027')).toBeNull();
-    expect(dateCell(popup, 'today')).toBeNull();
+  it('a day over 12 tells; unknown, day first', () => {
+    expect(dateOrder(calendar('2026-01-01'), '25/11/2025')).toBe('dmy');
+    expect(isoOf('01/10/2026', null)).toBe('2026-10-01');
+    expect(isoOf('2026-10-01', null)).toBe('2026-10-01');
+  });
+
+  it('not a date: nothing to pick (then it is typed)', () => {
+    expect(isoOf('13/13/2026', 'dmy')).toBeNull();
+    expect(isoOf('today', 'dmy')).toBeNull();
   });
 });
 
@@ -73,10 +80,21 @@ describe('type into a date field that did not take the date', () => {
     expect(out.note).toBe("01/01/2027 can't be chosen — disabled");
   });
 
-  it('allowed but not taken: not called disabled', async () => {
-    const out = await type.execute({ id: 9, text: '01/10/2026', clear: true }, ctxWith({ element: box, value: '10/11/2025', dateNotTaken: { box: 'From', why: 'unknown' } }));
-    expect(out.output).toMatch(/the date is allowed there, but it put back “10\/11\/2025”\. Try once more/);
+  it('not taken, put back: not called disabled', async () => {
+    const out = await type.execute(
+      { id: 9, text: '01/10/2026', clear: true },
+      ctxWith({ element: box, value: '10/11/2025', dateNotTaken: { box: 'From', why: 'unknown', before: '10/11/2025' } }),
+    );
+    expect(out.output).toMatch(/did not take “01\/10\/2026” — it put back “10\/11\/2025”\. Try once more/);
     expect(out.output).not.toMatch(/disabled/);
+  });
+
+  it('another date than asked: said, and no search with it', async () => {
+    const out = await type.execute(
+      { id: 9, text: '01/10/2026', clear: true },
+      ctxWith({ element: box, value: '10/01/2026', dateNotTaken: { box: 'From', why: 'unknown', before: '10/11/2025' } }),
+    );
+    expect(out.output).toMatch(/it now holds “10\/01\/2026” — another date\. Don't search with it/);
   });
 
   it('a field that says its limits: they go to the user', async () => {
