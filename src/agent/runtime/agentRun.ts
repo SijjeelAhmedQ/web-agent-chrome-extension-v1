@@ -372,7 +372,12 @@ export class AgentRun {
     // (the system prompt, the tools, the request) only to ask for it.
     if (!pageNote && byName.has('read_page')) {
       const page = await this.runTool({ id: uid('read_'), name: 'read_page', arguments: { mode: 'overview' } }, byName, ctx);
-      if (!/^(Error|Not )/.test(page)) messages.push({ role: 'user', content: `${FIRST_PAGE}\n${page}` });
+      if (!/^(Error|Not )/.test(page)) {
+        messages.push({ role: 'user', content: `${FIRST_PAGE}\n${page}` });
+        // Every control of the page is in this read: find_element would only find again what the model was shown —
+        // a call each time (four in one filter). A page too long for one read keeps it.
+        if (listsEveryControl(page)) specs = specs.filter((s) => s.name !== 'find_element');
+      }
     }
 
     let listNudges = 0;
@@ -1376,6 +1381,9 @@ const NOT_FINISHED_PROMPT = 'Not finished yet:';
 /** How a decision reaches the agent's model (and how compaction tells it from the user's request). */
 export const DECISION_HEAD = 'Decision (from';
 /** Tools marked read-only that still bring another page: reading it is the model's next step anyway. */
+/** A page read that lists all of the page's controls: none left out for find_element to find. */
+export const listsEveryControl = (page: string) => /Interactive elements/.test(page) && !/more not listed/.test(page);
+
 const PAGE_COMES_WITH = new Set(['open_menu', 'navigate', 'switch_tab']);
 /** The agent's model's calls on one decision before the decision model looks again. */
 const MAX_ACTS = 6;

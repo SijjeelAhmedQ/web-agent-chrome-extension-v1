@@ -24,6 +24,36 @@ const norm = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^\p{L}\p
 const stem = (w: string) => (w.length < 5 ? w : w.endsWith('ies') ? `${w.slice(0, -3)}y` : /(x|ch|sh|ss)es$/.test(w) ? w.slice(0, -2) : /[^su]s$/.test(w) ? w.slice(0, -1) : w);
 const wordsOf = (s: string) => new Set(norm(s).split(' ').filter((w) => w.length > 2 && !STOP.has(w)).map(stem));
 
+/** One letter wrong, missing or extra, or two side by side swapped: “shwo” is “show”, “reocrd” is “record”. */
+export function oneSlip(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  if (a.length === b.length) {
+    const diff: number[] = [];
+    for (let i = 0; i < a.length && diff.length <= 2; i++) if (a[i] !== b[i]) diff.push(i);
+    if (diff.length === 1) return true;
+    return diff.length === 2 && diff[1] === diff[0] + 1 && a[diff[0]] === b[diff[1]] && a[diff[1]] === b[diff[0]];
+  }
+  const [short, long] = a.length < b.length ? [a, b] : [b, a];
+  let i = 0;
+  while (i < short.length && short[i] === long[i]) i++;
+  return short.slice(i) === long.slice(i + 1);
+}
+
+/**
+ * The request's words with typos put right: a word of four letters or more that no entry has, and that is one slip
+ * from a word an entry has, is that word. A word the knowledge has (“fill”) stays itself, even one slip from another (“file”).
+ */
+export function corrected(asked: Set<string>, entries: KnowledgeEntry[]): Set<string> {
+  const known = new Set(entries.flatMap((e) => [...wordsOf(`${e.title} ${e.trigger ?? ''} ${e.content}`)]));
+  return new Set(
+    [...asked].map((w) => {
+      if (w.length < 4 || known.has(w)) return w;
+      return [...known].find((k) => k.length >= 4 && oneSlip(w, k)) ?? w;
+    }),
+  );
+}
+
 /** How well an entry matches a request: shared words, title and example count most. */
 export function relevance(entry: KnowledgeEntry, request: string): number {
   const asked = wordsOf(request);
@@ -66,7 +96,7 @@ export function knowledgeSection(profiles: SiteProfile[], request: string, budge
   // "Pop-ups when a consult opens" rule says”), then the site's navigation and other rules while there is room.
   // Words only in an entry's text don't make it a match: “task” or “patient” is in half a site's entries.
   // (All rules first filled a small model's room — Kaggle's 9,000 characters — before “goto patients” got its workflow.)
-  const asked = wordsOf(request);
+  const asked = corrected(wordsOf(request), entries);
   // An example's words in two or more examples are sample values (“arya stark”, “aqib”), not what it is about.
   const inExamples = new Map<string, number>();
   for (const e of entries) for (const w of wordsOf(e.trigger ?? '')) inExamples.set(w, (inExamples.get(w) ?? 0) + 1);

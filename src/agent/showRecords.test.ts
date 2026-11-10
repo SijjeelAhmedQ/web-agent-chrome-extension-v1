@@ -5,7 +5,8 @@ import type { AppConfig, SiteProfile } from '@/shared/types/config';
 import { defaultConfig } from '@/shared/constants/defaults';
 import { BUILT_IN_STAMP } from '@/shared/constants/builtIn';
 import { normalizeConfig, normalizeSite } from '@/shared/storage/configStore';
-import { knowledgeSection } from './planner/siteKnowledge';
+import { corrected, knowledgeSection, oneSlip } from './planner/siteKnowledge';
+import { listsEveryControl } from './runtime/agentRun';
 import { patientFrom } from './runtime/directTask';
 import { formatSnapshot } from './tools/format';
 import { sitesFor } from './tools/registry';
@@ -146,4 +147,24 @@ describe('a page read says things once', () => {
     expect(out).toContain('HbA1c\nNormal');
   });
 
+});
+
+describe('fewer calls', () => {
+  it('finds the knowledge through a typo', () => {
+    expect(knowledgeSection(smart, 'shwo me all abnormal reocrds', 16_000, true).text).toContain('### Workflow: Show records — the filter, and nothing more');
+  });
+
+  it('a typo is one slip, and a word the knowledge has stays itself', () => {
+    expect([oneSlip('shwo', 'show'), oneSlip('reocrd', 'record'), oneSlip('recrd', 'record'), oneSlip('recordd', 'record')]).toEqual([true, true, true, true]);
+    expect([oneSlip('show', 'shut'), oneSlip('abnormal', 'normal')]).toEqual([false, false]);
+    const entries = smart[0].knowledge;
+    expect(corrected(new Set(['fill', 'shwo']), entries)).toEqual(new Set(['fill', 'show']));
+    expect(corrected(new Set(['arya', 'zzzz']), entries)).toEqual(new Set(['arya', 'zzzz']));
+  });
+
+  it('no find_element when the read lists every control', () => {
+    expect(listsEveryControl('Interactive elements (↓ = outside the visible area):\n[1] button "Search"')).toBe(true);
+    expect(listsEveryControl('Interactive elements (↓ = outside the visible area):\n[1] button "Search"\n(+40 more not listed — use find_element)')).toBe(false);
+    expect(listsEveryControl('Error: the page could not be read')).toBe(false);
+  });
 });
