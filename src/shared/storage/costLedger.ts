@@ -151,6 +151,41 @@ export function recordCall(call: ModelCallRecord, site: string, taskId: string):
   });
 }
 
+/** A ledger as a backup file holds it (anything else: null). */
+export function ledgerIn(raw: unknown): CostLedger | null {
+  const l = (raw as { costLedger?: CostLedger } | null)?.costLedger;
+  return l && typeof l === 'object' && l.days && typeof l.days === 'object' ? l : null;
+}
+
+/**
+ * A backup's days into the ledger here: a day only one of them has is taken as it is; a day both have keeps the
+ * one with more calls (the same day counted twice would double it). In place; how many days came from the file.
+ */
+export function mergeLedgers(mine: CostLedger, theirs: CostLedger): number {
+  let added = 0;
+  for (const [key, day] of Object.entries(theirs.days)) {
+    if (!day || typeof day.calls !== 'number') continue;
+    if (!mine.days[key] || day.calls > mine.days[key].calls) {
+      mine.days[key] = day;
+      added++;
+    }
+  }
+  mine.since = Math.min(mine.since, theirs.since ?? mine.since);
+  return added;
+}
+
+/** The cost record of a backup file brought back (Restore from backup, Add from file). How many days it added. */
+export function restoreLedger(raw: unknown): Promise<number> {
+  const theirs = ledgerIn(raw);
+  if (!theirs) return Promise.resolve(0);
+  return serialized(async () => {
+    const ledger = await loadOrStart();
+    const added = mergeLedgers(ledger, theirs);
+    if (added) await setItem(COST_LEDGER_KEY, prune(ledger));
+    return added;
+  });
+}
+
 export function watchLedger(listener: (ledger: CostLedger | undefined) => void): () => void {
   return watchItem<CostLedger>(COST_LEDGER_KEY, listener);
 }

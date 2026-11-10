@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addCall, daysAgo, dayKey, ledgerFromHistory, money, summarize, type CostLedger } from '@/shared/storage/costLedger';
+import { addCall, daysAgo, dayKey, ledgerFromHistory, ledgerIn, mergeLedgers, money, summarize, type CostLedger } from '@/shared/storage/costLedger';
 import type { TaskRecord } from '@/shared/types/history';
 
 const at = (y: number, m: number, d: number, h = 12) => new Date(y, m - 1, d, h).getTime();
@@ -52,6 +52,21 @@ describe('the cost ledger', () => {
     const task = (id: string, times: number[]) => ({ id, site: 'indici.test', calls: times.map((t) => ({ at: t, model: 'm', cost: 0.01 })) }) as unknown as TaskRecord;
     const start = ledgerFromHistory([task('a', [at(2026, 11, 8), at(2026, 11, 10, 10)]), task('b', [at(2026, 11, 10, 14)])], at(2026, 11, 10, 12));
     expect(summarize(start, '2026-11-01', '2026-11-30').calls).toBe(2); // the call at 14:00 is written as it happens
+  });
+
+  it('a backup brought back: its days added, a day both have not counted twice', () => {
+    const mine = ledgerOf([[at(2026, 11, 10), 'm', 0.01, 's', 'x']]);
+    const backup = ledgerOf([
+      [at(2026, 11, 1), 'm', 0.2, 's', 'a'],
+      [at(2026, 11, 10), 'm', 0.01, 's', 'x'],
+      [at(2026, 11, 10), 'm', 0.01, 's', 'x'],
+    ]);
+    const file = JSON.parse(JSON.stringify({ agents: [], costLedger: backup }));
+    expect(mergeLedgers(mine, ledgerIn(file)!)).toBe(2);
+    expect(summarize(mine, '2026-11-01', '2026-11-30').cost).toBeCloseTo(0.22);
+    expect(mergeLedgers(mine, ledgerIn(file)!)).toBe(0); // again: nothing more
+    expect(summarize(mine, '2026-11-01', '2026-11-30').cost).toBeCloseTo(0.22);
+    expect(ledgerIn({ agents: [] })).toBeNull();
   });
 
   it('dollars with a cent’s fractions', () => {

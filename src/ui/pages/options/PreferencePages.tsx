@@ -3,6 +3,7 @@ import { Ban, Download, Lock, Monitor, Moon, Sun, Upload, X } from 'lucide-react
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { defaultConfig } from '@/shared/constants/defaults';
 import { BACKUP_AT_KEY, mergeConfig, normalizeConfig, stripKeys } from '@/shared/storage/configStore';
+import { ledgerIn, restoreLedger } from '@/shared/storage/costLedger';
 import { getItem } from '@/shared/storage/kv';
 import { clearHistory } from '@/shared/storage/historyStore';
 import type { AppConfig, ConfirmationPolicy, ThemeMode } from '@/shared/types/config';
@@ -316,13 +317,15 @@ export function AdvancedPage() {
       const parsed = JSON.parse(await file.text()) as Partial<AppConfig>;
       if (!parsed || typeof parsed !== 'object' || (!parsed.agents && !parsed.sites && !parsed.skills)) throw new Error('not a config');
       const { config: next, added } = mergeConfig(config, parsed);
-      const parts = [`${added.agents} agents`, `${added.sites} sites`, `${added.skills} skills`, `${added.customTools} custom tools`];
+      const costDays = Object.keys(ledgerIn(parsed)?.days ?? {}).length;
+      const parts = [`${added.agents} agents`, `${added.sites} sites`, `${added.skills} skills`, `${added.customTools} custom tools`, ...(costDays ? [`${costDays} days of cost`] : [])];
       modal.confirm({
         title: 'Add these to your setup?',
-        content: `This file has ${parts.join(', ')}. They are added to what you have (the file's version replaces one with the same id); your connections, keys and settings stay as they are.`,
+        content: `This file has ${parts.join(', ')}. They are added to what you have (the file's version replaces one with the same id; a day of cost both have keeps the fuller one); your connections, keys and settings stay as they are.`,
         okText: 'Add',
-        onOk: () => {
+        onOk: async () => {
           dispatch(configActions.replaceConfig(next));
+          await restoreLedger(parsed).catch(() => 0);
           message.success('Added to your setup');
         },
       });
@@ -437,7 +440,7 @@ export function AdvancedPage() {
         </SettingRow>
         <SettingRow
           label="Automatic backup"
-          description={`Keeps a copy of your setup, without API keys, in Downloads/WebAgent/web-agent-backup.json whenever it changes — it stays there even if the extension is removed. Bring it back with Add from file.${backupAt ? ` Last saved ${new Date(backupAt).toLocaleString()}.` : ''}`}
+          description={`Keeps a copy of your setup and your cost record, without API keys, in Downloads/WebAgent/web-agent-backup.json whenever it changes — it stays there even if the extension is removed. Bring it back with Add from file.${backupAt ? ` Last saved ${new Date(backupAt).toLocaleString()}.` : ''}`}
         >
           <Switch checked={settings.autoBackup !== false} onChange={(v) => update({ autoBackup: v })} aria-label="Automatic backup" />
         </SettingRow>

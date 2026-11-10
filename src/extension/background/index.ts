@@ -4,7 +4,8 @@
  */
 
 import { BACKUP_AT_KEY, CONFIG_KEY, FRESH_INSTALL_KEY, loadConfig, stripKeys } from '@/shared/storage/configStore';
-import { setItem } from '@/shared/storage/kv';
+import { getItem, setItem } from '@/shared/storage/kv';
+import { COST_LEDGER_KEY } from '@/shared/storage/costLedger';
 
 const LOCAL_ORIGIN_RULE_ID = 1;
 
@@ -65,7 +66,9 @@ async function backUp() {
   backupTimer = null;
   const config = await loadConfig();
   if (config.settings.autoBackup === false) return;
-  const json = JSON.stringify({ ...(config.settings.backupKeys ? config : stripKeys(config)), backedUpAt: new Date().toISOString() }, null, 2);
+  // With the day-by-day cost record: only days, models, sites and dollars — it would be lost with the extension.
+  const costLedger = await getItem(COST_LEDGER_KEY).catch(() => undefined);
+  const json = JSON.stringify({ ...(config.settings.backupKeys ? config : stripKeys(config)), ...(costLedger ? { costLedger } : {}), backedUpAt: new Date().toISOString() }, null, 2);
   const url = `data:application/json;base64,${btoa(unescape(encodeURIComponent(json)))}`;
   const ui = chrome.downloads.setUiOptions;
   try {
@@ -86,10 +89,21 @@ async function backUp() {
   }
 }
 
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local' || !changes[CONFIG_KEY]) return;
+let backupDue = 0;
+/** A backup in `delay` ms — or sooner, if one is due sooner already. */
+function backUpIn(delay: number) {
+  const due = Date.now() + delay;
+  if (backupTimer && backupDue <= due) return;
   if (backupTimer) clearTimeout(backupTimer);
-  backupTimer = setTimeout(() => void backUp(), 4_000);
+  backupDue = due;
+  backupTimer = setTimeout(() => void backUp(), delay);
+}
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  // The setup: a few seconds after a change. The cost record changes with every model call: once a minute at most.
+  if (changes[CONFIG_KEY]) backUpIn(4_000);
+  else if (changes[COST_LEDGER_KEY]) backUpIn(60_000);
 });
 
 chrome.commands.onCommand.addListener((command, tab) => {

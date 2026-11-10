@@ -2,6 +2,7 @@ import { App, Button } from 'antd';
 import { RotateCcw, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { FRESH_INSTALL_KEY, mergeConfig } from '@/shared/storage/configStore';
+import { restoreLedger } from '@/shared/storage/costLedger';
 import { getItem, removeItem } from '@/shared/storage/kv';
 import type { AppConfig } from '@/shared/types/config';
 import { useAppDispatch, useAppSelector } from '@/store';
@@ -33,7 +34,8 @@ export function RestoreBanner() {
       if (!parsed || typeof parsed !== 'object' || (!parsed.agents && !parsed.sites)) throw new Error('not a config');
       const { config: next, added } = mergeConfig(config, parsed);
       dispatch(configActions.replaceConfig(next));
-      message.success(`Restored ${added.agents} agents, ${added.sites} sites, ${added.skills} skills and ${added.customTools} tools`);
+      const days = await restoreLedger(parsed).catch(() => 0);
+      message.success(`Restored ${added.agents} agents, ${added.sites} sites, ${added.skills} skills and ${added.customTools} tools${days ? `, and ${days} days of cost` : ''}`);
       done();
     } catch {
       message.error("That file isn't a Web Agent backup.");
@@ -45,7 +47,7 @@ export function RestoreBanner() {
     <div className="restore-banner" role="region" aria-label="Restore from backup">
       <RotateCcw size={18} aria-hidden />
       <div className="restore-banner-text">
-        <strong>Had Web Agent before?</strong> Bring back your agents, sites, knowledge, skills and tools from the backup in{' '}
+        <strong>Had Web Agent before?</strong> Bring back your agents, sites, knowledge, skills, tools and cost record from the backup in{' '}
         <code>Downloads\WebAgent\web-agent-backup.json</code>.
       </div>
       <input
