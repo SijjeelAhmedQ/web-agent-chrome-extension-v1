@@ -41,6 +41,19 @@ describe('the knowledge for showing and counting', () => {
     expect(JSON.stringify(restore)).not.toMatch(/karna chahte|ke sath|inhe /);
   });
 
+  it('searches with Search, and asks before Update & Search', () => {
+    const show = smart[0].knowledge.find((e) => e.id === 'kb_smart_show')!.content;
+    expect(show).toContain('Never "Update & Search"');
+    expect(show).toContain('select_option("Status (All)", "Abnormal")');
+    expect(smart[0].askBefore).toContain('Update & Search');
+  });
+
+  it('asks which patient before opening a consult, in English', () => {
+    const consult = smart[0].knowledge.find((e) => e.id === 'kb_smart_consult')!;
+    expect(consult.content).toContain("Which patient's consult would you like to open?");
+    expect(knowledgeSection(smart, 'go back to patient consult', 16_000, true).text).toContain("### Workflow: Open a patient's consult in Indici");
+  });
+
   it('a summary of the list showing keeps the list', () => {
     expect(smart[0].knowledge.find((e) => e.id === 'kb_smart_5')!.content).toContain('unless the user means the list showing now');
   });
