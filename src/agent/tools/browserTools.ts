@@ -607,10 +607,16 @@ const type: AgentTool<{ id: number; text: string; clear: boolean; submit: boolea
     }
     const label = res.element.name ? quote(res.element.name) : 'the field';
     if (res.dateNotTaken) {
-      return {
-        output: `${label} did not take ${quote(a.text)}: it put back ${quote(res.value)}. Type the date the way that one is written (the same order of day, month and year, and separators).`,
-        note: "The date didn't take",
-      };
+      const which = res.dateNotTaken.box ? `the ${res.dateNotTaken.box} date` : 'this date';
+      return res.dateNotTaken.refused
+        ? {
+            output: `${label}${res.dateNotTaken.box ? ` (${res.dateNotTaken.box})` : ''} refused ${quote(a.text)}: that date is disabled there — outside the dates it allows — and it put back ${quote(res.value)}. Don't type it again and don't search with it: tell the user ${which} ${quote(a.text)} can't be chosen, and ask for another.`,
+            note: `${a.text} can't be chosen — disabled`,
+          }
+        : {
+            output: `${label} did not take ${quote(a.text)}: it put back ${quote(res.value)}. Type the date the way that one is written (the same order of day, month and year, and separators).`,
+            note: "The date didn't take",
+          };
     }
     let output = `Typed into ${label}. It now contains: ${quote(res.value)}.${await otherChanges(ctx, a.id, form)}`;
     if (res.suggestions?.length && !a.submit) {

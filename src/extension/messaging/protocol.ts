@@ -102,8 +102,11 @@ export interface TypeResult {
   suggestions?: string[];
   /** A rich editor (contenteditable) whose caret was placed for real keyboard input — nothing typed yet. */
   awaitsInput?: boolean;
-  /** A date field that put its old date back: what was typed wasn't a date it reads. */
-  dateNotTaken?: boolean;
+  /**
+   * A date field that put its old date back. `refused`: written like its dates, so a date it doesn't allow
+   * (disabled); otherwise maybe only the format. `box`: its placeholder (From, To).
+   */
+  dateNotTaken?: { box: string; refused: boolean };
 }
 
 export interface SelectResult {

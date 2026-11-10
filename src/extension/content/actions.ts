@@ -278,12 +278,20 @@ async function confirmAntDate(field: HTMLInputElement | HTMLTextAreaElement): Pr
   field.dispatchEvent(new KeyboardEvent('keydown', init));
   field.dispatchEvent(new KeyboardEvent('keyup', init));
   await sleep(250);
+  // Always out of the field, then read: a date it refuses (disabled — after today, before the earliest it allows)
+  // stays as typed text while the field has focus, and is put back only when it loses it. Read before that, it
+  // looked typed (“Done”), and the model went round Expand, Clear and Type until the user stopped it.
   const doc = field.ownerDocument;
-  if (!Array.from(doc.querySelectorAll(ANT_DATE_POPUP)).some((p) => isVisible(p))) return;
   for (const type of ['mousedown', 'mouseup']) doc.body.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: doc.defaultView }));
-  (doc.activeElement as HTMLElement | null)?.blur?.();
-  await sleep(250);
+  field.blur();
+  const active = doc.activeElement as HTMLElement | null;
+  if (active && active !== doc.body && active.closest('.ant-picker')) active.blur(); // a range's Enter moved on to its end
+  await sleep(300);
+  if (Array.from(doc.querySelectorAll(ANT_DATE_POPUP)).some((p) => isVisible(p))) await sleep(300);
 }
+
+/** The shape of a date as written — “10/11/2026” and “01/01/2027” alike, “2027-01-01” not. */
+const dateShape = (s: string) => s.trim().replace(/\d/g, '9');
 
 /** The same date, however written: 1/3/2026 is 01/03/2026 (the same numbers in the same order). */
 export function sameDate(shown: string, typed: string): boolean {
@@ -339,9 +347,15 @@ export async function type(id: number, text: string, clearFirst: boolean, show: 
     field.dispatchEvent(new KeyboardEvent('keyup', { key: last, bubbles: true, composed: true }));
     field.dispatchEvent(new Event('change', { bubbles: true }));
     if (antDate) {
+      const before = field.defaultValue || '';
       await confirmAntDate(field);
-      // Put back as it was: the date wasn't one it could read (another format) — say so, don't call it typed.
-      return { element: summary(el), value: field.value, ...(sameDate(field.value, text) ? {} : { dateNotTaken: true }) };
+      const kept = field.value;
+      if (sameDate(kept, text)) return { element: summary(el), value: kept };
+      // Put back: written like its dates and still refused, it is a date the field doesn't allow (disabled);
+      // written otherwise, it may only be the format. Which box (From / To) — so the user is told which date.
+      const like = kept || before;
+      const refused = !like || dateShape(like) === dateShape(text);
+      return { element: summary(el), value: kept, dateNotTaken: { box: field.placeholder || '', refused } };
     }
     await closeDatePicker(field);
     const suggestions = await suggestionsUnder(field);
