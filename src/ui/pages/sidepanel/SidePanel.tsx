@@ -8,6 +8,7 @@ import { useAppDispatch, useAppSelector } from '@/store';
 import { chatActions } from '@/store/chatSlice';
 import { IconButton } from '../../components/IconButton';
 import { RuntimeBar } from '../../components/RuntimeBar';
+import { TodayCost } from '../../components/TodayCost';
 import { useActiveTab } from '../../hooks/useActiveTab';
 import { usePatientHere } from '../../hooks/usePatientHere';
 import { useAgentRunner } from '../../hooks/useAgentRunner';
@@ -149,6 +150,7 @@ export function SidePanel() {
         </IconButton>
       </header>
       {providers.length > 0 && <RuntimeBar agent={agent} config={config} url={tab.url} running={running} />}
+      {providers.length > 0 && <TodayCost />}
       {patient && (
         <div className="patient-here" role="status">
           Patient: <strong>{patient.name}</strong>

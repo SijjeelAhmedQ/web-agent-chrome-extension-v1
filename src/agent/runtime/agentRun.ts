@@ -2,6 +2,7 @@ import { BrowserController, PageError, scriptableReason } from '@/extension/brow
 import type { ForegroundLock } from '@/extension/browser/foreground';
 import { BUILT_IN_TOOL_IDS } from '@/shared/constants/tools';
 import { upsertTask } from '@/shared/storage/historyStore';
+import { recordCall } from '@/shared/storage/costLedger';
 import type { AgentConfig, AppConfig, ProviderConfig, SiteProfile } from '@/shared/types/config';
 import type { ModelCallRecord, ModelTier, StepRecord, TaskRecord, TaskRoute } from '@/shared/types/history';
 import { clip, matchesSite, siteOf, sleep, uid } from '@/shared/utils';
@@ -253,6 +254,8 @@ export class AgentRun {
     const log = (call: ModelCallRecord) => {
       const tier = auto ? tierOfModel(auto, call.model) : undefined;
       this.updateTask({ calls: [...(this.task.calls ?? []), tier ? { ...call, tier } : call] });
+      // And in the day's spending (the Cost page), kept apart from the history.
+      void recordCall(call, this.task.site, this.task.id).catch(() => undefined);
     };
     const client = meteredClient(createClient(provider), 'worker', () => this.knowledgeNow, log, () => this.withinSpendingLimit());
     // The decision model, when the agent has one, decides each next step; the agent's own model reads the

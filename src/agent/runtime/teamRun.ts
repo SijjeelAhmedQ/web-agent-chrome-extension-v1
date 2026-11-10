@@ -1,6 +1,7 @@
 import { BrowserController, scriptableReason } from '@/extension/browser/controller';
 import { ForegroundLock } from '@/extension/browser/foreground';
 import { upsertTask } from '@/shared/storage/historyStore';
+import { recordCall } from '@/shared/storage/costLedger';
 import type { AgentConfig } from '@/shared/types/config';
 import type { StepRecord, TaskRecord } from '@/shared/types/history';
 import { clip, siteOf, uid } from '@/shared/utils';
@@ -214,7 +215,10 @@ export class TeamRun {
     let notCovered = '';
     try {
       // Logged with the team task; each member's calls are in its own task.
-      const lead = meteredClient(createClient(provider), 'worker', () => '', (call) => this.save({ calls: [...(this.task.calls ?? []), call] }));
+      const lead = meteredClient(createClient(provider), 'worker', () => '', (call) => {
+        this.save({ calls: [...(this.task.calls ?? []), call] });
+        void recordCall(call, this.task.site, this.task.id).catch(() => undefined);
+      });
       const res = await lead.chat({
         model,
         purpose: 'Splitting the request among the team',

@@ -15,6 +15,7 @@ import { Globe,
   Sparkles,
   Sun,
   Terminal,
+  Wallet,
   Wrench,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -27,6 +28,7 @@ import { BrandMark } from '../../components/Brand';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { ActivityPage } from './ActivityPage';
 import { AgentsPage } from './AgentsPage';
+import { CostPage } from './CostPage';
 import { ModelsPage } from './ModelsPage';
 import { AdvancedPage, AppearancePage, BehaviorPage, GeneralPage, PermissionsPage, PrivacyPage } from './PreferencePages';
 import { SiteDetailPage, SitesPage } from './SitesPage';
@@ -57,7 +59,13 @@ const NAV = [
       { to: '/advanced', label: 'Advanced', icon: Terminal },
     ],
   },
-  { group: 'History', items: [{ to: '/activity', label: 'Activity', icon: Activity }] },
+  {
+    group: 'History',
+    items: [
+      { to: '/activity', label: 'Activity', icon: Activity },
+      { to: '/cost', label: 'Cost', icon: Wallet },
+    ],
+  },
 ];
 
 function ThemeSwitch() {
@@ -188,6 +196,7 @@ function Shell() {
               <Route path="/privacy" element={<PrivacyPage />} />
               <Route path="/advanced" element={<AdvancedPage />} />
               <Route path="/activity" element={<ActivityPage />} />
+              <Route path="/cost" element={<CostPage />} />
               <Route path="*" element={<Navigate to="/agents" replace />} />
             </Routes>
           </div>

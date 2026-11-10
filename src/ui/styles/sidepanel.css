@@ -1069,3 +1069,31 @@ body {
   font-size: 12px;
   border-bottom: 1px solid var(--border, rgba(127, 127, 127, 0.25));
 }
+
+/* ---------- Spent today (opens the Cost page) ---------- */
+
+.today-cost {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 4px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  flex: none;
+}
+
+.today-cost strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.today-cost:hover {
+  background: var(--hover);
+}

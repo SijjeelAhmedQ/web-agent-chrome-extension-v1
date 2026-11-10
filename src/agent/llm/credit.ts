@@ -10,6 +10,8 @@ export interface Credit {
   keyUsed: number;
   /** The account's credits bought and used — not every key may read them. */
   account?: { total: number; used: number };
+  /** What the key spent this UTC day, week (from Monday) and month, as OpenRouter counts it — every use of the key. */
+  spent?: { day: number; week: number; month: number };
 }
 
 /** Under this many dollars the side panel warns that the credit is running out. */
@@ -18,7 +20,7 @@ export const LOW_CREDIT = 0.5;
 export const hasCredit = (provider: Pick<ProviderConfig, 'baseUrl'>) => /^https:\/\/openrouter\.ai\//.test(provider.baseUrl);
 
 interface KeyInfo {
-  data: { limit: number | null; limit_remaining: number | null; usage: number };
+  data: { limit: number | null; limit_remaining: number | null; usage: number; usage_daily?: number; usage_weekly?: number; usage_monthly?: number };
 }
 interface Credits {
   data: { total_credits: number; total_usage: number };
@@ -37,6 +39,9 @@ export async function fetchCredit(provider: Pick<ProviderConfig, 'baseUrl' | 'ap
     ...(key.data.limit != null ? { keyLimit: key.data.limit } : {}),
     keyUsed: key.data.usage,
     ...(account ? { account } : {}),
+    ...(typeof key.data.usage_daily === 'number'
+      ? { spent: { day: key.data.usage_daily, week: key.data.usage_weekly ?? 0, month: key.data.usage_monthly ?? 0 } }
+      : {}),
   };
 }
 
