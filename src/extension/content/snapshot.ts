@@ -352,6 +352,29 @@ let reads = 0;
 const firstSeen = new Map<number, number>();
 let listedBefore = new Set<number>();
 
+/**
+ * The controls of a search or filter bar: the biggest box around a field that holds another field too and no more
+ * than BAR_MAX controls — its fields, its dropdowns and the buttons beside them (Search, Reset). A page's list of
+ * repeated buttons (a patient list's Pin, Scope, Expand) cut them from an overview: then each was a find_element.
+ */
+const BAR_MAX = 40;
+export function barMembers(elements: Element[], isField: (el: Element, i: number) => boolean): Set<Element> {
+  const fields = new Set(elements.filter((el, i) => isField(el, i)));
+  const out = new Set<Element>(fields);
+  const done = new Set<Element>();
+  for (const field of fields) {
+    let bar: Element[] | null = null;
+    for (let box = field.parentElement, depth = 0; box && depth < 8 && !done.has(box); box = box.parentElement, depth++) {
+      const inside = elements.filter((el) => box.contains(el));
+      if (inside.length > BAR_MAX) break;
+      if (inside.filter((el) => fields.has(el)).length >= 2) bar = inside;
+    }
+    if (bar) for (const el of bar) out.add(el);
+    if (field.parentElement) done.add(field.parentElement);
+  }
+  return out;
+}
+
 export function snapshot(mode: ReadMode, maxElements: number, maxTextChars: number): PageSnapshot {
   const { elements, frames } = collectInteractive();
   const described = elements.map(describeElement);
@@ -374,7 +397,10 @@ export function snapshot(mode: ReadMode, maxElements: number, maxTextChars: numb
   // boxes and generic blocks, and those before plain text (spans, cells, headings, labels): click_text reaches it.
   // Fields first of all: a step fills them, and there are few (the Smart Inbox's Patient Name and Status were cut
   // again and again behind its links).
-  const kind = (e: ElementInfo) => (FIELD_ROLES.test(e.role) ? -1 : PLAIN_ROLES.test(e.role) ? 2 : LESSER_ROLES.test(e.role) ? 1 : 0);
+  // A dropdown made of divs (the Smart Inbox's “Status (All)”) is a field too, and a search bar's buttons go with its fields.
+  const bar = described.length > maxElements ? barMembers(elements, (el, i) => FIELD_ROLES.test(described[i].role) || opensList(el)) : new Set<Element>();
+  const inBar = new Set(described.filter((_, i) => bar.has(elements[i])).map((e) => e.id));
+  const kind = (e: ElementInfo) => (FIELD_ROLES.test(e.role) || inBar.has(e.id) ? -1 : PLAIN_ROLES.test(e.role) ? 2 : LESSER_ROLES.test(e.role) ? 1 : 0);
   const chosen = [...described]
     .sort(
       (a, b) =>

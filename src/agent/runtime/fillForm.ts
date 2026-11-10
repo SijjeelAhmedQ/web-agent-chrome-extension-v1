@@ -11,19 +11,19 @@ export const FILL_FORM = 'fill_form';
 
 const field = z
   .object({
-    id: z.coerce.number().int().positive().describe('Field id from the latest read'),
-    text: z.coerce.string().optional().describe('Text to type into it'),
-    option: z.coerce.string().optional().describe('For a dropdown: the visible text of the option to choose'),
+    id: z.coerce.number().int().positive().describe('Field id'),
+    text: z.coerce.string().optional().describe('Text to type'),
+    option: z.coerce.string().optional().describe('A dropdown\'s option'),
   })
   .refine((f) => (f.text === undefined) !== (f.option === undefined), { message: 'give text or option, not both' });
 
-export const fillFormSchema = z.object({ fields: z.array(field).min(1).max(12).describe('The fields, in the order to fill them') });
+export const fillFormSchema = z.object({ fields: z.array(field).min(1).max(12).describe('The fields, in order') });
 export type FillFormArgs = z.infer<typeof fillFormSchema>;
 
 export const fillFormTool: AgentTool<FillFormArgs> = {
   name: FILL_FORM,
   description:
-    'Fill several fields of one form in one step, in order: text is typed into a field (as type does), option is chosen in a dropdown (as select_option does). Stops at a field that needs the user, or whose suggestions need a choice. It only fills — press Save yourself next.',
+    'Fill several fields of one form in one step, in order: text is typed, option chosen in a dropdown. Stops at a field that needs the user. Only fills — press Save or Search next.',
   schema: fillFormSchema,
   risk: 'action',
   touchesPage: true,

@@ -57,7 +57,23 @@ export function buildToolset(agent: AgentConfig, config: AppConfig, url: string)
   return { tools, alwaysSkills: always, onDemandSkills: onDemand, sites };
 }
 
+/**
+ * A schema without what tells the model nothing, in every call — at every depth (fill_form's fields too): an empty or
+ * false default (the parameter is optional already) and an id's “more than 0”. The tool still checks them.
+ */
+function withoutNoise<T>(schema: T): T {
+  if (Array.isArray(schema)) return schema.map(withoutNoise) as T;
+  if (!schema || typeof schema !== 'object') return schema;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (key === 'exclusiveMinimum' || (key === 'default' && (value === '' || value === false))) continue;
+    out[key] = withoutNoise(value);
+  }
+  return out as T;
+}
+
 /** Exactly what the model receives for a tool: name, description and parameters. */
+
 export function specOf(t: AgentTool<any>): ToolSpec {
   let parameters = t.jsonSchema;
   if (!parameters) {
@@ -65,7 +81,7 @@ export function specOf(t: AgentTool<any>): ToolSpec {
     // on OpenRouter unable to call click or type at all — it fell back to click_text for everything.
     // No `additionalProperties: false` either: it goes with every call, for every tool, and changes nothing.
     const { $schema: _ignored, additionalProperties: _closed, ...schema } = zodToJsonSchema(t.schema, { target: 'jsonSchema7', $refStrategy: 'none' }) as Record<string, unknown>;
-    parameters = schema;
+    parameters = withoutNoise(schema);
   }
   return { name: t.name, description: t.description, parameters };
 }

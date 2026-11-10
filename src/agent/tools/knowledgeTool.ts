@@ -12,8 +12,8 @@ export function knowledgeTool(sites: SiteProfile[], here?: (ctx: ToolContext) =>
   const names = sites.map((s) => s.name).join(', ') || 'the sites you set up';
   return {
     name: 'site_knowledge',
-    description: `Look up what the user has taught you about ${names}: how its menus, pages and controls work, and step-by-step workflows. Use it before guessing how to do something on this site.`,
-    schema: z.object({ topic: z.string().min(1).describe('What you need to know, e.g. "open a patient" or "Search & List"') }),
+    description: `Look up what the user has taught you about ${names}: its pages, controls and workflows. Use it before guessing.`,
+    schema: z.object({ topic: z.string().min(1).describe('What you need, e.g. "open a patient"') }),
     risk: 'read',
     touchesPage: false,
     label: (a) => `Checking what I know about “${a.topic}”`,

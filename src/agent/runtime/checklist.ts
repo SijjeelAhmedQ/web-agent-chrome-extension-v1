@@ -90,11 +90,11 @@ export function checklistTool(list: Checklist, onChange: (done: number | null) =
   return {
     name: 'task_list',
     description:
-      'Your checklist for a request with several separate things to do. First call it with items (one per thing, with all the details the user gave for it, in their order); right after finishing each, call it with done: <its number> and a short note ("added"). Tick an add only on proof of the one you added now (a success message, a new entry with today’s date) — not an older look-alike. Not for a single task.',
+      'Your checklist when a request has several separate things to do (not one). First items (each with its details, in order); after finishing each, done: <its number> and a short note ("added"). Tick an add only on proof of the one you added now (a success message, an entry with today’s date) — not an older look-alike.',
     schema: z.object({
-      items: itemList.optional().describe('The items, each with its details — only when making the list'),
+      items: itemList.optional().describe('The items with their details — only when making the list'),
       done: z.coerce.number().int().positive().optional().describe('The number of the item you just finished'),
-      note: z.string().optional().describe('A few words on the result, e.g. "added" or "already there — skipped"'),
+      note: z.string().optional().describe('A few words, e.g. "added"'),
     }),
     risk: 'read',
     touchesPage: false,

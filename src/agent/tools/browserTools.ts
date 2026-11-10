@@ -160,10 +160,10 @@ const OVERVIEW_ELEMENTS = 100;
 const readPage: AgentTool<{ mode: 'overview' | 'content'; full: boolean }> = {
   name: 'read_page',
   description:
-    'Read the current page. Returns its URL, title, scroll position, a numbered list of interactive elements as `[id] role "name"` and the visible text. Use mode "content" to get the full text when you need to read, compare or summarize. Call again after the page changes — ids from an older page are invalid.',
+    'Read the page: its controls as `[id] role "name"` and its visible text. mode "content": the full text, to read or summarise. Ids from an older page are invalid.',
   schema: z.object({
-    mode: z.enum(['overview', 'content']).optional().default('overview').describe('"overview" (default) or "content" for the full text'),
-    full: bool(false).describe('The whole page again, not only what changed since your last read of it'),
+    mode: z.enum(['overview', 'content']).optional().default('overview').describe('"overview" (default) or "content"'),
+    full: bool(false).describe('The whole page, not only what changed'),
   }),
   risk: 'read',
   touchesPage: true,
@@ -199,8 +199,8 @@ const readPage: AgentTool<{ mode: 'overview' | 'content'; full: boolean }> = {
 
 const findElement: AgentTool<{ query: string }> = {
   name: 'find_element',
-  description: 'Find interactive elements matching a description (e.g. "search box", "Add to cart button", "email field") and any matching visible text. Useful on long pages or when read_page listed too many elements.',
-  schema: z.object({ query: z.string().min(1).describe('What to look for, in plain words') }),
+  description: 'Find controls by a description ("search box", "Add button") and matching text — for those a read left out.',
+  schema: z.object({ query: z.string().min(1).describe('What to look for') }),
   risk: 'read',
   touchesPage: true,
   label: (a) => `Looking for ${quote(a.query)}`,
@@ -429,10 +429,10 @@ async function realClick(ctx: ToolContext, elementId: number, label: string, dou
 const click: AgentTool<{ id: number; name: string; double: boolean }> = {
   name: 'click',
   description:
-    'Click an element (button, link, tab, checkbox, menu item, row…). Waits for the page to react. Always pass name: the element’s name as listed — the click is refused if the id is a different element.',
+    'Click a control (button, link, tab, checkbox, row…); waits for the page. Pass its name as listed: a different id is refused.',
   schema: z.object({
     id,
-    name: z.coerce.string().optional().default('').describe('The name of the element you mean, as listed (e.g. "Arya STARK"). Guards against a wrong id.'),
+    name: z.coerce.string().optional().default('').describe('Its name as listed'),
     double,
   }),
   risk: 'sensitive',
@@ -491,10 +491,10 @@ async function textTarget(a: ClickTextArgs, ctx: ToolContext): Promise<TextResul
 const clickText: AgentTool<ClickTextArgs> = {
   name: 'click_text',
   description:
-    'Click visible text that is not listed as a button or link — e.g. a name in a table or a result in a search dropdown. Matches whole words, exact text first. If the text appears more than once, pass near: other text from the same row (a date of birth, an ID). It only clicks — it never types: to enter text into a field, use type.',
+    'Click visible text that is not a listed control (a name in a table, a search suggestion). Appears more than once: pass near, other text of its row. Never types.',
   schema: z.object({
-    text: str(z.string().min(1)).describe('The visible text to click, e.g. "Arya STARK"'),
-    near: z.coerce.string().optional().default('').describe('Optional: other text in the same row or item, to pick the right one (e.g. "03-12-2015")'),
+    text: str(z.string().min(1)).describe('The text, e.g. "Arya STARK"'),
+    near: z.coerce.string().optional().default('').describe('Other text of its row (a date, an ID)'),
     double,
   }),
   risk: 'sensitive',
@@ -560,18 +560,18 @@ async function otherChanges(ctx: ToolContext, id: number, before: FormAround | n
 const type: AgentTool<{ id: number; text: string; clear: boolean; submit: boolean; then_click?: number }> = {
   name: 'type',
   description:
-    'Type text into a text field, search box, combobox or editor. Replaces the existing text unless clear is false. Set submit to true to press Enter afterwards, or then_click to press a button after typing (e.g. the form’s Search) — in the same step.',
+    'Type into a text field, search box or editor; replaces its text unless clear is false. submit: Enter after; then_click: press that Search or Go button after — one step.',
   schema: z.object({
     id,
     text: str().describe('The text to type'),
-    clear: bool(true).describe('Replace existing text (default true)'),
-    submit: bool(false).describe('Press Enter after typing (default false)'),
+    clear: bool(true).describe('Replace the text (default true)'),
+    submit: bool(false).describe('Enter after typing'),
     then_click: z.coerce
       .number()
       .int()
       .positive()
       .optional()
-      .describe('Id of a button to press right after typing: one that searches or goes on (Search, Go). One that saves, sends or deletes is not pressed — click it next'),
+      .describe('Id of a Search or Go button to press after (not Save, Send or Delete)'),
   }),
   risk: 'action',
   touchesPage: true,
@@ -657,8 +657,8 @@ const clear: AgentTool<{ id: number }> = {
 
 const selectOption: AgentTool<{ id: number; option: string }> = {
   name: 'select_option',
-  description: 'Choose an option in a dropdown by its visible text — a native <select>, or an Ant Design one (it opens it, narrows or scrolls the list, and clicks the option). For other custom dropdowns, click to open them and then click the option instead.',
-  schema: z.object({ id, option: str().describe('Visible text of the option') }),
+  description: 'Choose a dropdown\'s option by its text, in one step: it opens the dropdown, finds the option and clicks it (native and Ant Design). Another custom dropdown: click it, then the option.',
+  schema: z.object({ id, option: str().describe('The option\'s text') }),
   risk: 'action',
   touchesPage: true,
   label: (a, ctx) => `Choosing ${quote(a.option)}${ctx.elements.get(a.id)?.name ? ` in ${nameOf(ctx, a.id)}` : ''}`,
@@ -673,10 +673,10 @@ const selectOption: AgentTool<{ id: number; option: string }> = {
 
 const scroll: AgentTool<{ direction?: 'up' | 'down' | 'top' | 'bottom'; id?: number }> = {
   name: 'scroll',
-  description: 'Scroll the page up or down by about a screen, to the top or bottom, or until a specific element is visible (pass id). Use it to reveal content marked ↓ or load more results.',
+  description: 'Scroll a screen down or up, to the top or bottom, or to an element (id).',
   schema: z.object({
     direction: z.enum(['up', 'down', 'top', 'bottom']).optional().describe('Default "down"'),
-    id: id.optional().describe('Scroll this element into view instead'),
+    id: id.optional().describe('Scroll to this element'),
   }),
   risk: 'read',
   touchesPage: true,
@@ -691,7 +691,7 @@ const scroll: AgentTool<{ direction?: 'up' | 'down' | 'top' | 'bottom'; id?: num
 const hover: AgentTool<{ id: number }> = {
   name: 'hover',
   description:
-    'Move the mouse over an element without clicking. Opens menus that appear on hover (navigation bars, dropdown menus), tooltips and previews. Returns the items that appeared, with their ids — then hover the next level or click the item you want.',
+    'Hover over a control: opens hover menus and tooltips; returns what appeared, with ids.',
   schema: z.object({ id }),
   risk: 'read',
   touchesPage: true,
@@ -715,8 +715,8 @@ const pathSchema = z.preprocess(
 const openMenu: AgentTool<{ path: string[] }> = {
   name: 'open_menu',
   description:
-    'Open nested menus by their visible labels and choose the item at the end, e.g. ["Patients", "Search & List"] — each level is hovered (or clicked if it is a menu button), and a last label that is an item, not a menu, is clicked for you (unless clicking it would save, send or delete something: then click it yourself). With only menu labels, returns the items of the last level with their ids. Use it for navigation bars with sub-menus.',
-  schema: z.object({ path: pathSchema.describe('Menu labels from the top level down, ending with the item to choose') }),
+    'Open nested menus by their labels and choose the last item, e.g. ["Patients", "Search & List"] — one step. An item that saves, sends or deletes is not clicked: click it next. Only menu labels: returns the last level\'s items.',
+  schema: z.object({ path: pathSchema.describe('Labels from the top down, the item last') }),
   risk: 'read',
   touchesPage: true,
   label: (a) => `Opening ${a.path.map((p) => quote(p)).join(' › ')}`,
@@ -773,7 +773,7 @@ export async function formAfterLoading(ctx: ToolContext): Promise<void> {
 
 const pressKey: AgentTool<{ key: string; id?: number }> = {
   name: 'press_key',
-  description: 'Press a key: Enter, Escape, Tab, ArrowDown, ArrowUp, Backspace, Space, etc. Sent to the element with that id, or to the focused element. Enter in a form field submits the form; Escape closes most pop-ups.',
+  description: 'Press a key (Enter, Escape, Tab, arrows…) on a control or the focused one. Enter submits a form; Escape closes most pop-ups.',
   schema: z.object({ key: z.string().min(1), id: id.optional() }),
   risk: 'sensitive',
   touchesPage: true,
@@ -801,10 +801,10 @@ const pressKey: AgentTool<{ key: string; id?: number }> = {
 
 const wait: AgentTool<{ seconds: number; text?: string }> = {
   name: 'wait',
-  description: 'Wait for the page: either a number of seconds (max 10), or until some text appears.',
+  description: 'Wait some seconds (max 10) or until a text appears.',
   schema: z.object({
     seconds: z.coerce.number().min(0.2).max(10).optional().default(2),
-    text: z.string().optional().describe('Wait until this text is on the page'),
+    text: z.string().optional().describe('Wait for this text'),
   }),
   risk: 'read',
   touchesPage: true,
@@ -827,8 +827,8 @@ function normalizeUrl(raw: string): string {
 
 const navigate: AgentTool<{ url: string }> = {
   name: 'navigate',
-  description: 'Open a web address in the current tab.',
-  schema: z.object({ url: z.string().min(1).describe('Full URL, e.g. https://www.google.com') }),
+  description: 'Open a URL in this tab.',
+  schema: z.object({ url: z.string().min(1).describe('Full URL') }),
   risk: 'read',
   touchesPage: false,
   label: (a) => `Opening ${siteOf(normalizeUrl(a.url)) || a.url}`,
@@ -841,7 +841,7 @@ const navigate: AgentTool<{ url: string }> = {
 
 const goBack: AgentTool<Record<string, never>> = {
   name: 'go_back',
-  description: 'Go back to the previous page in this tab.',
+  description: 'Back a page in this tab.',
   schema: z.object({}),
   risk: 'read',
   touchesPage: false,
@@ -854,7 +854,7 @@ const goBack: AgentTool<Record<string, never>> = {
 
 const goForward: AgentTool<Record<string, never>> = {
   name: 'go_forward',
-  description: 'Go forward to the next page in this tab.',
+  description: 'Forward a page in this tab.',
   schema: z.object({}),
   risk: 'read',
   touchesPage: false,
@@ -867,7 +867,7 @@ const goForward: AgentTool<Record<string, never>> = {
 
 const listTabs: AgentTool<Record<string, never>> = {
   name: 'list_tabs',
-  description: 'List the open tabs in this window with their ids. The one marked (current) is where you are working.',
+  description: 'This window\'s tabs with ids; (current) is yours.',
   schema: z.object({}),
   risk: 'read',
   touchesPage: false,
@@ -880,7 +880,7 @@ const listTabs: AgentTool<Record<string, never>> = {
 
 const openTab: AgentTool<{ url: string }> = {
   name: 'open_tab',
-  description: 'Open a URL in a new tab and continue working there.',
+  description: 'Open a URL in a new tab and work there.',
   schema: z.object({ url: z.string().min(1) }),
   risk: 'read',
   touchesPage: false,
@@ -894,7 +894,7 @@ const openTab: AgentTool<{ url: string }> = {
 
 const switchTab: AgentTool<{ tab_id: number }> = {
   name: 'switch_tab',
-  description: 'Switch to another open tab (ids from list_tabs) and continue working there.',
+  description: 'Work in another tab (id from list_tabs).',
   schema: z.object({ tab_id: z.coerce.number().int() }),
   risk: 'read',
   touchesPage: false,
@@ -908,7 +908,7 @@ const switchTab: AgentTool<{ tab_id: number }> = {
 
 const closeTab: AgentTool<{ tab_id?: number }> = {
   name: 'close_tab',
-  description: 'Close a tab (default: the current one). Afterwards you work in whichever tab becomes active.',
+  description: 'Close a tab (default: this one); you then work in the active one.',
   schema: z.object({ tab_id: z.coerce.number().int().optional() }),
   risk: 'action',
   touchesPage: false,
@@ -1013,17 +1013,17 @@ async function popupText(ctx: ToolContext, shown?: { rows?: VisualRow[] }): Prom
 const readRecords: AgentTool<{ first: string; near: string; next: string; close: string; max: number; area: string; status_label: string; normal_values: string; empty_is_normal: boolean }> = {
   name: 'read_records',
   description:
-    'Read a list of records (an inbox, results) in one go instead of opening each: opens the first record, presses the viewer\'s "Next" to the last, keeps each record\'s text and fields, then closes the viewer. Saves nothing. Answer from what it returns.',
+    'Read many records in one step: opens the first, presses Next to the last, keeps each one\'s text and fields, closes the viewer. Saves nothing.',
   schema: z.object({
-    first: z.coerce.string().optional().default('').describe('Text to click to open the first record (e.g. its Subject); with area, empty = the record showing now'),
-    near: z.coerce.string().optional().default('').describe('Other text of the same row, when first appears more than once'),
-    next: z.coerce.string().optional().default('Next').describe('The viewer button to the next record'),
-    close: z.coerce.string().optional().default('Cancel').describe('The viewer button that closes it without saving'),
+    first: z.coerce.string().optional().default('').describe('Text that opens the first record (its Subject); with area, empty = the one showing'),
+    near: z.coerce.string().optional().default('').describe('Other text of its row, if first repeats'),
+    next: z.coerce.string().optional().default('Next').describe('The Next button'),
+    close: z.coerce.string().optional().default('Cancel').describe('The button closing the viewer'),
     max: z.coerce.number().int().min(1).max(100).optional().default(30).describe('At most this many records'),
-    area: z.coerce.string().optional().default('').describe('Record opens in the page, not a pop-up: text always in its part of the page (the site knowledge names it)'),
-    status_label: z.coerce.string().optional().default('').describe('The word before each result’s flag (e.g. "Status"), when the site knowledge names one: normal and abnormal are counted'),
-    normal_values: z.coerce.string().optional().default('Normal').describe('Flags that mean normal, comma-separated'),
-    empty_is_normal: bool(false).describe('An empty flag is normal (when the site knowledge says so)'),
+    area: z.coerce.string().optional().default('').describe('Records show in the page, not a pop-up: text always in that part (from the site knowledge)'),
+    status_label: z.coerce.string().optional().default('').describe('The word before each result’s flag (e.g. "Status"): normal and abnormal are counted'),
+    normal_values: z.coerce.string().optional().default('Normal').describe('Flags meaning normal, comma-separated'),
+    empty_is_normal: bool(false).describe('An empty flag is normal'),
   }),
   risk: 'action',
   touchesPage: true,
@@ -1162,7 +1162,7 @@ export function tableOutput(t: TableResult): string {
 const readTable: AgentTool<{ near: string; max: number }> = {
   name: 'read_table',
   description:
-    'Read a list or table on the page — each row\'s cells, and the colour each row is shown in when they differ (e.g. abnormal results in red) — to count or sort its rows without opening any of them.',
+    'Read a list or table: each row\'s cells and colour (red: abnormal) — to count or sort rows without opening them.',
   schema: z.object({
     near: z.coerce.string().optional().default('').describe('Text inside the list you mean — a column header or a row\'s text — when the page has more than one'),
     max: z.coerce.number().int().min(1).max(200).optional().default(100).describe('At most this many rows'),

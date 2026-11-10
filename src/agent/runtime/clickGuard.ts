@@ -107,8 +107,8 @@ export function undoTool(last: () => ClickRecord | null, onUndone: (note: string
   return {
     name: 'undo_click',
     description:
-      'Go back from your last click when it opened the wrong thing — a different tab, page or pop-up than you meant (for example an icon instead of the record’s name). It closes the tab it opened, goes back from the page, or closes the pop-up, and tells the user. Then do the right thing. It cannot undo something saved or sent.',
-    schema: z.object({ why: z.string().optional().describe('What went wrong, in a few words, e.g. "opened Book appointment instead of the patient"') }),
+      'Take back your last click when it opened the wrong tab, page or pop-up (an icon instead of a record’s name): closes it or goes back. Then do the right thing. Can’t undo a save or send.',
+    schema: z.object({ why: z.string().optional().describe('What went wrong, in a few words') }),
     risk: 'action',
     touchesPage: true,
     label: () => `Going back from a wrong click${last() ? ` (${last()!.label.replace(/^Clicking /, '')})` : ''}`,

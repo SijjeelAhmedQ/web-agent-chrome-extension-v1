@@ -179,7 +179,7 @@ describe('toolset', () => {
     expect(spec.description).toBe('Click visible text. On our PMS, click the patient name.');
     const props = (spec.parameters as { properties: Record<string, { description?: string }> }).properties;
     expect(props.near.description).toBe('The date of birth in that row');
-    expect(props.text.description).toMatch(/visible text/);
+    expect(props.text.description).toMatch(/Arya STARK/); // untouched: the tool's own
     expect(tools.find((t) => t.name === 'click_text')!.alwaysAsk).toBe(true);
     // Untouched tools are sent as they are.
     expect(tools.find((t) => t.name === 'click')!.alwaysAsk).toBeUndefined();

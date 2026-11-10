@@ -7,6 +7,9 @@ import { BUILT_IN_STAMP } from '@/shared/constants/builtIn';
 import { normalizeConfig, normalizeSite } from '@/shared/storage/configStore';
 import { corrected, knowledgeSection, oneSlip } from './planner/siteKnowledge';
 import { listsEveryControl } from './runtime/agentRun';
+import { barMembers } from '@/extension/content/snapshot';
+import { buildToolset, toolSpecs } from './tools/registry';
+import { fillFormTool } from './runtime/fillForm';
 import { buildSystemPrompt } from './planner/systemPrompt';
 import { patientFrom } from './runtime/directTask';
 import { formatSnapshot } from './tools/format';
@@ -195,5 +198,49 @@ describe('the search bar', () => {
     const withIt = buildSystemPrompt({ agent, toolNames: ['read_page', 'click', 'type', 'find_element'], page: { title: '', url: '' }, readOnly: false, siteKnowledge: '', alwaysSkills: [], onDemandSkills: [] } as never);
     expect(without).not.toContain('find_element');
     expect(withIt).toContain('find_element');
+  });
+});
+
+describe('an overview lists the search bar', () => {
+  it('its fields, dropdowns and buttons — not a long list’s repeated buttons', () => {
+    const patients = Array.from({ length: 30 }, (_, i) => `<li><button>P${i}</button><button>Pin patient</button><button>Inbox scope</button></li>`).join('');
+    document.body.innerHTML = `
+      <header><div class="bar">
+        <input id="name" placeholder="Patient Name" />
+        <div class="ant-select" id="status"><div class="ant-select-selector">Status (All)</div></div>
+        <input id="from" placeholder="From" /><input id="to" placeholder="To" />
+        <button id="reset">Reset</button><button id="search">Search</button>
+      </div></header>
+      <ul>${patients}</ul>`;
+    const elements = Array.from(document.querySelectorAll('input,button,.ant-select'));
+    const field = (el: Element) => el.matches('input') || el.matches('.ant-select');
+    const bar = barMembers(elements, field);
+    const ids = [...bar].map((el) => el.id).filter(Boolean).sort();
+    expect(ids).toEqual(['from', 'name', 'reset', 'search', 'status', 'to']);
+    expect([...bar].some((el) => el.textContent === 'Pin patient')).toBe(false);
+  });
+
+  it('a lone field takes no buttons with it', () => {
+    document.body.innerHTML = '<div><input id="q" /><button id="go">Go</button></div><div><button>A</button></div>';
+    const elements = Array.from(document.querySelectorAll('input,button'));
+    expect([...barMembers(elements, (el) => el.matches('input'))].map((el) => el.id)).toEqual(['q']);
+  });
+});
+
+describe('the tools as the model gets them', () => {
+  const config = normalizeConfig(undefined);
+  const agent = config.agents.find((x) => x.id === 'agent-smart-inbox')!;
+  const specs = toolSpecs([...buildToolset(agent, config, 'https://inbox-app-dev.vitonta.com/').tools, fillFormTool]);
+
+  it('carry no empty defaults or id minimums', () => {
+    const text = JSON.stringify(specs);
+    expect(text).not.toContain('"default":""');
+    expect(text).not.toContain('"default":false');
+    expect(text).not.toContain('exclusiveMinimum');
+    expect(text).toContain('"default":true'); // type's clear: a real default stays
+  });
+
+  it('are short', () => {
+    expect(JSON.stringify(specs).length).toBeLessThan(8_500); // 11,031 before the short descriptions
   });
 });
