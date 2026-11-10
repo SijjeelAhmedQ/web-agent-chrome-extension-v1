@@ -7,6 +7,7 @@ import { BUILT_IN_STAMP } from '@/shared/constants/builtIn';
 import { normalizeConfig, normalizeSite } from '@/shared/storage/configStore';
 import { corrected, knowledgeSection, oneSlip } from './planner/siteKnowledge';
 import { listsEveryControl } from './runtime/agentRun';
+import { buildSystemPrompt } from './planner/systemPrompt';
 import { patientFrom } from './runtime/directTask';
 import { formatSnapshot } from './tools/format';
 import { sitesFor } from './tools/registry';
@@ -46,6 +47,7 @@ describe('the knowledge for showing and counting', () => {
     const show = smart[0].knowledge.find((e) => e.id === 'kb_smart_show')!.content;
     expect(show).toContain('Never "Update & Search"');
     expect(show).toContain('select_option("Status (All)", "Abnormal")');
+    expect(smart[0].knowledge.find((e) => e.id === 'kb_smart_2')!.content).toContain('never "Update & Search"');
     expect(smart[0].askBefore).toContain('Update & Search');
   });
 
@@ -166,5 +168,32 @@ describe('fewer calls', () => {
     expect(listsEveryControl('Interactive elements (↓ = outside the visible area):\n[1] button "Search"')).toBe(true);
     expect(listsEveryControl('Interactive elements (↓ = outside the visible area):\n[1] button "Search"\n(+40 more not listed — use find_element)')).toBe(false);
     expect(listsEveryControl('Error: the page could not be read')).toBe(false);
+  });
+});
+
+describe('the search bar', () => {
+  const findRecords = () => smart[0].knowledge.find((e) => e.id === 'kb_smart_2')!.content;
+
+  it('says how to set every field, in one fill_form', () => {
+    const text = findRecords();
+    for (const field of ['"Date range"', 'placeholder "From" and "To"', '"Category (All)"', '"Message Subject (All)"', '"Providers (All)"', '"Sender (All)"', '"AI (All)"', '"Status (All)"', '"File (All)"', 'ONE fill_form']) expect(text).toContain(field);
+  });
+
+  it('resets once, never twice', () => {
+    expect(findRecords()).toContain('once in a task, never a second time');
+  });
+
+  it('reaches a request by dates, in a small prompt too', () => {
+    const shown = knowledgeSection(smart, 'show all inbox records from 10/03/2026 10/11/2026', 16_000, true).text;
+    expect(shown).toContain('### Workflow: Find records — search and filters');
+    expect(shown).toContain('### Workflow: Show records — the filter, and nothing more');
+  });
+
+  it('a prompt without find_element doesn’t name it', () => {
+    const agent = { name: 'A', description: '', instructions: '' } as never;
+    const without = buildSystemPrompt({ agent, toolNames: ['read_page', 'click', 'type'], page: { title: '', url: '' }, readOnly: false, siteKnowledge: '', alwaysSkills: [], onDemandSkills: [] } as never);
+    const withIt = buildSystemPrompt({ agent, toolNames: ['read_page', 'click', 'type', 'find_element'], page: { title: '', url: '' }, readOnly: false, siteKnowledge: '', alwaysSkills: [], onDemandSkills: [] } as never);
+    expect(without).not.toContain('find_element');
+    expect(withIt).toContain('find_element');
   });
 });

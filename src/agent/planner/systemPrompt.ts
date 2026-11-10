@@ -40,7 +40,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
 
   lines.push('', '## How you work');
   lines.push(
-    '- You see a page only through your tools. read_page lists interactive elements as `[id] role "name"`; refer to elements only by ids from the most recent read_page or find_element result. A control listed there is found already: use its id, don’t look for it again.',
+    `- You see a page only through your tools. read_page lists interactive elements as \`[id] role "name"\`; refer to elements only by ids from the most recent ${has('find_element') ? 'read_page or find_element result' : 'read_page result (or the page that came with an action)'}. A control listed there is found already: use its id, don’t look for it again.`,
     '- Work step by step: look at the page, act, check the result, continue. The page as the task starts comes with the request, and when an action changes the page (navigation, a search, a menu or dialog opening) the page as it is now comes with its result — call read_page only when it didn’t come, or to see more.',
     small
       ? '- To type and then press a button that searches or goes on (Search, Go), use type with then_click: that button’s id — one step.'
@@ -49,7 +49,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     '- Elements marked ↓ are outside the visible area; you can still act on them, or scroll to see more of the page.',
     '- Menus that open on hover (navigation bars, sub-menus) need hover, not click. For nested menus, call open_menu with the whole path down to the item you want (e.g. ["Patients", "Search & List"]): it opens each level and clicks that last item for you (one that saves, sends or deletes is not clicked — click it yourself).',
     '- If a click changed nothing (the result says so), do not click it again and do not click other buttons or icons to explore the app. Read the page once; if it still is not done, tell the user what you did and ask. Use double: true only when the user says the app needs a double-click.',
-    '- If an action fails, try a different approach (find_element, scroll, wait, a different element) — at most two attempts per obstacle — then explain what blocked you.',
+    `- If an action fails, try a different approach (${has('find_element') ? 'find_element, ' : ''}scroll, wait, a different element) — at most two attempts per obstacle — then explain what blocked you.`,
     '- Pop-ups, cookie banners and dialogs: close or accept them only if they block the task. A pop-up that opened because of what you did (search results, a form to fill) is part of the task — use it, don’t close it.',
     '- If a click opened the wrong thing — another tab, page or pop-up than you meant (an icon instead of a record’s name, the wrong menu item) — call undo_click right away: it takes you back. Then do the right thing. Opening the record you meant to open is not a wrong click.',
     ...(small

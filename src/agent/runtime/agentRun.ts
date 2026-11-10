@@ -376,7 +376,12 @@ export class AgentRun {
         messages.push({ role: 'user', content: `${FIRST_PAGE}\n${page}` });
         // Every control of the page is in this read: find_element would only find again what the model was shown —
         // a call each time (four in one filter). A page too long for one read keeps it.
-        if (listsEveryControl(page)) specs = specs.filter((s) => s.name !== 'find_element');
+        // Out of the tools, the rules and the prompt — Qwen called it while it was only named in the rules.
+        if (listsEveryControl(page) && byName.delete('find_element')) {
+          specs = specs.filter((s) => s.name !== 'find_element');
+          system = systemFor(this.hereSites.length ? this.hereSites : toolset.sites);
+          messages[0] = { role: 'system', content: system };
+        }
       }
     }
 
@@ -419,7 +424,7 @@ export class AgentRun {
         tookOver = true;
         if (small) {
           small = false;
-          specs = toolSpecs(toolset.tools);
+          specs = toolSpecs(toolset.tools.filter((t) => byName.has(t.name)));
           ctx.overviewTextChars = overviewBefore;
           system = systemFor(this.hereSites.length ? this.hereSites : toolset.sites);
         }
