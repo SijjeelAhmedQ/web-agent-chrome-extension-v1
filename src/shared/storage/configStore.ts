@@ -16,6 +16,8 @@ export function stripKeys(config: AppConfig): AppConfig {
   const copy = structuredClone(config);
   copy.providers = copy.providers.map((p) => ({ ...p, apiKey: '' }));
   copy.customTools = copy.customTools.map((t) => ({ ...t, headers: '' }));
+  // The speech server's key (the Kaggle notebook's): it went into every backup file, in plain text.
+  if (copy.settings?.voice) copy.settings.voice = { ...copy.settings.voice, key: '' };
   return copy;
 }
 

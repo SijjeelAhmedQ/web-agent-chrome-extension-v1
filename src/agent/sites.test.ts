@@ -176,6 +176,17 @@ describe('adding a backup file to the setup', () => {
     expect(added).toEqual({ agents: 1, skills: backup.skills.length, customTools: backup.customTools.length, sites: 1 });
     expect(backup.providers[0].apiKey).toBe('');
   });
+
+  it('a backup without keys has no speech server key either', async () => {
+    const { stripKeys } = await import('@/shared/storage/configStore');
+    const { defaultConfig } = await import('@/shared/constants/defaults');
+    const mine = defaultConfig();
+    mine.settings.voice = { ...mine.settings.voice, serverUrl: 'https://x.trycloudflare.com', key: 'notebook-secret' };
+    const backup = stripKeys(mine);
+    expect(JSON.stringify(backup)).not.toContain('notebook-secret');
+    expect(backup.settings.voice.serverUrl).toBe('https://x.trycloudflare.com');
+    expect(mine.settings.voice.key).toBe('notebook-secret'); // the setup itself keeps it
+  });
 });
 
 describe('restoring a backup made with keys', () => {
