@@ -574,6 +574,14 @@ function cardAround(el: Element): Element | null {
   return null;
 }
 
+/** A dropdown — a native select, a combobox, an Ant Design select — or the small control that holds one. */
+const LIST_OPENER = 'select,[role=combobox],[aria-haspopup=listbox],.ant-select-selector';
+export function opensList(el: Element): boolean {
+  if (el.matches(LIST_OPENER) || el.closest('.ant-select')) return true;
+  // A wrapper around one (its label and arrow): small, or it is a whole form or row, not a dropdown.
+  return el.querySelectorAll('*').length <= 12 && !!el.querySelector(LIST_OPENER);
+}
+
 export function describeRisk(el: Element): ElementRisk {
   const info = describeElement(el);
   const form = (el as HTMLInputElement).form ?? el.closest('form');
@@ -591,6 +599,7 @@ export function describeRisk(el: Element): ElementRisk {
     role: info.role,
     tag: info.tag,
     type: info.type,
+    ...(opensList(el) ? { opensList: true } : {}),
     href: isAnchor(el) ? el.href : undefined,
     target: isAnchor(el) ? el.target : undefined,
     formHasPassword: fields.some((f) => (f as HTMLInputElement).type === 'password'),

@@ -221,13 +221,20 @@ const findElement: AgentTool<{ query: string }> = {
 
 /** Clicks a known element id and reports what happened. Shared by click and click_text. */
 async function clickById(ctx: ToolContext, elementId: number, double = false): Promise<ToolOutcome> {
+  // A dropdown, known before the click changes it: clicking it and then its option is two steps where one does.
+  const list = await ctx.browser.send({ kind: 'describe', id: elementId }).then((d) => (d?.opensList ? d.name : null), () => null);
   const tabs = await ctx.browser.watchNewTabs();
   try {
-    return await clickAndReport(ctx, elementId, double, tabs.opened);
+    const outcome = await clickAndReport(ctx, elementId, double, tabs.opened);
+    return list === null ? outcome : { ...outcome, output: `${outcome.output}\n${dropdownHint(list, elementId)}` };
   } finally {
     tabs.stop();
   }
 }
+
+/** What a click on a dropdown is told: choose in it with select_option. */
+export const dropdownHint = (name: string, id: number) =>
+  `${name ? quote(name) : 'This'} is a dropdown: choose in it with select_option (id ${id} and the option's text) — one step, not a click on the dropdown and another on its option.`;
 
 /** The page opened a new tab or pop-up window: work there. */
 /**

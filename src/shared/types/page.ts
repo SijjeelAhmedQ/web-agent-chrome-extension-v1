@@ -101,6 +101,8 @@ export interface ElementRisk {
   shown?: boolean;
   /** The words of the pop-up the control is in (a confirm's question). */
   dialogText?: string;
+  /** A dropdown: pressing it opens a list to choose from, and saves nothing (“File (All)” is a filter, not filing). */
+  opensList?: boolean;
   /** The table row the control is in (“row 3 “Bloods · CBC · …””) — which record the action is about. */
   context?: string;
   href?: string;

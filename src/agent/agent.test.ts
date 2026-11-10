@@ -3,6 +3,8 @@ import { defaultConfig } from '@/shared/constants/defaults';
 import type { ElementRisk } from '@/shared/types/page';
 import { matchesSite } from '@/shared/utils';
 import { classifyClick, classifySubmit, classifyTyping } from './execution/riskPolicy';
+import { opensList } from '@/extension/content/snapshot';
+import { dropdownHint } from './tools/browserTools';
 import { extractTextToolCalls, parseArguments, stripThinking } from './llm/parse';
 import { buildSystemPrompt } from './planner/systemPrompt';
 import { APPROVED_DONE, budgetFor, compactMessages, estimateTokens, shrinkSnapshot } from './runtime/context';
@@ -40,6 +42,29 @@ describe('matchesSite', () => {
   it('ignores junk', () => {
     expect(matchesSite('chrome://newtab', ['newtab'])).toBe(false);
     expect(matchesSite('https://a.com', ['', '  '])).toBe(false);
+  });
+});
+
+describe('a dropdown', () => {
+  it('opening one needs no approval, whatever its name', () => {
+    expect(classifyClick(risk({ name: 'File (All)', role: 'clickable', opensList: true })).consequential).toBe(false);
+    expect(classifyClick(risk({ name: 'File', role: 'button' })).consequential).toBe(true);
+    expect(classifyClick(risk({ name: 'File All Normal 3', role: 'button' })).consequential).toBe(true);
+  });
+
+  it('is known from the page', () => {
+    document.body.innerHTML = `
+      <div class="ant-select" id="a"><div class="ant-select-selector" id="b"><span>File (All)</span></div></div>
+      <label id="c">Status <select><option>All</option></select></label>
+      <button id="d">File</button>
+      <form id="e"><input /><input /><input /><input /><input /><input /><input /><select></select><button>Save</button><button>x</button><button>y</button><button>z</button><button>w</button></form>`;
+    const at = (id: string) => document.getElementById(id)!;
+    expect([opensList(at('a')), opensList(at('b')), opensList(at('c'))]).toEqual([true, true, true]);
+    expect([opensList(at('d')), opensList(at('e'))]).toEqual([false, false]);
+  });
+
+  it('a click on one points to select_option', () => {
+    expect(dropdownHint('File (All)', 12)).toContain('select_option (id 12');
   });
 });
 

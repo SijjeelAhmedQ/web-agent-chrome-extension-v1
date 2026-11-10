@@ -48,6 +48,8 @@ export function classifyClick(info: ElementRisk): RiskVerdict {
   const candidates = name.length > 60 ? RULES.slice(0, 3) : RULES;
   // Leaving a form saves nothing — even when its Cancel is a submit button (a <button> in a <form> is one).
   if (/^(cancel|close|back|no|×|✕)$/i.test(name)) return { consequential: false };
+  // Opening a dropdown only shows its options, whatever its name says (“File (All)”, “Status (All)”).
+  if (info.opensList) return { consequential: false };
 
   if ((BUTTONISH.has(info.role) || isSubmit) && CONFIRMS.test(name) && info.dialogText) {
     for (const rule of RULES) if (rule.pattern.test(info.dialogText)) return { consequential: true, consequence: rule.consequence };
