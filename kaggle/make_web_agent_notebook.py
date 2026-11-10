@@ -10,6 +10,10 @@ Builds the Web Agent's own Kaggle notebooks (the CareFlow notebook, careflow_kag
   web_agent_qwen38long_kaggle.ipynb  The same Qwen3.8 27B with 64k tokens of context instead of 16k — for long
                                    requests (several forms one after another). Set Context window = 65536 in the
                                    extension (Models → Kaggle GPU). Still the strongest tool-calling model that fits.
+  web_agent_test_kaggle.ipynb      The testing notebook: Qwen3.8 27B with 64k context (as qwen38long), and a self-test
+                                   (one tool call through the server) before it prints the address, and the two
+                                   KAGGLE_URL / KAGGLE_KEY lines for the test scripts' env file.
+  All of them install Ollama without apt-get (it can hang on Kaggle) and say how far its download is.
   web_agent_qwen3vl4b_kaggle.ipynb Qwen3-VL 4B Instruct (qwen3-vl:4b-instruct-q8_0, ~5 GB) — small and fast, sees
                                    images as well as text; one T4 is enough.
 
@@ -141,14 +145,52 @@ def load(model):
             print(f"   loading {model}: {int(time.time() - started)} s, GPU memory {used} MiB", flush=True)
     return model in in_memory()
 
-sh("apt-get update -qq && apt-get install -y -qq zstd")
 def ollama_version():
     out = subprocess.run("ollama --version", shell=True, capture_output=True, text=True).stdout + " "
     found = re.search(r"(\d+)\.(\d+)\.(\d+)", out)
     return tuple(int(x) for x in found.groups()) if found else (0, 0, 0)
 
+def install_ollama():
+    """Ollama without apt-get: on Kaggle `apt-get update` can hang for good (and install.sh needs zstd, which Kaggle
+    lacks). With zstd there, install.sh; without, Ollama's own release unpacked here with Python's zstandard."""
+    if shutil.which("zstd"):
+        sh("curl -fsSL https://ollama.com/install.sh | sh")
+        return
+    import tarfile, urllib.request
+    sh("pip install -q zstandard")
+    import zstandard
+
+    class Progress:
+        """The download, read as it is unpacked — a line every 250 MB, so a slow one is not taken for a stuck one."""
+        def __init__(self, res):
+            self.res, self.got, self.shown, self.started = res, 0, 0, time.time()
+        def read(self, n=-1):
+            data = self.res.read(n)
+            self.got += len(data)
+            if self.got - self.shown >= 250 * 1024 ** 2:
+                self.shown = self.got
+                print(f"   Ollama: {self.got // 1024 ** 2} MB in {int(time.time() - self.started)} s", flush=True)
+            return data
+
+    url = "https://ollama.com/download/ollama-linux-amd64.tar.zst"
+    print("$ (python) download and unpack", url, "→ /usr/local", flush=True)
+    try:
+        with urllib.request.urlopen(url, timeout=120) as res:
+            with zstandard.ZstdDecompressor().stream_reader(Progress(res)) as raw:
+                with tarfile.open(fileobj=raw, mode="r|") as tar:
+                    try:
+                        tar.extractall("/usr/local", filter="tar")
+                    except TypeError:  # an older Python without extraction filters
+                        tar.extractall("/usr/local")
+    except Exception as exc:  # an older release ships as .tgz
+        print("   .tar.zst failed:", exc, "— trying the .tgz", flush=True)
+        sh("curl -fsSL https://ollama.com/download/ollama-linux-amd64.tgz | tar -xzf - -C /usr/local")
+    if not shutil.which("ollama"):
+        raise SystemExit("Ollama did not install — the lines above say why.")
+
 if not shutil.which("ollama") or ollama_version() < MIN_OLLAMA:  # installed by the last run already and new enough: keep it
-    sh("curl -fsSL https://ollama.com/install.sh | sh")
+    install_ollama()
+print("Ollama", ".".join(map(str, ollama_version())), flush=True)
 start_ollama()
 sh(f"ollama pull {MODEL}")  # @SIZE@ — the first run takes a while
 sh("ollama list")
@@ -190,6 +232,32 @@ if server.poll() is not None:
     raise SystemExit("The server stopped — the log above says why.")
 sh("nvidia-smi --query-gpu=index,name,memory.used,memory.total --format=csv")
 
+def self_test():
+    """One request the way the extension sends it (address, key, a tool): does the model call the tool? It also warms
+    the model up, so the extension's first step is not the slow one. Here on Kaggle — no other service, no cost."""
+    import json, urllib.request
+    body = {"model": MODEL, "max_tokens": 200, "messages": [
+                {"role": "system", "content": "You control a web page through tools."},
+                {"role": "user", "content": "Click the Search button. Its id is 7."}],
+            "tools": [{"type": "function", "function": {"name": "click", "description": "Click an element by its id.",
+                       "parameters": {"type": "object", "properties": {"id": {"type": "integer"}}, "required": ["id"]}}}]}
+    t = time.time()
+    try:
+        req = urllib.request.Request("http://127.0.0.1:8000/vllm/v1/chat/completions", data=json.dumps(body).encode(),
+                                     headers={"Content-Type": "application/json", "X-CareFlow-Key": KEY})
+        res = json.load(urllib.request.urlopen(req, timeout=600))
+        calls = res["choices"][0]["message"].get("tool_calls") or []
+        took = round(time.time() - t, 1)
+        if calls:
+            fn = calls[0]["function"]
+            print(f"Self-test OK: the model called {fn['name']}({fn['arguments']}) in {took} s · usage {res.get('usage')}", flush=True)
+        else:
+            print(f"Self-test: an answer but no tool call ({took} s) — {str(res['choices'][0]['message'])[:300]}", flush=True)
+    except Exception as exc:
+        print("Self-test failed:", exc, "\n", tail("/kaggle/working/server.log", 20), flush=True)
+
+self_test()
+
 # 4. The public address: a Cloudflare quick tunnel (free, no account).
 if not os.access("/kaggle/working/cloudflared", os.X_OK):  # downloaded by the last run already: reuse it
     sh("wget -q -O /kaggle/working/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 && chmod +x /kaggle/working/cloudflared")
@@ -216,6 +284,9 @@ def banner(url, note=""):
     print("  Model:         ", MODEL, "— in GPU memory now:", ", ".join(in_memory()) or "none yet")
     print("  Context window:", CTX, "— set the same number in the extension")
     print("  Voice:          Whisper large-v3-turbo (same address and key)")
+    print("For the test scripts (C:/Users/92313/.webagent-kaggle.env), these two lines:")
+    print(f"  KAGGLE_URL={url}")
+    print(f"  KAGGLE_KEY={KEY}")
     print("Keep this notebook running while you use the extension.")
     print("=" * 64, flush=True)
 
@@ -261,6 +332,13 @@ PRESETS = {
     # steps instead of having them cut to fit, and the prompt is rarely rewritten, so each step reuses the cache.
     "qwen38long": {
         "@TITLE@": "Qwen3.8 27B, 64k context", "@ACCELERATOR@": "GPU T4 x2", "@MODEL@": "qwen3.8:27b-q4_K_M",
+        "@MODEL_NOTE@": "~18 GB across both T4s + ~2 GB of cache for 64k tokens; tools (the server turns thinking off unless asked)",
+        "@PARALLEL@": "1", "@LOAD_STALL_S@": "300", "@MIN_GPUS@": "2", "@SIZE@": "~18 GB", "@CTX@": "65536",
+    },
+    # The testing notebook: the long one, for the extension and the test scripts alike (both use the address and key
+    # it prints). MODEL can be any Ollama model with tools that fits ~28 GB; set Context window to CTX in the extension.
+    "test": {
+        "@TITLE@": "Qwen3.8 27B (testing), 64k context", "@ACCELERATOR@": "GPU T4 x2", "@MODEL@": "qwen3.8:27b-q4_K_M",
         "@MODEL_NOTE@": "~18 GB across both T4s + ~2 GB of cache for 64k tokens; tools (the server turns thinking off unless asked)",
         "@PARALLEL@": "1", "@LOAD_STALL_S@": "300", "@MIN_GPUS@": "2", "@SIZE@": "~18 GB", "@CTX@": "65536",
     },
