@@ -36,8 +36,9 @@ describe('the knowledge for showing and counting', () => {
     const show = smart[0].knowledge.find((e) => e.id === 'kb_smart_show')!.content;
     expect(show).toContain('in whatever words');
     expect(show).toContain("don't call read_records");
-    expect(show).toContain('In abnormal records ke sath kya karna chahte hain?');
-    expect(show).toContain('In records ke sath kya karna chahte hain?');
+    expect(show).toContain('What would you like to do with these abnormal records?');
+    expect(show).toContain('What would you like to do with these records?');
+    expect(JSON.stringify(restore)).not.toMatch(/karna chahte|ke sath|inhe /);
   });
 
   it('a summary of the list showing keeps the list', () => {
