@@ -102,6 +102,8 @@ export interface TypeResult {
   suggestions?: string[];
   /** A rich editor (contenteditable) whose caret was placed for real keyboard input — nothing typed yet. */
   awaitsInput?: boolean;
+  /** A date field that put its old date back: what was typed wasn't a date it reads. */
+  dateNotTaken?: boolean;
 }
 
 export interface SelectResult {

@@ -266,6 +266,33 @@ async function closeDatePicker(field: HTMLElement): Promise<void> {
   await sleep(150);
 }
 
+const ANT_DATE_POPUP = '.ant-picker-dropdown:not(.ant-picker-dropdown-hidden)';
+
+/**
+ * An Ant Design date field (the Smart Inbox's Date range): typed text is only a draft — it takes with Enter, and
+ * without one it is put back as it was when the field loses focus. So: Enter, as a person does after typing a date
+ * (in a range, the start's Enter moves on to the end), then a press outside closes the calendar.
+ */
+async function confirmAntDate(field: HTMLInputElement | HTMLTextAreaElement): Promise<void> {
+  const init = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, composed: true } as KeyboardEventInit;
+  field.dispatchEvent(new KeyboardEvent('keydown', init));
+  field.dispatchEvent(new KeyboardEvent('keyup', init));
+  await sleep(250);
+  const doc = field.ownerDocument;
+  if (!Array.from(doc.querySelectorAll(ANT_DATE_POPUP)).some((p) => isVisible(p))) return;
+  for (const type of ['mousedown', 'mouseup']) doc.body.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: doc.defaultView }));
+  (doc.activeElement as HTMLElement | null)?.blur?.();
+  await sleep(250);
+}
+
+/** The same date, however written: 1/3/2026 is 01/03/2026 (the same numbers in the same order). */
+export function sameDate(shown: string, typed: string): boolean {
+  const nums = (s: string) => (s.match(/\d+/g) ?? []).map(Number);
+  const a = nums(shown);
+  const b = nums(typed);
+  return b.length > 0 && a.length === b.length && a.every((n, i) => n === b[i]);
+}
+
 /** Lists of suggestions that open under a field as you type (jQuery UI autocomplete, chosen, select2, typeahead…). */
 const SUGGESTION_LISTS = '.ui-autocomplete,[role=listbox],.chosen-results,.select2-results,.tt-menu,.typeahead,.autocomplete-suggestions,.easy-autocomplete-container,.dropdown-menu';
 
@@ -300,14 +327,22 @@ export async function type(id: number, text: string, clearFirst: boolean, show: 
   dispatchPointerSequence(field);
 
   if (isInput(field) || isTextArea(field)) {
-    const start = clearFirst ? '' : field.value;
-    if (clearFirst && field.value) setFieldValue(field, '', null);
+    const antDate = !!field.closest('.ant-picker');
+    // An Ant date always holds a date: the new one replaces it in one go (emptied first, the range would change to
+    // “no start date” on the way).
+    const start = clearFirst || antDate ? '' : field.value;
+    if (clearFirst && field.value && !antDate) setFieldValue(field, '', null);
     // Key events per character for autocompletes that listen to keys; value set in one go.
     const last = text.slice(-1);
     field.dispatchEvent(new KeyboardEvent('keydown', { key: last, bubbles: true, composed: true }));
     setFieldValue(field, start + text, text);
     field.dispatchEvent(new KeyboardEvent('keyup', { key: last, bubbles: true, composed: true }));
     field.dispatchEvent(new Event('change', { bubbles: true }));
+    if (antDate) {
+      await confirmAntDate(field);
+      // Put back as it was: the date wasn't one it could read (another format) — say so, don't call it typed.
+      return { element: summary(el), value: field.value, ...(sameDate(field.value, text) ? {} : { dateNotTaken: true }) };
+    }
     await closeDatePicker(field);
     const suggestions = await suggestionsUnder(field);
     return { element: summary(el), value: field.type === 'password' ? '••••' : field.value, ...(suggestions.length ? { suggestions } : {}) };
@@ -424,11 +459,17 @@ async function chooseInCustom(el: Element, option: string, show: boolean): Promi
     if (own && isVisible(own)) return own;
     return Array.from(document.querySelectorAll('.ant-select-dropdown')).filter((d) => isVisible(d) && !d.matches('.ant-select-dropdown-hidden')).at(-1) ?? null;
   };
-  if (!popup()) {
-    dispatchPointerSequence(opener);
-    opener.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }));
-    await sleep(350);
-  }
+  // Its list is made the first time it opens, and slides in: wait for the options (up to 2 s), not a fixed moment —
+  // after 350 ms the first time, it was still empty (“no option Abnormal”), and the model clicked its way round.
+  // Still nothing open then: a second press, on its text box this time.
+  const open = async (target: Element) => {
+    dispatchPointerSequence(target);
+    target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }));
+    for (let i = 0; i < 20 && !popup()?.querySelector('.ant-select-item-option'); i++) await sleep(100);
+  };
+  if (!popup()) await open(opener);
+  if (!popup()) await open(input ?? opener);
+  else if (!popup()?.querySelector('.ant-select-item-option')) await sleep(300); // open, the options on their way
   const wanted = optionNorm(option);
   const textOf = (o: Element) => optionNorm(o.getAttribute('title') || (o as HTMLElement).innerText || '');
   const seen = new Set<string>();

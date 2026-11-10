@@ -606,6 +606,12 @@ const type: AgentTool<{ id: number; text: string; clear: boolean; submit: boolea
         : await ctx.browser.send({ kind: 'type', id: a.id, text: a.text, clear: a.clear, highlight: false });
     }
     const label = res.element.name ? quote(res.element.name) : 'the field';
+    if (res.dateNotTaken) {
+      return {
+        output: `${label} did not take ${quote(a.text)}: it put back ${quote(res.value)}. Type the date the way that one is written (the same order of day, month and year, and separators).`,
+        note: "The date didn't take",
+      };
+    }
     let output = `Typed into ${label}. It now contains: ${quote(res.value)}.${await otherChanges(ctx, a.id, form)}`;
     if (res.suggestions?.length && !a.submit) {
       output += ` A list of suggestions opened under it: ${res.suggestions.map((s) => quote(s)).join(', ')}. Typing alone chose none of them — click the one you mean (click_text with its text), or the field stays unset.`;
