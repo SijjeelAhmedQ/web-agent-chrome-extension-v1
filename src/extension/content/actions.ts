@@ -268,26 +268,56 @@ async function closeDatePicker(field: HTMLElement): Promise<void> {
 
 const ANT_DATE_POPUP = '.ant-picker-dropdown:not(.ant-picker-dropdown-hidden)';
 
+/** The calendar cell of a typed date, when its month is in view: 01/10/2026 is 1 October (else 10 January). */
+export function dateCell(popup: Element, typed: string): Element | null {
+  const n = (typed.match(/\d+/g) ?? []).map(Number);
+  if (n.length !== 3) return null;
+  const pad = (x: number) => String(x).padStart(2, '0');
+  // Ant's cells carry their date as YYYY-MM-DD in title.
+  const isos = n[0] > 31 ? [`${n[0]}-${pad(n[1])}-${pad(n[2])}`] : [`${n[2]}-${pad(n[1])}-${pad(n[0])}`, `${n[2]}-${pad(n[0])}-${pad(n[1])}`];
+  for (const iso of isos) {
+    const cells = Array.from(popup.querySelectorAll(`td[title="${iso}"]`));
+    const cell = cells.find((c) => c.matches('.ant-picker-cell-in-view')) ?? cells[0];
+    if (cell) return cell;
+  }
+  return null;
+}
+
 /**
- * An Ant Design date field (the Smart Inbox's Date range): typed text is only a draft — it takes with Enter, and
- * without one it is put back as it was when the field loses focus. So: Enter, as a person does after typing a date
- * (in a range, the start's Enter moves on to the end), then a press outside closes the calendar.
+ * An Ant Design date field (the Smart Inbox's Date range): typed text is only a draft — put back as it was when
+ * the field loses focus, unless it was taken. Typed, the calendar goes to that date (if the field allows it); so,
+ * as a person does: its day disabled there — say so; its day there — click it; not there — Enter. Then a press
+ * outside closes the calendar. What the calendar showed comes back: 'disabled', 'allowed', 'not in view' or
+ * 'no calendar'.
  */
-async function confirmAntDate(field: HTMLInputElement | HTMLTextAreaElement): Promise<void> {
-  const init = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, composed: true } as KeyboardEventInit;
-  field.dispatchEvent(new KeyboardEvent('keydown', init));
-  field.dispatchEvent(new KeyboardEvent('keyup', init));
+async function confirmAntDate(field: HTMLInputElement | HTMLTextAreaElement, typed: string): Promise<'disabled' | 'allowed' | 'not in view' | 'no calendar'> {
+  const doc = field.ownerDocument;
+  // The page reads the typing first (React, a moment later): an Enter sent at once found no date to take, the
+  // date was put back, and a date it allows (01/10/2026) was called disabled.
+  await sleep(250);
+  const popup = (): Element | null => Array.from(doc.querySelectorAll(ANT_DATE_POPUP)).filter((p) => isVisible(p)).at(-1) ?? null;
+  const calendar = popup();
+  const cell = calendar ? dateCell(calendar, typed) : null;
+  const seen = !calendar ? 'no calendar' : !cell ? 'not in view' : cell.matches('.ant-picker-cell-disabled') ? 'disabled' : 'allowed';
+  if (seen === 'allowed') {
+    dispatchPointerSequence(cell!);
+    (cell as HTMLElement).click();
+  } else if (seen !== 'disabled') {
+    const init = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, composed: true } as KeyboardEventInit;
+    field.dispatchEvent(new KeyboardEvent('keydown', init));
+    field.dispatchEvent(new KeyboardEvent('keyup', init));
+  }
   await sleep(250);
   // Always out of the field, then read: a date it refuses (disabled — after today, before the earliest it allows)
   // stays as typed text while the field has focus, and is put back only when it loses it. Read before that, it
   // looked typed (“Done”), and the model went round Expand, Clear and Type until the user stopped it.
-  const doc = field.ownerDocument;
   for (const type of ['mousedown', 'mouseup']) doc.body.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: doc.defaultView }));
   field.blur();
   const active = doc.activeElement as HTMLElement | null;
   if (active && active !== doc.body && active.closest('.ant-picker')) active.blur(); // a range's Enter moved on to its end
   await sleep(300);
-  if (Array.from(doc.querySelectorAll(ANT_DATE_POPUP)).some((p) => isVisible(p))) await sleep(300);
+  if (popup()) await sleep(300);
+  return seen;
 }
 
 /** The shape of a date as written — “10/11/2026” and “01/01/2027” alike, “2027-01-01” not. */
@@ -336,6 +366,15 @@ export async function type(id: number, text: string, clearFirst: boolean, show: 
 
   if (isInput(field) || isTextArea(field)) {
     const antDate = !!field.closest('.ant-picker');
+    if (antDate) {
+      // Which box of a range is being typed in, the page learns from its focus event — which the browser doesn't
+      // send while the side panel has the focus. Send it; then a moment for the calendar to open.
+      if (!field.ownerDocument.hasFocus()) {
+        field.dispatchEvent(new FocusEvent('focus'));
+        field.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+      }
+      await sleep(200);
+    }
     // An Ant date always holds a date: the new one replaces it in one go (emptied first, the range would change to
     // “no start date” on the way).
     const start = clearFirst || antDate ? '' : field.value;
@@ -348,19 +387,22 @@ export async function type(id: number, text: string, clearFirst: boolean, show: 
     field.dispatchEvent(new Event('change', { bubbles: true }));
     if (antDate) {
       const before = field.defaultValue || '';
-      await confirmAntDate(field);
+      const seen = await confirmAntDate(field, text);
       const kept = field.value;
       if (sameDate(kept, text)) return { element: summary(el), value: kept };
-      // Put back: written like its dates and still refused, it is a date the field doesn't allow (disabled);
-      // written otherwise, it may only be the format. Which box (From / To) — so the user is told which date.
+      // Put back. Disabled only when its day showed disabled in the calendar — or, written like the field's dates,
+      // the calendar never went to it (it goes to any date it allows). Written otherwise: the format, maybe.
+      // Its day there and allowed, and still put back: not taken, for no reason seen — not called disabled.
+      // (01/10/2026, a date it allows, was once called disabled: the typing hadn't been read yet.)
       const like = kept || before;
-      const refused = !like || dateShape(like) === dateShape(text);
-      return { element: summary(el), value: kept, dateNotTaken: { box: field.placeholder || '', refused } };
+      const shaped = !like || dateShape(like) === dateShape(text);
+      const why = seen === 'disabled' || (shaped && seen === 'not in view') ? 'disabled' : shaped ? 'unknown' : 'format';
+      return { element: summary(el), value: kept, dateNotTaken: { box: field.placeholder || '', why } };
     }
     // A date field of the browser's own with limits (min / max): a date outside them is one it doesn't allow.
     if (isInput(field) && /^(date|datetime-local|month|week|time)$/.test(field.type) && (field.validity.rangeUnderflow || field.validity.rangeOverflow)) {
       const allowed = [field.min && `from ${field.min}`, field.max && `up to ${field.max}`].filter(Boolean).join(' ');
-      return { element: summary(el), value: field.value, dateNotTaken: { box: field.placeholder || '', refused: true, ...(allowed ? { allowed } : {}) } };
+      return { element: summary(el), value: field.value, dateNotTaken: { box: field.placeholder || '', why: 'disabled', ...(allowed ? { allowed } : {}) } };
     }
     await closeDatePicker(field);
     const suggestions = await suggestionsUnder(field);

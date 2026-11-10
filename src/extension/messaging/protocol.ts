@@ -103,10 +103,11 @@ export interface TypeResult {
   /** A rich editor (contenteditable) whose caret was placed for real keyboard input — nothing typed yet. */
   awaitsInput?: boolean;
   /**
-   * A date field that put its old date back. `refused`: written like its dates, so a date it doesn't allow
-   * (disabled); otherwise maybe only the format. `box`: its placeholder (From, To).
+   * A date field that didn't take the date. `why`: 'disabled' (a date it doesn't allow — its day showed disabled,
+   * or it is outside the field's min / max), 'format' (written unlike its dates), 'unknown'. `box`: its
+   * placeholder (From, To).
    */
-  dateNotTaken?: { box: string; refused: boolean; /** The dates it allows, when the field says (“from 2025-11-10 up to 2026-11-10”). */ allowed?: string };
+  dateNotTaken?: { box: string; why: 'disabled' | 'format' | 'unknown'; /** The dates it allows, when the field says (“from 2025-11-10 up to 2026-11-10”). */ allowed?: string };
 }
 
 export interface SelectResult {

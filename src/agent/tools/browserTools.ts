@@ -607,16 +607,26 @@ const type: AgentTool<{ id: number; text: string; clear: boolean; submit: boolea
     }
     const label = res.element.name ? quote(res.element.name) : 'the field';
     if (res.dateNotTaken) {
-      const which = res.dateNotTaken.box ? `the ${res.dateNotTaken.box} date` : 'this date';
-      return res.dateNotTaken.refused
-        ? {
-            output: `${label}${res.dateNotTaken.box ? ` (${res.dateNotTaken.box})` : ''} refused ${quote(a.text)}: that date is disabled there — outside the dates it allows${res.dateNotTaken.allowed ? ` (${res.dateNotTaken.allowed})` : ''}${res.value && res.value.trim() !== a.text.trim() ?` — and it put back ${quote(res.value)}` : ''}. Don't type it again and don't search with it: tell the user ${which} ${quote(a.text)} can't be chosen${res.dateNotTaken.allowed ? ` (it allows ${res.dateNotTaken.allowed})` : ''}, and ask for another.`,
-            note: `${a.text} can't be chosen — disabled`,
-          }
-        : {
-            output: `${label} did not take ${quote(a.text)}: it put back ${quote(res.value)}. Type the date the way that one is written (the same order of day, month and year, and separators).`,
-            note: "The date didn't take",
-          };
+      const { box, why, allowed } = res.dateNotTaken;
+      const which = box ? `the ${box} date` : 'this date';
+      const field = `${label}${box ? ` (${box})` : ''}`;
+      // Not the dates it allows unless the field said them: the date it put back is not where they start or end.
+      if (why === 'disabled') {
+        return {
+          output: `${field} refused ${quote(a.text)}: that date is disabled there${allowed ? ` (it allows ${allowed})` : ''}. Don't type it again and don't search with it: tell the user ${which} ${quote(a.text)} can't be chosen${allowed ? ` (it allows ${allowed})` : " — don't guess which dates it allows"}, and ask for another.`,
+          note: `${a.text} can't be chosen — disabled`,
+        };
+      }
+      if (why === 'format') {
+        return {
+          output: `${field} did not take ${quote(a.text)}: it put back ${quote(res.value)}. Type the date the way that one is written (the same order of day, month and year, and separators).`,
+          note: "The date didn't take",
+        };
+      }
+      return {
+        output: `${field} did not take ${quote(a.text)} — the date is allowed there, but it put back ${quote(res.value)}. Try once more; if it is put back again, don't search: tell the user ${which} couldn't be set.`,
+        note: "The date didn't take",
+      };
     }
     let output = `Typed into ${label}. It now contains: ${quote(res.value)}.${await otherChanges(ctx, a.id, form)}`;
     if (res.suggestions?.length && !a.submit) {
