@@ -1,0 +1,34 @@
+
+>>> goto patients and select arya Stark
+--- 110s ---
+goto patients and select arya Stark
+Completed
+5 steps · 1m 49s
+Reading the page
+Done
+0.1s
+84 controls · Patient Search
+read_page Details
+Clicking “Arya STARK” (with “03-12-2015”)
+Done
+11s
+Opened in a new tab
+click_text Details
+Reading the page
+Done
+1s
+442 controls · Consult Detail
+read_page Details
+Clicking “×”
+Done
+4s
+click Details
+Reading the page
+Done
+0.8s
+438 controls · Consult Detail · only the changes
+read_page Details
+
+I've opened Arya STARK's consult (DOB 03-12-2015, NHI ZAA3490). I closed the Patient Alerts pop-up (allergy alert: Tramadol).
+
+There's a pop-up asking for a reason to view the patient file, and I can't fill it in without your input. What reason should I add to view the patient file?
