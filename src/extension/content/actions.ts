@@ -357,6 +357,11 @@ export async function type(id: number, text: string, clearFirst: boolean, show: 
       const refused = !like || dateShape(like) === dateShape(text);
       return { element: summary(el), value: kept, dateNotTaken: { box: field.placeholder || '', refused } };
     }
+    // A date field of the browser's own with limits (min / max): a date outside them is one it doesn't allow.
+    if (isInput(field) && /^(date|datetime-local|month|week|time)$/.test(field.type) && (field.validity.rangeUnderflow || field.validity.rangeOverflow)) {
+      const allowed = [field.min && `from ${field.min}`, field.max && `up to ${field.max}`].filter(Boolean).join(' ');
+      return { element: summary(el), value: field.value, dateNotTaken: { box: field.placeholder || '', refused: true, ...(allowed ? { allowed } : {}) } };
+    }
     await closeDatePicker(field);
     const suggestions = await suggestionsUnder(field);
     return { element: summary(el), value: field.type === 'password' ? '••••' : field.value, ...(suggestions.length ? { suggestions } : {}) };

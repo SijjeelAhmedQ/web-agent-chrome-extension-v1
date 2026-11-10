@@ -610,7 +610,7 @@ const type: AgentTool<{ id: number; text: string; clear: boolean; submit: boolea
       const which = res.dateNotTaken.box ? `the ${res.dateNotTaken.box} date` : 'this date';
       return res.dateNotTaken.refused
         ? {
-            output: `${label}${res.dateNotTaken.box ? ` (${res.dateNotTaken.box})` : ''} refused ${quote(a.text)}: that date is disabled there — outside the dates it allows — and it put back ${quote(res.value)}. Don't type it again and don't search with it: tell the user ${which} ${quote(a.text)} can't be chosen, and ask for another.`,
+            output: `${label}${res.dateNotTaken.box ? ` (${res.dateNotTaken.box})` : ''} refused ${quote(a.text)}: that date is disabled there — outside the dates it allows${res.dateNotTaken.allowed ? ` (${res.dateNotTaken.allowed})` : ''}${res.value && res.value.trim() !== a.text.trim() ?` — and it put back ${quote(res.value)}` : ''}. Don't type it again and don't search with it: tell the user ${which} ${quote(a.text)} can't be chosen${res.dateNotTaken.allowed ? ` (it allows ${res.dateNotTaken.allowed})` : ''}, and ask for another.`,
             note: `${a.text} can't be chosen — disabled`,
           }
         : {

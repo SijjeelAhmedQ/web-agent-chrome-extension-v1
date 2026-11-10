@@ -51,10 +51,20 @@ describe('type into a date field that put its old date back', () => {
     expect(out.note).toBe("01/01/2027 can't be chosen — disabled");
   });
 
-  it('the knowledge says which dates can be chosen', async () => {
+  it('a field that says its limits: they go to the user', async () => {
+    const out = await type.execute(
+      { id: 9, text: '2027-01-01', clear: true },
+      ctxWith({ element: { name: 'To', role: 'textbox' }, value: '2027-01-01', dateNotTaken: { box: '', refused: true, allowed: 'from 2025-11-10 up to 2026-11-10' } }),
+    );
+    expect(out.output).toMatch(/can't be chosen \(it allows from 2025-11-10 up to 2026-11-10\)/);
+    expect(out.output).not.toMatch(/put back/);
+  });
+
+  it('the knowledge names no fixed range: which dates are disabled can change', async () => {
     const restore = (await import('../../knowledge/web-agent-restore-indici.json')).default as { sites: { id: string; knowledge: { id: string; content: string }[] }[] };
     const search = restore.sites.find((s) => s.id === 'site-smart-inbox')!.knowledge.find((e) => e.id === 'kb_smart_2')!.content;
-    expect(search).toMatch(/Only dates from one year back up to today can be chosen/);
+    expect(search).toMatch(/Some dates may be disabled — which ones can change/);
+    expect(search).not.toMatch(/one year back up to today/);
   });
 
   it('a date that took is typed as usual', async () => {

@@ -106,7 +106,7 @@ export interface TypeResult {
    * A date field that put its old date back. `refused`: written like its dates, so a date it doesn't allow
    * (disabled); otherwise maybe only the format. `box`: its placeholder (From, To).
    */
-  dateNotTaken?: { box: string; refused: boolean };
+  dateNotTaken?: { box: string; refused: boolean; /** The dates it allows, when the field says (“from 2025-11-10 up to 2026-11-10”). */ allowed?: string };
 }
 
 export interface SelectResult {
