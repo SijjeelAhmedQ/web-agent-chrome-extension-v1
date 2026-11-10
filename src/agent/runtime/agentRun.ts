@@ -14,7 +14,7 @@ import { formatDialogs } from '../tools/format';
 import { DEFAULT_CONTEXT_WINDOW } from '../llm/ollama';
 import type { ChatMessage, ToolCall } from '../llm/types';
 import { buildSystemPrompt } from '../planner/systemPrompt';
-import { knowledgeBudget, knowledgeSection } from '../planner/siteKnowledge';
+import { knowledgeBudget, knowledgeSection, partForHere } from '../planner/siteKnowledge';
 import { buildToolset, sitesFor, toolSpecs } from '../tools/registry';
 import { ElementMemory, type AgentTool, type ApprovalRequest, type ToolContext, type ToolOutcome } from '../tools/types';
 import { APPROVED_DONE, budgetFor, clipToolOutput, compactMessages, dropEarlierPages, estimateTokens, FIRST_PAGE, isFullRead, isPageRead, PAGE_AFTER, pageIn } from './context';
@@ -337,7 +337,10 @@ export class AgentRun {
     this.doneBefore = new Set(this.checklist.size ? [] : (followUp?.doneSteps ?? []));
     const pageNote = scriptableReason(url) ?? undefined;
     const systemFor = (sites: SiteProfile[]) => {
-      const knowledge = knowledgeSection(sites, followUp ? `${followUp.task}\n${request}` : request, knowledgeBudget(contextWindowOf(provider)), small).text;
+      const asked = followUp ? `${followUp.task}\n${request}` : request;
+      // Only passing through this site on the way to another: what the way needs (what matches, the navigation), not the rest.
+      const part = partForHere(asked, sites, config.sites);
+      const knowledge = knowledgeSection(sites, part, knowledgeBudget(contextWindowOf(provider)), small || part !== asked).text;
       this.knowledgeText += `\n${knowledge}`;
       this.knowledgeNow = knowledge;
       return buildSystemPrompt({

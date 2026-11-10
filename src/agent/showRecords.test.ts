@@ -5,7 +5,7 @@ import type { AppConfig, SiteProfile } from '@/shared/types/config';
 import { defaultConfig } from '@/shared/constants/defaults';
 import { BUILT_IN_STAMP } from '@/shared/constants/builtIn';
 import { normalizeConfig, normalizeSite } from '@/shared/storage/configStore';
-import { corrected, knowledgeSection, oneSlip } from './planner/siteKnowledge';
+import { corrected, knowledgeSection, oneSlip, partForHere } from './planner/siteKnowledge';
 import { listsEveryControl } from './runtime/agentRun';
 import { barMembers } from '@/extension/content/snapshot';
 import { buildToolset, toolSpecs } from './tools/registry';
@@ -242,5 +242,39 @@ describe('the tools as the model gets them', () => {
 
   it('are short', () => {
     expect(JSON.stringify(specs).length).toBeLessThan(8_500); // 11,031 before the short descriptions
+  });
+});
+
+describe('a request that goes on to another site', () => {
+  const all = restore.sites;
+  const indici = restore.sites.filter((s) => s.id === 'site_indici');
+
+  it.each([
+    ['goto smart inbox and show me all abnormal records', 'goto smart inbox'],
+    ['goto smart AI inbox and select arya STARK patient and show me the trend of CBC of this patient.', 'goto smart AI inbox'],
+    ['open the smart inbox then show filed records', 'open the smart inbox'],
+  ])('%s: here, only the way there', (request, part) => {
+    expect(partForHere(request, indici, all)).toBe(part);
+  });
+
+  it.each(['goto smart inbox', 'show abnormal results in my inbox', 'add a task for arya stark'])('%s: all of it', (request) => {
+    expect(partForHere(request, indici, all)).toBe(request);
+  });
+
+  it('on the other site, all of it', () => {
+    expect(partForHere('goto smart inbox and show me all abnormal records', smart, all)).toBe('goto smart inbox and show me all abnormal records');
+  });
+
+  it('gives this site only what the way there needs', () => {
+    const request = 'goto smart inbox and show me all abnormal records';
+    const whole = knowledgeSection(indici, request, 16_000).text;
+    const part = knowledgeSection(indici, partForHere(request, indici, all), 16_000, true).text; // passing through: as agentRun asks for it
+    expect(part).toContain('### Workflow: Open the Smart AI Inbox');
+    expect(part).not.toContain('### Workflow: Review inbox results');
+    expect(part.length).toBeLessThan(whole.length * 0.5);
+  });
+
+  it('the answer after a filter: filters and counts, no names', () => {
+    expect(smart[0].knowledge.find((e) => e.id === 'kb_smart_show')!.content).toContain('no patient names');
   });
 });

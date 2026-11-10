@@ -54,6 +54,38 @@ export function corrected(asked: Set<string>, entries: KnowledgeEntry[]): Set<st
   );
 }
 
+/**
+ * The part of a request this site's knowledge is for. A request that names another site the user set up, with more
+ * after it (“goto smart inbox and show me all abnormal records”), does that more there: here it is only the way
+ * there. Matched on all of it, Indici's own inbox workflows came with “abnormal records” — 16,000 characters, and
+ * the model looked up the one it needed although it was in them. A site is named by the words of its name that
+ * this site's names don't have (“smart inbox”), close together (“smart AI inbox”).
+ */
+export function partForHere(request: string, here: SiteProfile[], all: SiteProfile[]): string {
+  const ours = new Set(here.flatMap((s) => norm(s.name).split(' ')).map(stem));
+  const tokens = request.split(/\s+/).filter(Boolean);
+  const words = tokens.map((t) => stem(norm(t)));
+  let end = -1;
+  for (const site of all) {
+    if (!site.enabled || here.some((h) => h.id === site.id)) continue;
+    const own = [...new Set(norm(site.name).split(' ').map(stem))].filter((w) => w.length >= 3 && !ours.has(w));
+    if (!own.length) continue;
+    for (let i = 0; i < words.length; i++) {
+      if (words[i] !== own[0]) continue;
+      let at = i;
+      const found = own.slice(1).every((w) => {
+        const j = words.findIndex((x, k) => k > at && k <= at + 2 && x === w);
+        if (j < 0) return false;
+        at = j;
+        return true;
+      });
+      if (found && (end < 0 || at < end)) end = at;
+      if (found) break;
+    }
+  }
+  return end >= 0 && end < tokens.length - 1 ? tokens.slice(0, end + 1).join(' ') : request;
+}
+
 /** How well an entry matches a request: shared words, title and example count most. */
 export function relevance(entry: KnowledgeEntry, request: string): number {
   const asked = wordsOf(request);
