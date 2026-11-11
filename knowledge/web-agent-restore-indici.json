@@ -412,7 +412,6 @@
         "Inactive",
         "Mark as Primary",
         "Call",
-        "Diagnostic Comment",
         "Add task",
         "Add urgent",
         "Add diagnosis",
@@ -512,22 +511,22 @@
         {
           "id": "kb_smart_6",
           "kind": "workflow",
-          "title": "File records",
-          "content": "- \"File\": the open record. \"Unfile\": a record already filed. \"File All Normal <n>\": the patient's n unfiled normal records. \"File All <n>\": all n unfiled records of the patient.\n1. Open the patient (and the record, for File). Tell the user what will be filed — how many records, and whether any is abnormal — then click the button; the user approves it.\n2. Never use \"File All\" when an abnormal record is among them unless the user said so.\n3. Check it: the record now shows \"Unfile\", and the counts on the buttons went down. Tell the user.\n4. Unfile: a filed record doesn't show in the patient's default scope — open_menu [\"Inbox scope for <name>\", \"Show all filed for this patient\"], open the record, click \"Unfile\"; the user approves it. Check: the record shows \"File\" again.",
-          "trigger": "file arya stark’s normal results",
+          "title": "File and unfile records — File, Unfile, File All, File All Normal",
+          "content": "- \"File\": the open record. \"Unfile\": a record already filed. \"File All Normal <n>\": the patient's n unfiled normal records. \"File All <n>\": all n unfiled records of the patient.\n1. Open the patient (and the record, for File), then click the button at once — its approval card shows the user what is filed. In your answer say how many records were filed and whether any was abnormal.\n2. Never use \"File All\" when an abnormal record is among them unless the user said so.\n3. Check it: the record now shows \"Unfile\", and the counts on the buttons went down. Tell the user.\n4. Unfile: a filed record doesn't show in the patient's default scope — open_menu [\"Inbox scope for <name>\", \"Show all filed for this patient\"], open the record, click \"Unfile\"; the user approves it. Check: the record shows \"File\" again.\n5. \"File this record and go to the next patient\" (in either order of words): File the record open now first (approved) — one that shows \"Unfile\" is filed already: say so — then click the next patient's name below in the list on the left. The next patient is the next name in that list; \"Next\" at the bottom of the record is the same patient's next record.\n6. \"Unfile the one you just filed\": only a record filed in this chat — if none was, say so and unfile nothing.",
+          "trigger": "file arya stark’s normal results; file, unfile, filed, file all, file all normal, next patient",
           "enabled": true,
           "createdAt": 1792999777295,
-          "updatedAt": 1792999777295
+          "updatedAt": 1794389206421
         },
         {
           "id": "kb_smart_7",
           "kind": "workflow",
           "title": "Add a diagnostic comment — one record or several",
-          "content": "One record:\n1. Open the record. The \"Diagnostic Comment\" box saves itself as you type (\"Saved\" shows beside it): type the user's words, exactly — never words of your own — once the user has approved it.\n2. If \"Save diagnostic comment\" is enabled after typing, click it; if it is greyed out, it is saved already. Check that \"Saved\" shows, then tell the user.\n3. To remove a comment, clear the box (the user approves it).\nSeveral records (\"comment X on all abnormal records of <patient>\"):\n1. Narrow the list as for a summary (workflow \"Summarise records\"): the patient's name, Status Abnormal (or what the user named), open_menu [\"Inbox scope for <name>\", \"Show all for this patient\"] if filed ones are meant too. Search.\n2. Say how many records that is (the counts at the top), then go through them from \"1 / n\" with Next — the same records, in order. On each: read its Diagnostic Comment box (read_page shows its text), type the words (the user approves each), check \"Saved\".\n3. A box that already has a comment: don't replace it unnoticed — ask the user, once, whether to replace those comments or add the words after them. Adding is typing with clear false, starting with a space (\" hello world\"), so the words don't run into the old comment. A record \"already has\" the words only when they are there exactly — \"heelo world\" is not \"hello world\".\n4. Only those records: stop at \"n / n\". At the end list each record (subject, date) and whether it got the comment — from what you typed and saw \"Saved\" for, not from memory.",
+          "content": "One record:\n1. Open the record. The \"Diagnostic Comment\" box saves itself as you type (\"Saved\" shows beside it): type the user's words, exactly — never words of your own. No approval: the user chose to have comments typed straight in.\n2. If \"Save diagnostic comment\" is enabled after typing, click it; if it is greyed out, it is saved already. Check that \"Saved\" shows, then tell the user.\n3. To remove a comment, clear the box (the user approves it).\nSeveral records (\"comment X on all abnormal records of <patient>\"):\n1. Narrow the list as for a summary (workflow \"Summarise records\"): the patient's name, Status Abnormal (or what the user named), open_menu [\"Inbox scope for <name>\", \"Show all for this patient\"] if filed ones are meant too. Search.\n2. Say how many records that is (the counts at the top), then go through them from \"1 / n\" with Next — the same records, in order. On each: read its Diagnostic Comment box (read_page shows its text), type the words, check \"Saved\".\n3. A box that already has a comment: don't replace it unnoticed — ask the user, once, whether to replace those comments or add the words after them. Adding is typing with clear false, starting with a space (\" hello world\"), so the words don't run into the old comment. A record \"already has\" the words only when they are there exactly — \"heelo world\" is not \"hello world\".\n4. Only those records: stop at \"n / n\". At the end list each record (subject, date) and whether it got the comment — from what you typed and saw \"Saved\" for, not from memory.",
           "trigger": "comment hello world to all abnormal records of arya stark",
           "enabled": true,
           "createdAt": 1792999777295,
-          "updatedAt": 1793867427519
+          "updatedAt": 1794388828136
         },
         {
           "id": "kb_smart_8",
