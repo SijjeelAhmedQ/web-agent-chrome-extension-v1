@@ -124,7 +124,7 @@ describe('what comes a moment later', () => {
 });
 
 describe('moving to another site', () => {
-  const page = (name: string) => `Page: ${name}`;
+  const page = (name: string) => `Page: ${name}\n[1] button "${name}"`;
 
   it('drops the pages of the site before, and keeps what was done', () => {
     const messages: ChatMessage[] = [
@@ -136,7 +136,8 @@ describe('moving to another site', () => {
     ];
     dropEarlierPages(messages);
     const text = messages.map((m) => m.content).join('\n');
-    expect(text).not.toContain('dashboard');
+    expect(text).not.toContain('[1] button "dashboard"'); // its controls go
+    expect(text).toContain('(Page: dashboard)'); // which page it was stays, a line
     expect(text).toContain('trend');
     expect(messages[4].content).toContain(page('inbox'));
   });

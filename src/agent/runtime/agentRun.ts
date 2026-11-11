@@ -18,7 +18,7 @@ import { buildSystemPrompt } from '../planner/systemPrompt';
 import { knowledgeBudget, knowledgeSection, partForHere } from '../planner/siteKnowledge';
 import { buildToolset, sitesFor, toolSpecs } from '../tools/registry';
 import { ElementMemory, type AgentTool, type ApprovalRequest, type ToolContext, type ToolOutcome } from '../tools/types';
-import { APPROVED_DONE, budgetFor, clipToolOutput, compactMessages, dropEarlierPages, estimateTokens, FIRST_PAGE, isFullRead, isPageRead, PAGE_AFTER, pageIn } from './context';
+import { APPROVED_DONE, budgetFor, clipToolOutput, compactMessages, dropEarlierPages, estimateTokens, FIRST_PAGE, isFullRead, isPageRead, PAGE_AFTER, pageIn, retireEarlierPages } from './context';
 import type { ApprovalAnswer, ApprovalPrompt, RunEvent } from './events';
 import { asksUser, followUpOf, historyForModel, withoutStoppedList } from './followUp';
 import { Checklist, checklistTool } from './checklist';
@@ -409,6 +409,8 @@ export class AgentRun {
     let tookOver = false;
     for (let step = 0; step < stepLimit; step++) {
       this.throwIfCancelled();
+      // A page read a newer one replaced: one line from now on, not the whole page with every call.
+      retireEarlierPages(messages);
       // The task moved to another site (Indici → its Smart Inbox, in a new tab): the knowledge of that site, as if
       // the task had started there — a title search would miss its workflows. Back on the first site, its own again.
       if (this.hereSites.length && siteKey(this.hereSites) !== knowledgeOf) {

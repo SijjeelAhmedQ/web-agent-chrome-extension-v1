@@ -33,11 +33,35 @@ export const isFullRead = (m: ChatMessage): boolean => {
   const page = pageIn(m);
   return page !== null && !page.startsWith(DIFF_HEAD) && !page.endsWith(PLACEHOLDER);
 };
-/** A message's page read, gone: what came before it (an action's result, the head) stays. */
+/**
+ * A message's page read, gone: what came before it (an action's result, the head) stays, and which page it was
+ * (“Page: Smart AI Inbox”) — a line, so the steps still say where they were.
+ */
 function withoutPage(m: ChatMessage): ChatMessage {
-  if (m.role === 'user') return { ...m, content: `${FIRST_PAGE} ${PLACEHOLDER}` };
+  const title = pageIn(m)?.match(/^Page: .{0,120}/m)?.[0];
+  const gone = title ? `(${title.trim()}) ${PLACEHOLDER}` : PLACEHOLDER;
+  if (m.role === 'user') return { ...m, content: `${FIRST_PAGE} ${gone}` };
   const at = m.content.indexOf(`\n\n${PAGE_AFTER}\n`);
-  return { ...m, content: at < 0 ? PLACEHOLDER : `${m.content.slice(0, at)}\n${PLACEHOLDER}` };
+  return { ...m, content: at < 0 ? gone : `${m.content.slice(0, at)}\n${gone}` };
+}
+
+/** A read of a page's text (read_page mode "content"): what the model read to answer from. */
+const isTextRead = (m: ChatMessage) => /\n\nPage text/.test(pageIn(m) ?? '');
+
+/**
+ * Headroom's way with tool output: a page read is the page at that moment, and once a newer whole read is in, the
+ * older one only costs — its ids are invalid, and it went with every call after it (a seven-call task's pages grew
+ * from 2.5k to 8.9k tokens, on a model with room for 64k nothing cut them). So it becomes one line, which page it
+ * was, as soon as it is superseded — not only when the room runs out. Only reads before the latest whole read
+ * change, near the end of the conversation: the server's prompt cache still serves all before them. A read of the
+ * page's text (mode "content") stays: what it says may be the answer. Mutates.
+ */
+export function retireEarlierPages(messages: ChatMessage[]): void {
+  const latest = messages.findLastIndex(isFullRead);
+  for (let i = 0; i < latest; i++) {
+    const m = messages[i];
+    if (isPageRead(m) && !m.content.endsWith(PLACEHOLDER) && !isTextRead(m)) messages[i] = withoutPage(m);
+  }
 }
 /**
  * The task moved to another site: the pages of the site before go, all but the latest read, or they go with every

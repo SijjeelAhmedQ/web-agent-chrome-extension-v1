@@ -96,6 +96,8 @@ const isOpenRouter = (url: string) => /openrouter\.ai/.test(url);
  * prefix by itself only sometimes, a marked one every time. (OpenAI, DeepSeek… cache a repeated prefix themselves.)
  */
 const marksCache = (model: string) => /^(anthropic|google)\//i.test(model);
+/** Claude takes OpenRouter's automatic mark (one at the top of the request, moved to its end by the server). */
+export const cachesConversation = (model: string) => /^~?anthropic\//i.test(model);
 
 const isLocal = (url: string) => /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:|\/|$)/.test(url);
 
@@ -130,6 +132,10 @@ export class OpenAICompatibleClient implements LlmClient {
     Object.assign(body, thinkingFields(this.provider));
     // OpenRouter: the reply then says what the call cost and which model answered (kept in the task's log).
     if (isOpenRouter(this.provider.baseUrl)) body.usage = { include: true };
+    // Claude: the whole conversation cached as well, not only the system prompt — OpenRouter's automatic mark moves
+    // to the end of each request, so the next step reads every earlier step and page at a tenth of the price
+    // (written once at 1.25×). Without it each step paid in full for all the steps before it.
+    if (isOpenRouter(this.provider.baseUrl) && cachesConversation(req.model)) body.cache_control = { type: 'ephemeral' };
     // OpenRouter holds back credit for the model's whole output limit (65k tokens) unless told less — a key with
     // little left then fails every request. A step's reply is far shorter; high thinking gets more room.
     if (/openrouter\.ai/.test(this.provider.baseUrl)) body.max_tokens = thinkingOf(this.provider) === 'high' ? 16_384 : 8_192;
