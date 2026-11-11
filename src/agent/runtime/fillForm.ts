@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ToolCall } from '../llm/types';
 import type { AgentTool } from '../tools/types';
+import type { ElementInfo } from '@/shared/types/page';
 
 /**
  * fill_form: several fields of one form in one step. Each field is done by the runtime as its own type or
@@ -40,4 +41,21 @@ export const fieldCall = (f: FillFormArgs['fields'][number], n: number, parent: 
     : { id: `${parent}_${n}`, name: 'type', arguments: { id: f.id, text: f.text ?? '' } };
 
 /** A field's result that ends the filling: it was refused, failed, needs the user, or waits for a suggestion to be chosen. */
-export const stopsFilling = (output: string): boolean => /^(Not |Error|Stopped|Cancelled)/.test(output) || /suggestions opened under it/.test(output);
+const GO_ON = /^(search|save|submit|apply|find|go|ok|create|done|confirm|continue|next)\b/i;
+
+/**
+ * The buttons that go on from the fields just filled (Search, Save…): those of the latest page read that come
+ * right after the fields in the page, by id (ids follow the page's order). At most two.
+ */
+export function goOnButtons(onPage: Pick<ElementInfo, 'id' | 'name' | 'role'>[], fieldIds: number[]): { id: number; name: string }[] {
+  if (!fieldIds.length) return [];
+  const first = Math.min(...fieldIds);
+  const last = Math.max(...fieldIds);
+  return onPage
+    .filter((e) => e.role === 'button' && e.id > first && e.id <= last + 15 && !fieldIds.includes(e.id) && GO_ON.test(e.name.trim()))
+    .sort((a, b) => a.id - b.id) // an overview lists by importance, not page order
+    .slice(0, 2)
+    .map((e) => ({ id: e.id, name: e.name.trim() }));
+}
+
+export const stopsFilling =(output: string): boolean => /^(Not |Error|Stopped|Cancelled)/.test(output) || /suggestions opened under it/.test(output);

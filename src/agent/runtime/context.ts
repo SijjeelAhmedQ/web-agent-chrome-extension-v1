@@ -52,17 +52,30 @@ const isTextRead = (m: ChatMessage) => /\n\nPage text/.test(pageIn(m) ?? '');
  * Headroom's way with tool output: a page read is the page at that moment, and once a newer whole read is in, the
  * older one only costs — its ids are invalid, and it went with every call after it (a seven-call task's pages grew
  * from 2.5k to 8.9k tokens, on a model with room for 64k nothing cut them). So it becomes one line, which page it
- * was, as soon as it is superseded — not only when the room runs out. Only reads before the latest whole read
- * change, near the end of the conversation: the server's prompt cache still serves all before them. A read of the
- * page's text (mode "content") stays: what it says may be the answer. Mutates.
+ * was, as soon as it is superseded — not only when the room runs out.
+ *
+ * But not at any price: the server has cached the prompt (Claude, DeepSeek, Ollama's own memory), and a change
+ * in it is paid again from there on — Claude writes it anew at 1.25×, where a page left as it was is read at a
+ * tenth. Removing the first page of a short task behind a few steps cost more than it saved. So a page goes when
+ * what follows it is small next to it (a page right before the newer one: little to write again), or once the
+ * conversation is long (then every call carries the old pages). A read of the page's text (mode "content")
+ * stays: what it says may be the answer. Mutates.
  */
 export function retireEarlierPages(messages: ChatMessage[]): void {
   const latest = messages.findLastIndex(isFullRead);
-  for (let i = 0; i < latest; i++) {
+  if (latest < 0) return;
+  const long = size(messages) > LONG_CONVERSATION;
+  // Newest first: a page that goes changes the prompt from there anyway, so what is after it costs nothing more.
+  for (let i = latest - 1; i >= 0; i--) {
     const m = messages[i];
-    if (isPageRead(m) && !m.content.endsWith(PLACEHOLDER) && !isTextRead(m)) messages[i] = withoutPage(m);
+    if (!isPageRead(m) || m.content.endsWith(PLACEHOLDER) || isTextRead(m)) continue;
+    const after = size(messages.slice(i + 1, latest));
+    if (long || after * 4 <= tokensOf(m)) messages[i] = withoutPage(m);
   }
 }
+
+/** Past this many tokens, the earlier pages go whatever the cache: every call carries them. */
+const LONG_CONVERSATION = 20_000;
 /**
  * The task moved to another site: the pages of the site before go, all but the latest read, or they go with every
  * call there. The instructions changed at that moment, so the server's prompt cache has nothing to lose. Mutates.

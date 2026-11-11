@@ -3,6 +3,7 @@ import { createClient } from './llm';
 import type { ChatMessage } from './llm/types';
 import { estimateTokens, FIRST_PAGE, PAGE_AFTER, retireEarlierPages } from './runtime/context';
 import { DIFF_HEAD } from './tools/pageDiff';
+import { goOnButtons } from './runtime/fillForm';
 
 // A Smart Inbox overview: about 3,000 tokens, as in the user's logs.
 const page = (n: number) => `Page: Smart AI Inbox\nURL: https://inbox.test/\n\nInteractive elements (↓ = outside the visible area):\n${Array.from({ length: 140 }, (_, i) => `[${n * 1000 + i}] button "Patient ${i} · NHI ZAA${3400 + i}"`).join('\n')}`;
@@ -51,6 +52,23 @@ describe('Headroom: a page read a newer one replaced', () => {
     expect(msgs.map((m) => m.content)).toEqual(once);
   });
 
+  it('a page with several steps after it stays while the task is short — the cache would be written again', () => {
+    // As in the user's run: the first page, then Expand (a read of the changes), Reset, a wait, Expand again…
+    const step = (id: string, text: string): ChatMessage[] => [
+      { role: 'assistant', content: '', toolCalls: [{ id, name: 'click', arguments: { id: 1 } }] },
+      { role: 'tool', toolName: 'click', toolCallId: id, content: text },
+    ];
+    const steps = Array.from({ length: 8 }, (_, i) => step(`s${i}`, `Clicked "Button ${i}". The page changed: ${'a filter, a count, '.repeat(30)}`)).flat();
+    const msgs: ChatMessage[] = [{ role: 'system', content: 'rules' }, { role: 'user', content: 'go' }, { role: 'user', content: `${FIRST_PAGE}\n${page(1)}` }, ...steps, ...act('n', 'Clicked "Search".', 2)];
+    retireEarlierPages(msgs);
+    expect(msgs[2].content).toContain('[1000] button'); // stays: removing it would rewrite every step after it
+    // A long conversation: it goes, whatever the cache.
+    const long: ChatMessage[] = [{ role: 'system', content: 'rules' }, { role: 'user', content: 'go' }, { role: 'user', content: `${FIRST_PAGE}\n${page(1)}` }, ...Array.from({ length: 16 }, () => steps).flat(), ...act('n', 'Clicked "Search".', 2)];
+    expect(long.reduce((n, m) => n + estimateTokens(m.content), 0)).toBeGreaterThan(20_000);
+    retireEarlierPages(long);
+    expect(long[2].content).not.toContain('[1000] button');
+  });
+
   it('a seven-call task sends far fewer tokens', () => {
     // What each call carries: the conversation so far (the fixed part — rules, knowledge, tools — aside).
     const run = (retire: boolean) => {
@@ -66,6 +84,29 @@ describe('Headroom: a page read a newer one replaced', () => {
     const before = run(false);
     const after = run(true);
     expect(after).toBeLessThan(before * 0.35); // the conversation's part: about two thirds less
+  });
+});
+
+describe('fill_form names the button that goes on', () => {
+  // The Smart Inbox's search bar, as an overview lists it — by importance, not page order.
+  const onPage = [
+    { id: 1217, name: 'Search', role: 'button' },
+    { id: 1206, name: 'Date range', role: 'textbox' },
+    { id: 1207, name: 'Date range', role: 'textbox' },
+    { id: 1210, name: 'Status (All)', role: 'combobox' },
+    { id: 1216, name: 'Reset', role: 'button' },
+    { id: 1218, name: 'Update & Search', role: 'button' },
+    { id: 1537, name: 'Expand search controls', role: 'button' },
+    { id: 1300, name: 'Save diagnostic comment', role: 'button' },
+  ];
+
+  it('Search, after the fields — not Reset, not “Update & Search”, nothing far off', () => {
+    expect(goOnButtons(onPage, [1206, 1207, 1210])).toEqual([{ id: 1217, name: 'Search' }]);
+  });
+
+  it('none when there is none', () => {
+    expect(goOnButtons(onPage, [1300])).toEqual([]);
+    expect(goOnButtons(onPage, [])).toEqual([]);
   });
 });
 

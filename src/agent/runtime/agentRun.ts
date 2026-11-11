@@ -25,7 +25,7 @@ import { Checklist, checklistTool } from './checklist';
 import { meteredClient } from './costLog';
 import { pageFilledIn, patientFrom, stepFinishes } from './directTask';
 import { choosePrompt, fallbackTier, kindOfTask, parseTier, tierOfModel, tiersFor } from './modelRoute';
-import { FILL_FORM, fieldCall, fillFormSchema, fillFormTool, stopsFilling } from './fillForm';
+import { FILL_FORM, fieldCall, fillFormSchema, fillFormTool, goOnButtons, stopsFilling } from './fillForm';
 import { changedSomething, namedIn, nearlyNamed, pageState, undoTool, wrongRowClick, type ClickRecord } from './clickGuard';
 
 export { namedIn } from './clickGuard';
@@ -690,17 +690,23 @@ export class AgentRun {
     }
     const lines: string[] = [];
     const { fields } = parsed.data;
+    let stopped = false;
     for (const [n, f] of fields.entries()) {
       this.throwIfCancelled();
       const out = await this.runTool(fieldCall(f, n, call.id), byName, ctx);
       lines.push(`- field [${f.id}]: ${out}`);
       if (this.endWith) break;
       if (stopsFilling(out)) {
+        stopped = true;
         const left = fields.slice(n + 1).map((x) => `[${x.id}]`);
         if (left.length) lines.push(`Stopped here — not filled: ${left.join(', ')}. Deal with this field first, then fill the rest.`);
         break;
       }
     }
+    // The button that goes on, by its id: Claude looked it up with find_element after filling (a call) although
+    // it was in the page read. Not one that saves over something (“Update & Search”) — only the plain go-on words.
+    const next = stopped || this.endWith ? [] : goOnButtons(ctx.elements.onPage(), fields.map((f) => f.id));
+    if (next.length) lines.push(`Filled. To go on, click ${next.map((b) => `[${b.id}] "${b.name}"`).join(' or ')} (beside these fields) — no need to look for it.`);
     return lines.join('\n');
   }
 

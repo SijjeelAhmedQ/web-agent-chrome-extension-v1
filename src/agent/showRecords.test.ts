@@ -182,8 +182,10 @@ describe('the search bar', () => {
     for (const field of ['"Date range"', 'placeholder "From" and "To"', '"Category (All)"', '"Message Subject (All)"', '"Providers (All)"', '"Sender (All)"', '"AI (All)"', '"Status (All)"', '"File (All)"', 'ONE fill_form']) expect(text).toContain(field);
   });
 
-  it('resets once, never twice', () => {
-    expect(findRecords()).toContain('once in a task, never a second time');
+  it('resets only for a filter from before the request doesn’t name, at most once', () => {
+    expect(findRecords()).toContain('Reset only when a filter from before is set that this request doesn\'t name');
+    expect(findRecords()).toContain('A filter the user names now is set again in 3 over the old one: no Reset for it');
+    expect(findRecords()).toContain('At most once in a task');
   });
 
   it('reaches a request by dates, in a small prompt too', () => {
