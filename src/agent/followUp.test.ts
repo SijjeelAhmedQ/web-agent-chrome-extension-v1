@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { StepRecord } from '@/shared/types/history';
-import { asksUser, followUpOf, historyForModel, rememberedAnswer } from './runtime/followUp';
+import { asksUser, followUpOf, historyForModel, looksLikeNewTask, rememberedAnswer } from './runtime/followUp';
 
 const step = (label: string, note?: string, status: StepRecord['status'] = 'done'): StepRecord => ({ id: label, label, status, tool: 'click', startedAt: 1, ...(note ? { note } : {}) });
 
@@ -78,6 +78,18 @@ describe('a question the task waits on', () => {
     expect(asksUser('The NZF pop-up shows two interactions.\n\nDo you want me to press **OK** or **Cancel**?')).toBe(true);
     expect(asksUser('Two patients match. Would you like me to open Arya STARK or Arya STARKK?')).toBe(true);
   });
+  it('is not the open “what would you like to do” after a list is shown — the next command is a new task', () => {
+    expect(asksUser('Filtered to **Status: Abnormal**, **Category: Discharge** — Abnormal: 1.\n\nWhat would you like to do with these abnormal records?')).toBe(false);
+    expect(asksUser('Arya STARK is open.\n\nWhat would you like to do with her records?')).toBe(false);
+    expect(asksUser('You declined File All. How would you like to proceed?')).toBe(false);
+    // A question the task needs answered still is one.
+    expect(asksUser('Which patient\'s consult would you like to open?')).toBe(true);
+    expect(asksUser('Two patients match — which one should I open? Arya STARK or Arya STARKK?')).toBe(true);
+    for (const next of ['summarize first record', 'what is this patient\'s medication and medical history', 'file all normal records of arya STARK']) expect(looksLikeNewTask(next)).toBe(true);
+    expect(looksLikeNewTask('the first one')).toBe(false);
+    expect(looksLikeNewTask('follow up')).toBe(false);
+  });
+
   it('is not a polite offer at the end of a finished task', () => {
     expect(asksUser('The task is saved. Would you like me to do anything else?')).toBe(false);
     expect(asksUser('Done. Is there anything else, or something else I can help with?')).toBe(false);

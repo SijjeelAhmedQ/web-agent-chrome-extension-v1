@@ -501,13 +501,21 @@ export class AgentRun {
         } else {
           const label = !decider || step === 0 ? undefined : phase === 'answer' ? `Checking the answer · ${workerLabel}` : `Doing it · ${workerLabel}`;
           this.emit({ type: 'thinking', taskId: this.id, active: true, ...(label ? { label } : {}) });
-          const purpose = nextPurpose ?? (step === 0 ? 'First step' : phase === 'answer' ? 'Double-check' : 'Doing a step');
+          // Three steps in a row refused as repeats: the model is going round (12 page reads after a File; the same
+          // knowledge look-up ten times after a task and a recall were saved), and the task ended “I got stuck”
+          // without saying what was done. The next call has no tools: it can only tell the user.
+          const wrapUp = this.skippedInARow >= 3;
+          if (wrapUp) {
+            messages.push({ role: 'user', content: WRAP_UP });
+            this.skippedInARow = 0;
+          }
+          const purpose = wrapUp ? 'Telling the user where it stands' : (nextPurpose ?? (step === 0 ? 'First step' : phase === 'answer' ? 'Double-check' : 'Doing a step'));
           nextPurpose = null;
           response = await client.chat({
             model,
             purpose,
             messages: this.withChecklist(reasoningFor(compactMessages(messages, budget), model)),
-            tools: specs,
+            tools: wrapUp ? [] : specs,
             temperature: agent.temperature,
             signal: this.abort.signal,
           });
@@ -1449,6 +1457,8 @@ const MAX_ACTS = 6;
 const HISTORY_TURNS = 6;
 /** The most of a page's text an earlier step of a reply gets (see textAfter). */
 const TEXT_AFTER_CHARS = 2_500;
+/** The runtime's word when the model keeps repeating steps that are refused: answer now, with no tools. */
+const WRAP_UP = '(You have repeated steps that were refused as repeats — they will not get further. Stop working now and answer the user: what is done (only what you saw succeed on the page), and what is left or blocked and why.)';
 
 /** To the agent's model, when a decision model decides its steps. */
 const WORKER_ROLE = [

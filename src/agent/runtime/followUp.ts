@@ -12,7 +12,10 @@ const STOPPED = '[Where I stopped — steps already done in this task:';
 const SAVED = ' ⟪saved, not ticked yet⟫';
 
 /** Polite offers at the end of an answer are not questions the task is waiting on. */
-const OFFER = /\b(is there anything|anything else|something else|let me know|else (can|could|should) i|help (you )?with|(would|do) you (like|want) me to|you'?d like me to|shall i|want me to|need (any|more|further))\b[^?]*\?/gi;
+// “What would you like to do with these records?” — asked after every list shown — is an open offer too: taken for
+// a question the task waits on, the user's next command (“summarize first record”) became a reply to the list's
+// task, its knowledge was the list's, and the model answered with the filters again.
+const OFFER = /\b(is there anything|anything else|something else|let me know|else (can|could|should) i|help (you )?with|(would|do) you (like|want) me to|you'?d like me to|shall i|want me to|need (any|more|further)|what (else )?(would|do) you (like|want)( me)? to do|how would you like (me )?to (proceed|continue|go on))\b[^?]*\?/gi;
 
 /**
  * A question that offers choices (“Do you want me to press OK or Cancel?”, “Arya STARK or Arya STARKK?”): the task
@@ -81,7 +84,7 @@ export interface FollowUp {
 }
 
 /** Words a new task starts with (“goto patients and select…”, “add medication…”); a reply rarely does. */
-const TASK_START = /^(please\s+)?(go ?to|go|open|select|add|search|find|look ?up|create|make|book|schedule|navigate|show|click|remove|delete|update|change|edit|fill|check|send|start|close|log ?in|sign ?in)\b/i;
+const TASK_START = /^(please\s+)?(go ?to|go|open|select|add|search|find|look ?up|create|make|book|schedule|navigate|show|click|remove|delete|update|change|edit|fill|check|send|start|close|log ?in|sign ?in|summari[sz]e|file|unfile|sort|filter|read|list|tell me|give me|what is|what are|how many)\b/i;
 
 /**
  * Is this message a new task rather than an answer? It starts like a request and has a few words —
