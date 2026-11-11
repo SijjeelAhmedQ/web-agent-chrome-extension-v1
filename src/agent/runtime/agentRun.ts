@@ -14,7 +14,7 @@ import { BROWSER_TOOLS } from '../tools/browserTools';
 import { formatDialogs } from '../tools/format';
 import { DEFAULT_CONTEXT_WINDOW } from '../llm/ollama';
 import type { ChatMessage, ToolCall } from '../llm/types';
-import { buildSystemPrompt } from '../planner/systemPrompt';
+import { buildSystemPrompt, buildTaskContext, TASK_CONTEXT } from '../planner/systemPrompt';
 import { knowledgeBudget, knowledgeSection, partForHere } from '../planner/siteKnowledge';
 import { buildToolset, sitesFor, toolSpecs } from '../tools/registry';
 import { ElementMemory, type AgentTool, type ApprovalRequest, type ToolContext, type ToolOutcome } from '../tools/types';
@@ -339,30 +339,52 @@ export class AgentRun {
     // With a checklist, the ticked items already say what is done.
     this.doneBefore = new Set(this.checklist.size ? [] : (followUp?.doneSteps ?? []));
     const pageNote = scriptableReason(url) ?? undefined;
-    const systemFor = (sites: SiteProfile[]) => {
+    // The system prompt: the rules, the same from task to task (the server's prompt cache serves it, and the tools
+    // after it, at the first call of every task). What changes — the site's knowledge for this request, the tab —
+    // goes in a message of its own before the request (`contextFor`).
+    const systemFor = () =>
+      buildSystemPrompt({
+        agent,
+        toolNames: [...byName.keys()],
+        alwaysSkills: toolset.alwaysSkills,
+        onDemandSkills: toolset.onDemandSkills,
+        page: { title: '', url: '' },
+        readOnly: false,
+        small,
+        contextOutside: true,
+      });
+    const contextFor = (sites: SiteProfile[], here?: chrome.tabs.Tab | null) => {
       const asked = followUp ? `${followUp.task}\n${request}` : request;
       // Only passing through this site on the way to another: what the way needs (what matches, the navigation), not the rest.
       const part = partForHere(asked, sites, config.sites);
       const knowledge = knowledgeSection(sites, part, knowledgeBudget(contextWindowOf(provider)), small || part !== asked).text;
       this.knowledgeText += `\n${knowledge}`;
       this.knowledgeNow = knowledge;
-      return buildSystemPrompt({
-        agent,
-        toolNames: [...byName.keys()],
-        alwaysSkills: toolset.alwaysSkills,
-        onDemandSkills: toolset.onDemandSkills,
-        page: { title: tab?.title ?? '', url: tab?.url ?? url, note: pageNote ? `${pageNote} Navigate to a website if the task needs one.` : undefined },
-        readOnly: matchesSite(url, config.settings.readOnlySites),
+      const at = here ?? tab;
+      return buildTaskContext({
         siteKnowledge: knowledge,
-        small,
+        page: { title: at?.title ?? '', url: at?.url ?? url, note: pageNote ? `${pageNote} Navigate to a website if the task needs one.` : undefined },
+        readOnly: matchesSite(at?.url ?? url, config.settings.readOnlySites),
       });
     };
     const siteKey = (sites: SiteProfile[]) => sites.map((s) => s.id).join(',');
-    let system = systemFor(toolset.sites);
+    let system = systemFor();
     let knowledgeOf = siteKey(toolset.sites);
     // Earlier answers are context, not facts about the page now. The last few turns: each goes with every call.
     const history = historyForModel(this.options.history.slice(-HISTORY_TURNS), followUp);
-    const messages: ChatMessage[] = [{ role: 'system', content: system }, ...history, { role: 'user', content: followUp?.request ?? request }];
+    const messages: ChatMessage[] = [
+      { role: 'system', content: system },
+      ...history,
+      { role: 'user', content: contextFor(toolset.sites) },
+      { role: 'user', content: followUp?.request ?? request },
+    ];
+    /** The task's knowledge again, newer (another site, a bigger model): the one before becomes a line, the new one goes at the end. */
+    const renewContext = async (sites: SiteProfile[], note = '') => {
+      const before = messages.findLastIndex((m) => m.role === 'user' && m.content.startsWith(TASK_CONTEXT));
+      if (before >= 0) messages[before] = { role: 'user', content: `${TASK_CONTEXT} [replaced by a newer one below]` };
+      const here = await browser.currentTab().catch(() => null);
+      messages.push({ role: 'user', content: `${contextFor(sites, here)}${note ? `\n\n${note}` : ''}` });
+    };
     let verified = false;
     let checkedAnswer: string | null = null;
     let nudges = 0;
@@ -385,7 +407,7 @@ export class AgentRun {
         // Out of the tools, the rules and the prompt — Qwen called it while it was only named in the rules.
         if (listsEveryControl(page) && byName.delete('find_element')) {
           specs = specs.filter((s) => s.name !== 'find_element');
-          system = systemFor(this.hereSites.length ? this.hereSites : toolset.sites);
+          system = systemFor();
           messages[0] = { role: 'system', content: system };
         }
       }
@@ -415,14 +437,13 @@ export class AgentRun {
       // the task had started there — a title search would miss its workflows. Back on the first site, its own again.
       if (this.hereSites.length && siteKey(this.hereSites) !== knowledgeOf) {
         knowledgeOf = siteKey(this.hereSites);
-        system = systemFor(this.hereSites);
         dropEarlierPages(messages);
         // Steps planned on the site before (“open the patient's consult”) mean something else here.
         const names = this.hereSites.map((s) => s.name).join(', ');
-        messages.push({
-          role: 'user',
-          content: `(The task is on ${names} now. What the user taught you about it is in your instructions now, in place of the site before. Do the steps left${this.checklist.size ? ' on your checklist' : ''} the way it says here — its workflows and its controls — not the way you planned them on the site before. A step that names something of the site before (e.g. opening a patient's consult) means what it is for: do that here, the way this site does it.)`,
-        });
+        await renewContext(
+          this.hereSites,
+          `(The task is on ${names} now. What the user taught you about it is above, in place of the site before. Do the steps left${this.checklist.size ? ' on your checklist' : ''} the way it says here — its workflows and its controls — not the way you planned them on the site before. A step that names something of the site before (e.g. opening a patient's consult) means what it is for: do that here, the way this site does it.)`,
+        );
       }
       // The system prompt stays the same through the task, so the server's prompt cache serves it (and the
       // tools) at a fraction of the price on every call after the first. What changes — the checklist — goes
@@ -434,7 +455,8 @@ export class AgentRun {
           small = false;
           specs = toolSpecs(toolset.tools.filter((t) => byName.has(t.name)));
           ctx.overviewTextChars = overviewBefore;
-          system = systemFor(this.hereSites.length ? this.hereSites : toolset.sites);
+          system = systemFor();
+          await renewContext(this.hereSites.length ? this.hereSites : toolset.sites);
         }
         const tier = await this.chooseTier(jev, request, ['medium', 'big'], 'medium');
         model = auto[tier];

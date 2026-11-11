@@ -2,7 +2,8 @@
 import puppeteer from 'puppeteer';
 import { join } from 'node:path';
 import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-const DIST = join(import.meta.dirname, '..', '..', 'dist');
+// DIST=<path>: another build (a before/after comparison).
+const DIST = process.env.DIST ?? join(import.meta.dirname, '..', '..', 'dist');
 const COPY = 'C:/Users/92313/.webagent-ext';
 const b = await puppeteer.connect({ browserWSEndpoint: readFileSync(join(import.meta.dirname, '..', 'indici-live', 'indici-ws.txt'), 'utf8').trim(), defaultViewport: null });
 const idFile = join(import.meta.dirname, '..', 'indici-live', 'ext-id.txt');

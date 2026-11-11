@@ -12,7 +12,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Kaggle (C:/Users/92313/.webagent-kaggle.env: KAGGLE_URL=…, KAGGLE_KEY=…) when PROVIDER=kaggle, else OpenRouter.
 const envFile = (path) => { try { return readFileSync(path, 'utf8'); } catch { return ''; } };
 const kaggleEnv = envFile('C:/Users/92313/.webagent-kaggle.env');
-const useKaggle = process.env.PROVIDER === 'kaggle';
+// Kaggle unless OpenRouter is asked for by name: the user's OpenRouter key is paid, and since 2026-11-11 tests
+// by Claude run on Kaggle only — a missing PROVIDER must never fall back to it.
+const useKaggle = process.env.PROVIDER !== 'openrouter';
 const key = useKaggle ? kaggleEnv.match(/KAGGLE_KEY\s*=\s*(\S+)/)?.[1] : envFile('C:/Users/92313/.webagent-openrouter.env').match(/OPENROUTER_KEY\s*=\s*(\S+)/)?.[1];
 const kaggleUrl = kaggleEnv.match(/KAGGLE_URL\s*=\s*(\S+)/)?.[1]?.replace(/\/+$/, '');
 if (!key || (useKaggle && !kaggleUrl)) throw new Error(useKaggle ? 'no KAGGLE_URL / KAGGLE_KEY in the Kaggle env file' : 'no OPENROUTER_KEY in the env file');
@@ -20,7 +22,8 @@ const requests = JSON.parse(process.env.REQUESTS ?? '[]');
 const approve = process.env.APPROVE ? new RegExp(process.env.APPROVE, 'i') : null;
 // PANEL=side: drive the extension's real side panel beside the site, instead of a tab of its own.
 const sidePanel = process.env.PANEL === 'side';
-const restore = JSON.parse(readFileSync(join(import.meta.dirname, '..', '..', 'knowledge', 'web-agent-restore-indici.json'), 'utf8'));
+// KNOWLEDGE=<path>: another build's knowledge (a before/after comparison runs each build with its own).
+const restore = JSON.parse(readFileSync(process.env.KNOWLEDGE ?? join(import.meta.dirname, '..', '..', 'knowledge', 'web-agent-restore-indici.json'), 'utf8'));
 const extId = readFileSync(join(DIR, 'ext-id.txt'), 'utf8').trim();
 
 const browser = await puppeteer.connect({ browserWSEndpoint: readFileSync(join(DIR, 'indici-ws.txt'), 'utf8').trim(), defaultViewport: null, protocolTimeout: 1800000 });

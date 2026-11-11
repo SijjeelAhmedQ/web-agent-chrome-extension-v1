@@ -14,6 +14,10 @@ export function promptParts(messages: ChatMessage[], tools: ChatRequest['tools']
       const k = knowledge && m.content.includes(knowledge) ? estimateTokens(knowledge) : 0;
       parts.knowledge += k;
       parts.system += n - k;
+    } else if (m.role === 'user' && knowledge && m.content.includes(knowledge)) {
+      // The task's knowledge, in its own message before the request (the system prompt is the rules only).
+      parts.knowledge += estimateTokens(knowledge);
+      parts.rest += n - estimateTokens(knowledge);
     } else if (isPageRead(m) || (m.role === 'user' && m.content.includes('\nCurrent page:\n'))) parts.pages += n;
     else parts.rest += n;
   }

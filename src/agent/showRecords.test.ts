@@ -182,10 +182,25 @@ describe('the search bar', () => {
     for (const field of ['"Date range"', 'placeholder "From" and "To"', '"Category (All)"', '"Message Subject (All)"', '"Providers (All)"', '"Sender (All)"', '"AI (All)"', '"Status (All)"', '"File (All)"', 'ONE fill_form']) expect(text).toContain(field);
   });
 
-  it('resets only for a filter from before the request doesn’t name, at most once', () => {
-    expect(findRecords()).toContain('Reset only when a filter from before is set that this request doesn\'t name');
-    expect(findRecords()).toContain('A filter the user names now is set again in 3 over the old one: no Reset for it');
-    expect(findRecords()).toContain('At most once in a task');
+  it('clears a filter from before with its "(All)" in the same fill_form — Reset only to clear everything', () => {
+    const text = findRecords();
+    expect(text).toContain('its "(All)" option, in the same fill_form');
+    expect(text).toContain('A filter named again is just set again — no Reset');
+    expect(text).toContain('"Reset" clears every filter and closes the bar: only when the user asks to clear the filters');
+    for (const option of ['Status (All)', 'File (All)', 'Category (All)', 'AI (All)', 'AI-Autofile', 'Referrals']) expect(text).toContain(option);
+  });
+
+  it('dates only when the user gave them; the sort menu', () => {
+    const text = findRecords();
+    expect(text).toContain('Only when the user gave dates — without, leave both as they are');
+    expect(text).toContain('"Latest Received" or "Patient Name A–Z"');
+  });
+
+  it('Clinical Summary: the tabs asked for in one reply, nothing of the model’s own', () => {
+    const clinical = smart[0].knowledge.find((e) => e.id === 'kb_smart_10')!.content;
+    expect(clinical).toContain('in ONE reply');
+    expect(clinical).toContain('never a tab twice');
+    expect(clinical).toContain('nothing of your own');
   });
 
   it('reaches a request by dates, in a small prompt too', () => {

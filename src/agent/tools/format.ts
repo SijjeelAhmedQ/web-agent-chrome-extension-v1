@@ -8,6 +8,9 @@ import type { DialogInfo, ElementInfo, PageSnapshot } from '@/shared/types/page'
 /** Input types already conveyed by the role. */
 const IMPLIED_TYPES = new Set(['text', 'submit', 'button', 'reset', 'image', 'search', 'checkbox', 'radio', 'number', 'range']);
 
+/** The most of a field's value an overview shows. */
+const OVERVIEW_VALUE = 80;
+
 const q = (s: string) => `"${s.replace(/"/g, "'")}"`;
 
 export function formatElement(e: ElementInfo): string {
@@ -15,10 +18,12 @@ export function formatElement(e: ElementInfo): string {
 }
 
 /** An element as one line; in a list, one in the same table row as the line above says so instead of repeating the row. */
-function elementLine(e: ElementInfo, samePlaceAsAbove: boolean): string {
+function elementLine(e: ElementInfo, samePlaceAsAbove: boolean, overview = false): string {
   const parts = [`[${e.id}]`, e.role === 'clickable' ? e.tag : e.role, e.name ? q(e.name) : '(no label — unknown action)'];
   if (e.type && !IMPLIED_TYPES.has(e.type) && e.type !== e.role) parts.push(`type=${e.type}`);
-  if (e.value !== undefined && e.value !== '' && e.role !== 'link') parts.push(`value=${q(e.value)}`);
+  // An overview needs to know what a field holds, not all of it: a draft email or an AI suggestion ran to 200
+  // characters each, six of them on the Smart Inbox's record. The whole value is in a read of the page's text.
+  if (e.value !== undefined && e.value !== '' && e.role !== 'link') parts.push(`value=${q(overview && e.value.length > OVERVIEW_VALUE ? `${e.value.slice(0, OVERVIEW_VALUE).replace(/\s+/g, ' ').trimEnd()}…` : e.value)}`);
   else if (e.value === '' && /textbox|searchbox|combobox|spinbutton/.test(e.role)) parts.push('(empty)');
   if (e.label) parts.push(`label ${q(e.label)}`);
   if (e.placeholder) parts.push(`placeholder=${q(e.placeholder)}`);
@@ -72,7 +77,7 @@ export function formatSnapshot(s: PageSnapshot, mode: 'overview' | 'content'): s
   lines.push('Interactive elements (↓ = outside the visible area):');
   if (!s.elements.length) lines.push('(none found — the page may still be loading)');
   // A table row's icons (details, edit, task, payment…) or a pop-up's fields share their place: say it once.
-  s.elements.forEach((e, i) => lines.push(elementLine(e, !!e.context && s.elements[i - 1]?.context === e.context)));
+  s.elements.forEach((e, i) => lines.push(elementLine(e, !!e.context && s.elements[i - 1]?.context === e.context, mode === 'overview')));
   if (s.omitted > 0) lines.push(`(+${s.omitted} more not listed — a long table's later rows among them: use find_element, read_table or scroll)`);
 
   if (s.headings.length && mode === 'overview') {

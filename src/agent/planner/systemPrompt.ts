@@ -12,6 +12,25 @@ export interface PromptContext {
   /** A task of only clicks: without what forms, many records and long answers need. It goes with every call. */
   small?: boolean;
   now?: Date;
+  /**
+   * The site knowledge and the current tab go in a message of their own (`buildTaskContext`), not here: the
+   * system prompt is then the same from task to task, and the server's prompt cache serves it — with the tools
+   * after it — at the first call of every task, not only within one.
+   */
+  contextOutside?: boolean;
+}
+
+/** The head of the message with what this task needs to know: the site's knowledge and where the browser is. */
+export const TASK_CONTEXT = '(For this task — what the user taught you about this site, and where you are. Follow it as your instructions:)';
+
+/** What a task needs to know that changes from task to task: the site's knowledge and the current tab. */
+export function buildTaskContext(ctx: Pick<PromptContext, 'siteKnowledge' | 'page' | 'readOnly'>): string {
+  const lines = [TASK_CONTEXT];
+  if (ctx.siteKnowledge?.trim()) lines.push('', ctx.siteKnowledge.trim());
+  lines.push('', '## Where you are', `- Current tab: “${ctx.page.title || 'untitled'}” — ${ctx.page.url || 'no page'}`);
+  if (ctx.page.note) lines.push(`- ${ctx.page.note}`);
+  if (ctx.readOnly) lines.push('- The user has set this site to read-only: you may read and navigate, but not click, type or change anything here.');
+  return lines.join('\n');
 }
 
 /**
@@ -77,6 +96,9 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     '- When the task is complete, stop calling tools and give your answer.',
     '',
     '## How you answer',
+    // Asked to open the inbox, the model described its counts and first patient; asked for medications, it added a
+    // clinical note of its own — words to read, and to pay for.
+    '- Answer only what was asked. Asked to open or go somewhere: say it is done, in a line — not what the page holds. No summary, advice or notes of your own unless asked.',
     ...(small
       ? ['- One short sentence: what is done, or plainly what did not work. Say only what you saw or did.']
       : [
@@ -91,7 +113,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     lines.push('', '## Instructions from the user for this agent', agent.instructions.trim());
   }
 
-  if (ctx.siteKnowledge?.trim()) lines.push('', ctx.siteKnowledge.trim());
+  if (ctx.siteKnowledge?.trim() && !ctx.contextOutside) lines.push('', ctx.siteKnowledge.trim());
 
   if (ctx.alwaysSkills.length) {
     lines.push('', '## Skills');
@@ -105,6 +127,10 @@ export function buildSystemPrompt(ctx: PromptContext): string {
   lines.push('', '## Context');
   const now = ctx.now ?? new Date();
   lines.push(`- Today is ${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.${small ? '' : ` ${upcomingDays(now)}`}`);
+  if (ctx.contextOutside) {
+    lines.push('- The site’s knowledge and the current tab come in the message before the request.');
+    return lines.join('\n');
+  }
   lines.push(`- Current tab: “${ctx.page.title || 'untitled'}” — ${ctx.page.url || 'no page'}`);
   if (ctx.page.note) lines.push(`- ${ctx.page.note}`);
   if (ctx.readOnly) lines.push('- The user has set this site to read-only: you may read and navigate, but not click, type or change anything here.');

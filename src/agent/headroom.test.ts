@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createClient } from './llm';
 import type { ChatMessage } from './llm/types';
-import { estimateTokens, FIRST_PAGE, PAGE_AFTER, retireEarlierPages } from './runtime/context';
+import { compactMessages, estimateTokens, FIRST_PAGE, PAGE_AFTER, retireEarlierPages, textNotIn } from './runtime/context';
+import { buildSystemPrompt, buildTaskContext, TASK_CONTEXT } from './planner/systemPrompt';
+import { formatSnapshot } from './tools/format';
 import { DIFF_HEAD } from './tools/pageDiff';
 import { goOnButtons } from './runtime/fillForm';
 
@@ -84,6 +86,57 @@ describe('Headroom: a page read a newer one replaced', () => {
     const before = run(false);
     const after = run(true);
     expect(after).toBeLessThan(before * 0.35); // the conversation's part: about two thirds less
+  });
+});
+
+describe('a tab read before the next one keeps what it showed', () => {
+  const tabPage = (tab: string, rows: string[]) => `Page: Smart AI Inbox\nURL: https://inbox.test/\n\nInteractive elements (↓ = outside the visible area):\n${Array.from({ length: 120 }, (_, i) => `[${i}] button "Control ${i}"`).join('\n')}\n\nVisible text (start):\nClinical Summary\n${tab}\n${rows.join('\n')}`;
+  it('Medications, then Diagnosis: the medications stay, the controls go', () => {
+    const msgs: ChatMessage[] = [
+      { role: 'system', content: 'rules' },
+      { role: 'user', content: 'medications and history' },
+      { role: 'assistant', content: '', toolCalls: [{ id: 'm', name: 'click', arguments: { id: 1 } }, { id: 'd', name: 'click', arguments: { id: 2 } }] },
+      { role: 'tool', toolName: 'click', toolCallId: 'm', content: `Clicked "Medications".\n\n${PAGE_AFTER}\n${tabPage('Medications', ['Panadol 500 mg TDS', 'GlucaGen 1 mg'])}` },
+      { role: 'tool', toolName: 'click', toolCallId: 'd', content: `Clicked "Diagnosis".\n\n${PAGE_AFTER}\n${tabPage('Diagnosis', ['Diabetes mellitus type 2'])}` },
+    ];
+    retireEarlierPages(msgs);
+    expect(msgs[3].content).toContain('Panadol 500 mg TDS');
+    expect(msgs[3].content).toContain('GlucaGen 1 mg');
+    expect(msgs[3].content).not.toContain('[5] button'); // the controls went
+    expect(msgs[3].content).not.toMatch(/\nClinical Summary\n/); // what the newer read shows too isn't repeated
+    expect(textNotIn(msgs[4].content, msgs[4].content)).toBe('');
+  });
+});
+
+describe('the task’s knowledge and tab, out of the system prompt', () => {
+  const base = { agent: { name: 'A', description: '', instructions: '' } as never, toolNames: ['read_page', 'click'], alwaysSkills: [], onDemandSkills: [], readOnly: false, now: new Date(2026, 10, 11) };
+  it('the system prompt is the same on every page and for every request', () => {
+    const a = buildSystemPrompt({ ...base, page: { title: 'Inbox', url: 'https://a.test/' }, siteKnowledge: '## Knowledge A', contextOutside: true });
+    const b = buildSystemPrompt({ ...base, page: { title: 'Dashboard', url: 'https://b.test/' }, siteKnowledge: '## Knowledge B', contextOutside: true });
+    expect(a).toBe(b);
+    expect(a).not.toContain('Knowledge A');
+  });
+  it('they come in a message of their own, before the request', () => {
+    const text = buildTaskContext({ siteKnowledge: '## Knowledge A', page: { title: 'Inbox', url: 'https://a.test/' }, readOnly: false });
+    expect(text.startsWith(TASK_CONTEXT)).toBe(true);
+    expect(text).toContain('## Knowledge A');
+    expect(text).toContain('Current tab: “Inbox” — https://a.test/');
+  });
+  it('compaction never cuts it', () => {
+    const context: ChatMessage = { role: 'user', content: buildTaskContext({ siteKnowledge: `## Knowledge\n${'a rule. '.repeat(400)}`, page: { title: 'T', url: 'https://a.test/' }, readOnly: false }) };
+    const msgs: ChatMessage[] = [{ role: 'system', content: 'rules' }, { role: 'user', content: 'old request' }, { role: 'assistant', content: 'old answer '.repeat(200) }, context, { role: 'user', content: 'go' }, { role: 'tool', toolName: 'read_page', toolCallId: 'r', content: page(1) }];
+    compactMessages(msgs, 3_500);
+    expect(msgs[3].content).toBe(context.content);
+    expect(msgs[2].content.length).toBeLessThan(600);
+  });
+});
+
+describe('an overview shows the start of a long value', () => {
+  it('80 characters of a draft, the whole of it in a read of the content', () => {
+    const draft = 'Dear patient, we are writing to let you know about your recent blood test results for haemoglobin and ferritin.';
+    const snap = { title: 'Inbox', url: 'https://a.test/', scroll: { atTop: true, atBottom: true, percent: 0, screens: 1 }, frames: [], elements: [{ id: 7, role: 'textbox', name: 'Draft Email', tag: 'textarea', value: draft, inViewport: true }], omitted: 0, headings: [], text: '' } as never;
+    expect(formatSnapshot(snap, 'overview')).toContain(`value="${draft.slice(0, 80).trimEnd()}…"`);
+    expect(formatSnapshot(snap, 'content')).toContain(`value="${draft}"`);
   });
 });
 

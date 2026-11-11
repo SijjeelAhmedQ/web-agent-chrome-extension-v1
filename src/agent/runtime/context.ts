@@ -9,7 +9,9 @@ const PLACEHOLDER = '[Earlier page snapshot removed — its element ids are no l
  * A runtime message, not the user's request; a page read like any other, dropped once a newer one is in.
  */
 export const FIRST_PAGE = '(The page as the task starts — read for you, as read_page would; its ids are valid:)';
-const RUNTIME_PROMPT = /^(Before you finish|Not finished yet:|Your last reply was cut off|You have not finished the task yet|Decision \(from|\(The page as the task starts|\(Patient open in the consult)/;
+const RUNTIME_PROMPT = /^(Before you finish|Not finished yet:|Your last reply was cut off|You have not finished the task yet|Decision \(from|\(The page as the task starts|\(Patient open in the consult|\(For this task — what the user taught you)/;
+/** The message with the task's site knowledge and tab (see buildTaskContext): the instructions, never cut. */
+const isTaskContext = (m: ChatMessage) => m.role === 'user' && m.content.startsWith('(For this task — what the user taught you');
 
 /**
  * The head of the page read for the model after an action that changed it, added to that action's result
@@ -37,12 +39,32 @@ export const isFullRead = (m: ChatMessage): boolean => {
  * A message's page read, gone: what came before it (an action's result, the head) stays, and which page it was
  * (“Page: Smart AI Inbox”) — a line, so the steps still say where they were.
  */
-function withoutPage(m: ChatMessage): ChatMessage {
-  const title = pageIn(m)?.match(/^Page: .{0,120}/m)?.[0];
-  const gone = title ? `(${title.trim()}) ${PLACEHOLDER}` : PLACEHOLDER;
+function withoutPage(m: ChatMessage, newer?: string): ChatMessage {
+  const page = pageIn(m) ?? '';
+  const title = page.match(/^Page: .{0,120}/m)?.[0];
+  // What it showed that the newer read doesn't: a tab's list read before the next tab was opened (Medications, then
+  // Diagnosis). Without it the model went back for it — Medications clicked three times, eleven calls.
+  const own = newer === undefined ? '' : textNotIn(page, newer);
+  const gone = `${title ? `(${title.trim()}) ` : ''}${own ? `It showed, besides what the newer read shows:\n${own}\n` : ''}${PLACEHOLDER}`;
   if (m.role === 'user') return { ...m, content: `${FIRST_PAGE} ${gone}` };
   const at = m.content.indexOf(`\n\n${PAGE_AFTER}\n`);
   return { ...m, content: at < 0 ? gone : `${m.content.slice(0, at)}\n${gone}` };
+}
+
+/** A page read's text (after its element list): what it says, not what can be clicked. */
+const textOf = (page: string) => page.split(/\n\n(?:Visible text \(start\)|Page text):\n/)[1] ?? '';
+/** The most of an older read's own text kept when it goes. */
+const OWN_TEXT_CHARS = 1_500;
+
+/** The lines of a page's text that a newer read of it doesn't have, at most OWN_TEXT_CHARS. */
+export function textNotIn(page: string, newer: string): string {
+  const seen = new Set(textOf(newer).split('\n').map((l) => l.trim()));
+  const own = textOf(page)
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 2 && !seen.has(l) && !/^\(more text available/.test(l));
+  const text = [...new Set(own)].join('\n');
+  return text.length > OWN_TEXT_CHARS ? `${text.slice(0, OWN_TEXT_CHARS)}…` : text;
 }
 
 /** A read of a page's text (read_page mode "content"): what the model read to answer from. */
@@ -65,12 +87,13 @@ export function retireEarlierPages(messages: ChatMessage[]): void {
   const latest = messages.findLastIndex(isFullRead);
   if (latest < 0) return;
   const long = size(messages) > LONG_CONVERSATION;
+  const newest = pageIn(messages[latest]) ?? '';
   // Newest first: a page that goes changes the prompt from there anyway, so what is after it costs nothing more.
   for (let i = latest - 1; i >= 0; i--) {
     const m = messages[i];
     if (!isPageRead(m) || m.content.endsWith(PLACEHOLDER) || isTextRead(m)) continue;
     const after = size(messages.slice(i + 1, latest));
-    if (long || after * 4 <= tokensOf(m)) messages[i] = withoutPage(m);
+    if (long || after * 4 <= tokensOf(m)) messages[i] = withoutPage(m, newest);
   }
 }
 
@@ -159,7 +182,7 @@ export function compactMessages(messages: ChatMessage[], budgetTokens: number): 
   const request = messages.findLastIndex((m) => m.role === 'user' && !RUNTIME_PROMPT.test(m.content));
   for (let i = 1; i < request && total > target; i++) {
     const m = messages[i];
-    if ((m.role === 'user' || m.role === 'assistant') && m.content.length > 500) {
+    if ((m.role === 'user' || m.role === 'assistant') && m.content.length > 500 && !isTaskContext(m)) {
       total -= tokensOf(m);
       messages[i] = { ...m, content: `${m.content.slice(0, 500)} […]` };
       total += tokensOf(messages[i]);
@@ -195,7 +218,7 @@ export function compactMessages(messages: ChatMessage[], budgetTokens: number): 
   // answering): on a small context they are shortened too, or the server cuts the request instead.
   for (let i = messages.length - 1; i > request && total > budgetTokens; i--) {
     const m = messages[i];
-    if (m.role !== 'user' || m.content.length < 2_000) continue;
+    if (m.role !== 'user' || m.content.length < 2_000 || isTaskContext(m)) continue;
     const room = Math.max(MIN_PAGE_TOKENS, budgetTokens - (total - tokensOf(m)));
     total -= tokensOf(m);
     messages[i] = { ...m, content: shrinkSnapshot(m.content, room) };
@@ -206,7 +229,7 @@ export function compactMessages(messages: ChatMessage[], budgetTokens: number): 
   // is cut down; the latest page stays at its least.
   for (let i = request + 1; i < messages.length && total > budgetTokens; i++) {
     const m = messages[i];
-    if (i === latest || m.content.length <= 400) continue;
+    if (i === latest || m.content.length <= 400 || isTaskContext(m)) continue;
     const room = Math.max(100, budgetTokens - (total - tokensOf(m)));
     const keep = Math.max(300, Math.min(m.content.length - 1, room * 3));
     total -= tokensOf(m);
