@@ -6,6 +6,7 @@ import { buildSystemPrompt, buildTaskContext, TASK_CONTEXT } from './planner/sys
 import { formatSnapshot } from './tools/format';
 import { DIFF_HEAD } from './tools/pageDiff';
 import { goOnButtons } from './runtime/fillForm';
+import { labelBars } from '@/extension/content/snapshot';
 
 // A Smart Inbox overview: about 3,000 tokens, as in the user's logs.
 const page = (n: number) => `Page: Smart AI Inbox\nURL: https://inbox.test/\n\nInteractive elements (↓ = outside the visible area):\n${Array.from({ length: 140 }, (_, i) => `[${n * 1000 + i}] button "Patient ${i} · NHI ZAA${3400 + i}"`).join('\n')}`;
@@ -131,12 +132,23 @@ describe('the task’s knowledge and tab, out of the system prompt', () => {
   });
 });
 
-describe('an overview shows the start of a long value', () => {
-  it('80 characters of a draft, the whole of it in a read of the content', () => {
-    const draft = 'Dear patient, we are writing to let you know about your recent blood test results for haemoglobin and ferritin.';
-    const snap = { title: 'Inbox', url: 'https://a.test/', scroll: { atTop: true, atBottom: true, percent: 0, screens: 1 }, frames: [], elements: [{ id: 7, role: 'textbox', name: 'Draft Email', tag: 'textarea', value: draft, inViewport: true }], omitted: 0, headings: [], text: '' } as never;
-    expect(formatSnapshot(snap, 'overview')).toContain(`value="${draft.slice(0, 80).trimEnd()}…"`);
-    expect(formatSnapshot(snap, 'content')).toContain(`value="${draft}"`);
+describe('an overview shows a field’s whole value', () => {
+  it('a discharge summary written in a comment box is not cut', () => {
+    const summary = '[web agent test] DISCHARGE SUMMARY (test data). Admitted 24/10/2026, discharged 27/10/2026 after treatment for pneumonia.';
+    const snap = { title: 'Inbox', url: 'https://a.test/', scroll: { atTop: true, atBottom: true, percent: 0, screens: 1 }, frames: [], elements: [{ id: 7, role: 'textbox', name: 'Diagnostic Comment', tag: 'textarea', value: summary, inViewport: true }], omitted: 0, headings: [], text: '' } as never;
+    expect(formatSnapshot(snap, 'overview')).toContain(`value="${summary}"`);
+  });
+});
+
+describe('a Filters bar outside <main> is read', () => {
+  it('the Smart Inbox’s bar, once (the outermost), not its menu and not main', () => {
+    document.body.innerHTML = `
+      <nav><ul><li>Home: x</li><li>Patients: y</li><li>Reports: z</li></ul></nav>
+      <section class="panel"><div class="bar">Filters 6 Date range: 11/11/2025 – 11/11/2026 Status: Abnormal File: All Category: Discharge Normal: 0 Abnormal: 1</div></section>
+      <div class="list">Arya STARK NHI: ZAA3490</div>
+      <main><div>Result Date: 29/10/2026 Provider: Chadmin Category: DISCHARGE</div></main>`;
+    const bars = labelBars(document.querySelector('main')!);
+    expect(bars).toEqual(['Filters 6 Date range: 11/11/2025 – 11/11/2026 Status: Abnormal File: All Category: Discharge Normal: 0 Abnormal: 1']);
   });
 });
 

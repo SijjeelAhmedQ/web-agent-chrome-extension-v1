@@ -141,14 +141,37 @@ function headings(): string[] {
     .slice(0, 30);
 }
 
-/** Rendered text of the page's main region (falls back to the body). */
+const textOf = (el: Element) => ((el as HTMLElement).innerText ?? el.textContent ?? '').trim();
+const LABEL_VALUE = /[A-Za-z][\w ]{1,24}:\s*\S/g;
+
+/**
+ * Short bars outside the page's main region that say how it is set — “Filters 6 Date range: … Status: Abnormal
+ * Category: Discharge …”: three or more “Label: value” pairs in under 400 characters, not a menu. The Smart Inbox
+ * keeps its Filters bar outside <main>: the model never saw that a filter had taken, and set it again, and again.
+ * The outermost of nested ones, at most three, each on one line.
+ */
+export function labelBars(main: Element, root: ParentNode = document): string[] {
+  const found = Array.from(root.querySelectorAll('header,section,div,aside,ul,[role=toolbar],[role=status]')).filter((el) => {
+    if (main.contains(el) || el.contains(main) || el.closest('nav,[role=navigation],[role=menubar],[role=menu]')) return false;
+    const text = textOf(el);
+    return text.length >= 20 && text.length <= 400 && (text.match(LABEL_VALUE) ?? []).length >= 3;
+  });
+  return found
+    .filter((el) => !found.some((other) => other !== el && other.contains(el)))
+    .slice(0, 3)
+    .map((el) => textOf(el).replace(/\s*\n\s*/g, ' ').replace(/\s+/g, ' '));
+}
+
+/** Rendered text of the page's main region (falls back to the body), after the bars that say how the page is set. */
 function pageText(maxChars: number): { text: string; truncated: boolean } {
   // With pop-ups showing, the text that matters is the one in front.
   const shown = Array.from(document.querySelectorAll<HTMLElement>(DIALOGS)).filter((d) => d.getClientRects().length > 0 && !d.parentElement?.closest(DIALOGS));
   const dialog = shown.find((d) => inFront(d)) ?? shown[0];
   const main = document.querySelector<HTMLElement>('main,[role=main]');
   const root = dialog ?? (main && (main.innerText?.length ?? 0) > 200 ? main : document.body);
-  const raw = (root?.innerText ?? '')
+  const bars = root === main && main ? labelBars(main) : [];
+  const raw = [...bars, root?.innerText ?? '']
+    .join('\n')
     .replace(/[ \t]+/g, ' ')
     .replace(/\n\s*\n\s*\n+/g, '\n\n')
     .trim();
