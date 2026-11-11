@@ -646,8 +646,11 @@ export class AgentRun {
         if (recent.slice(-3).every((s) => s === signature) && recent.length >= 3) {
           output += '\nYou have repeated this exact action three times. Try a different approach or explain to the user what is blocking you.';
         }
-        // The reply's last step changed the page: the page now comes with its result.
+        // The reply's last step changed the page: the page now comes with its result. An earlier step of the
+        // same reply that changed it gets the page's text — Medications, Diagnosis and Allergies clicked in one
+        // reply, only Allergies was read, and the answer gave the allergies as medications and no diagnoses.
         if (n === response.toolCalls.length - 1) output = await this.pageAfter(call, output, byName, ctx);
+        else output = await this.textAfter(call, output, byName, ctx);
         messages.push({ role: 'tool', toolCallId: call.id, toolName: call.name, content: clipToolOutput(output) });
       }
       // Keep presence on whichever tab the agent is in now.
@@ -766,6 +769,20 @@ export class AgentRun {
     // The result's own “Call read_page” is done now: left in, the model reads the page again — a call more.
     const done = output.replace(/\b([Cc])all read_page( before acting on it| once to check| to see what is visible| to see it| to check| if you need to see the result)?/g, (_m, c: string) => `${c === 'C' ? 'S' : 's'}ee the page below`);
     return `${done}\n\n${PAGE_AFTER}\n${page}`;
+  }
+
+  /**
+   * After a step that changed the page, with more steps of the same reply to come: what the page says now (its
+   * text — not its controls, which the next step changes), so it isn't lost before the reply's last step.
+   */
+  private async textAfter(call: ToolCall, output: string, byName: Map<string, AgentTool<any>>, ctx: ToolContext): Promise<string> {
+    const tool = byName.get(call.name);
+    const acted = !!tool && tool.risk !== 'read' && tool.touchesPage;
+    if (!acted || this.endWith || !byName.has('read_page') || !/New on the page:|The page changed/.test(output) || /^(Not |Error|Stopped|Cancelled)/.test(output)) return output;
+    const page = await this.runTool({ id: uid('read_'), name: 'read_page', arguments: { mode: 'overview' } }, byName, ctx);
+    const text = page.split(/\n\n(?:Visible text \(start\)|Page text):\n/)[1]?.trim();
+    if (/^(Error|Not )/.test(page) || !text) return output;
+    return `${output}\n\n(What the page said after this step — its text:)\n${text.length > TEXT_AFTER_CHARS ? `${text.slice(0, TEXT_AFTER_CHARS)}…` : text}`;
   }
 
   /** Reads the page for the double-check, shown as its own step. Null when the page can't be read. */
@@ -1430,6 +1447,8 @@ const PAGE_COMES_WITH = new Set(['open_menu', 'navigate', 'switch_tab']);
 const MAX_ACTS = 6;
 /** Earlier messages of the conversation (requests and answers) that go with a task — with every call of it. */
 const HISTORY_TURNS = 6;
+/** The most of a page's text an earlier step of a reply gets (see textAfter). */
+const TEXT_AFTER_CHARS = 2_500;
 
 /** To the agent's model, when a decision model decides its steps. */
 const WORKER_ROLE = [
