@@ -78,6 +78,9 @@ export function buildSystemPrompt(ctx: PromptContext): string {
           '- When the request has several separate things to do (for example two medications and two diagnoses), call task_list first with one item per thing, each with all its details. Do the items one at a time in order, and call task_list with done right after finishing each one. Never redo an item marked ☑.',
         ]),
     '- Never invent facts. Report only what you actually saw on pages. If something is not on the page, say so.',
+    // “Zoom in on the document” on a record without one: Qwen opened the patient's other records one after another to
+    // find one that had a document, round and round, then zoomed a record the user never named.
+    '- “This record”, “the document”, “this patient” mean the one open now. If what the user asked for is not there (no document, no such result), say so in one line — don’t open other records or patients to look for it unless the user names one.',
     '- If what you need to click is visible text but not in the element list (a name in a table, a result in a search dropdown), use click_text with that text — and near with other text from the same row (like a date of birth) when it appears more than once.',
     '- To open or select a record in a list or table (a patient, an order…), click its name — the link text in that row — not an icon. Icons in a row do other things (book, edit, print, bill); click one only when the user asked for that action, and never click an element with no label to open a record.',
     '- Lists and tables are often paginated or filtered. If the item you need is not visible, use the page’s search box or go to the next page. Never assume, guess or reconstruct details (names, IDs, phone numbers, dates) of something you have not seen.',
