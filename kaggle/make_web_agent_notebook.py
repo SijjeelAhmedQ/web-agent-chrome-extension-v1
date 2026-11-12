@@ -50,6 +50,12 @@ try:
     KEY = UserSecretsClient().get_secret("WEB_AGENT_KEY") or KEY
 except Exception:
     pass
+# No key set (the secret not attached to this notebook): a random one for this run — never “CHANGE-ME”, which anyone
+# who finds the address could use. It is printed below; attach the WEB_AGENT_KEY secret to keep one key every run.
+if KEY == "CHANGE-ME":
+    import secrets
+    KEY = secrets.token_urlsafe(24)
+    print("No WEB_AGENT_KEY secret attached (Add-ons → Secrets → tick it for this notebook): this run uses a new random key, printed at the end.", flush=True)
 
 MODEL = "@MODEL@"   # @MODEL_NOTE@
 CTX = @CTX@                    # tokens per request — set the same Context window in the extension (Models → Kaggle GPU)
@@ -208,6 +214,21 @@ sh("nvidia-smi --query-gpu=index,name,memory.used,memory.total --format=csv")
 
 # 2. Speech recognition: Whisper large-v3-turbo (faster-whisper, fp16) — on the second T4 when there are two.
 sh("pip install -q faster-whisper fastapi uvicorn httpx")
+# Whisper on the GPU needs CUDA 12's cuBLAS and cuDNN, which this image may lack (“libcublas.so.12 is not found” —
+# then it runs on the CPU, slowly): from pip, and their folders on the library path of the server.
+sh("pip install -q nvidia-cublas-cu12 'nvidia-cudnn-cu12==9.*'", check=False)
+
+def cuda_libs():
+    """The lib folders of the pip-installed CUDA libraries, for LD_LIBRARY_PATH."""
+    found = []
+    for name in ("nvidia.cublas.lib", "nvidia.cudnn.lib"):
+        try:
+            import importlib
+            module = importlib.import_module(name)
+            found += [p for p in getattr(module, "__path__", [])]
+        except Exception:
+            pass
+    return ":".join(found + [os.environ.get("LD_LIBRARY_PATH", "")]).strip(":")
 
 # 3. The server (port 8000): the extension's address, key check, Ollama's chat with thinking off, /transcribe.
 #    It restarts a stuck Ollama by itself, with the same settings (OLLAMA_ENV).
@@ -215,7 +236,8 @@ def start_server():
     return subprocess.Popen(["python", "/kaggle/working/careflow_gpu_server.py"],
                             env={**os.environ, **OLLAMA_ENV, "CAREFLOW_KEY": KEY, "CAREFLOW_NUM_CTX": str(CTX), "CAREFLOW_STT": "whisper",
                                  "CAREFLOW_WHISPER": "large-v3-turbo", "CUDA_VISIBLE_DEVICES": "1" if gpus >= 2 else "0",
-                                 "CAREFLOW_KEEP_ALIVE": "-1", "CAREFLOW_LOAD_STALL_S": str(LOAD_STALL_S), "CAREFLOW_OLLAMA_LOG": OLLAMA_LOG},
+                                 "CAREFLOW_KEEP_ALIVE": "-1", "CAREFLOW_LOAD_STALL_S": str(LOAD_STALL_S), "CAREFLOW_OLLAMA_LOG": OLLAMA_LOG,
+                                 "LD_LIBRARY_PATH": cuda_libs()},
                             stdout=open("/kaggle/working/server.log", "a"), stderr=subprocess.STDOUT)
 
 server = start_server()
@@ -265,15 +287,27 @@ if not os.access("/kaggle/working/cloudflared", os.X_OK):  # downloaded by the l
 TUNNEL_LOG = "/kaggle/working/tunnel.log"
 
 def start_tunnel():
-    """A new quick tunnel and its address (a new one each time)."""
-    sh("pkill -x cloudflared; sleep 2", check=False)
-    proc = subprocess.Popen(["/kaggle/working/cloudflared", "tunnel", "--no-autoupdate", "--url", "http://localhost:8000"],
-                            stdout=open(TUNNEL_LOG, "w"), stderr=subprocess.STDOUT)
-    for _ in range(90):
-        time.sleep(1)
-        found = re.search(r"https://[a-z0-9-]+\.trycloudflare\.com", open(TUNNEL_LOG, errors="replace").read())
-        if found:
-            return proc, found.group(0)
+    """A new quick tunnel and its address (a new one each time). Cloudflare refuses quick tunnels for a while when
+    too many were asked for (status 429): waited out, then asked again — not the end of the notebook."""
+    for attempt, pause in enumerate([0, 30, 60, 120, 240, 300], start=1):
+        if pause:
+            print(f"   Cloudflare is limiting new tunnels (429) — trying again in {pause} s (attempt {attempt} of 6)", flush=True)
+            time.sleep(pause)
+        sh("pkill -x cloudflared; sleep 2", check=False)
+        proc = subprocess.Popen(["/kaggle/working/cloudflared", "tunnel", "--no-autoupdate", "--url", "http://localhost:8000"],
+                                stdout=open(TUNNEL_LOG, "w"), stderr=subprocess.STDOUT)
+        for _ in range(90):
+            time.sleep(1)
+            log = open(TUNNEL_LOG, errors="replace").read()
+            # The tunnel's own address — random words, e.g. https://neither-specialized-granny.trycloudflare.com —
+            # not api.trycloudflare.com, which its error lines name (it was once printed as the address).
+            found = re.search(r"https://(?!api\.)[a-z0-9]+(?:-[a-z0-9]+)+\.trycloudflare\.com", log)
+            if found:
+                return proc, found.group(0)
+            if re.search(r"status 429|Too Many Requests", log) or proc.poll() is not None:
+                break
+        if not re.search(r"status 429|Too Many Requests", open(TUNNEL_LOG, errors="replace").read()):
+            break
     raise SystemExit("No tunnel address — " + tail(TUNNEL_LOG, 20))
 
 def banner(url, note=""):
@@ -312,8 +346,11 @@ while True:
         time.sleep(10)  # one slow answer is not a dead tunnel
         if tunnel.poll() is not None or not answers(url + "/health", {"X-CareFlow-Key": KEY}):
             print("The tunnel stopped answering — opening a new one.", flush=True)
-            tunnel, url = start_tunnel()
-            banner(url, "NEW address — change it in the extension")
+            try:
+                tunnel, url = start_tunnel()
+                banner(url, "NEW address — change it in the extension")
+            except SystemExit as exc:  # Cloudflare still refusing: the model and server stay up, try again next minute
+                print(f"   No new tunnel yet ({exc}) — trying again in a minute.", flush=True)
     if time.time() - last_note >= 600:
         last_note = time.time()
         print(f"[{time.strftime('%H:%M')}] up {int((time.time() - started_at) // 60)} min · {url} · in GPU memory: {', '.join(in_memory()) or 'none'}", flush=True)
