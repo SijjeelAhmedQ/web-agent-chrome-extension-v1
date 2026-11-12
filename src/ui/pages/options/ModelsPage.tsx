@@ -389,6 +389,37 @@ function ProviderEditor({ value, onClose, onSave }: { value: { provider: Provide
             />
           </div>
         )}
+        {draft.kind === 'openai' && (
+          <div className="setting-row bare stacked">
+            <div className="setting-text">
+              <label className="setting-label" htmlFor="prov-headroom">
+                Headroom proxy (optional)
+              </label>
+              <div className="setting-desc">
+                Compresses each call's messages before they go to the model, with Headroom (github.com/headroomlabs-ai/headroom). Its
+                proxy's address — http://localhost:8787 when it runs on this computer, or this notebook's address followed by /headroom on
+                Kaggle. Empty: off. When it can't be reached, the messages go as they are.
+              </div>
+            </div>
+            <Input
+              id="prov-headroom"
+              value={draft.headroomUrl ?? ''}
+              onChange={(e) => set({ headroomUrl: e.target.value.trim() || undefined })}
+              placeholder="http://localhost:8787"
+              autoComplete="off"
+            />
+            {draft.headroomUrl && (
+              <Input.Password
+                value={draft.headroomToken ?? ''}
+                onChange={(e) => set({ headroomToken: e.target.value.trim() || undefined })}
+                placeholder="Proxy token (only if the proxy asks for one)"
+                autoComplete="off"
+                aria-label="Headroom proxy token"
+                style={{ marginTop: 6 }}
+              />
+            )}
+          </div>
+        )}
         <div className="setting-row bare stacked">
           <div className="setting-text">
             <div className="setting-label">Thinking</div>

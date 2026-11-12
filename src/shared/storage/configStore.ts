@@ -14,7 +14,7 @@ export const FRESH_INSTALL_KEY = 'wa.freshInstall';
 /** The setup without secrets: API keys and custom tools' headers emptied — for files that leave the browser. */
 export function stripKeys(config: AppConfig): AppConfig {
   const copy = structuredClone(config);
-  copy.providers = copy.providers.map((p) => ({ ...p, apiKey: '' }));
+  copy.providers = copy.providers.map((p) => ({ ...p, apiKey: '', ...(p.headroomToken ? { headroomToken: '' } : {}) }));
   copy.customTools = copy.customTools.map((t) => ({ ...t, headers: '' }));
   // The speech server's key (the Kaggle notebook's): it went into every backup file, in plain text.
   if (copy.settings?.voice) copy.settings.voice = { ...copy.settings.voice, key: '' };

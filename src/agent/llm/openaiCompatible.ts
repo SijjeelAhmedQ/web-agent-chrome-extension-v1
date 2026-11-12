@@ -1,3 +1,4 @@
+import { headroomCompress } from './headroom';
 import type { ProviderConfig } from '@/shared/types/config';
 import { thinkingOf } from '@/shared/utils';
 import { AgentError } from '@/shared/utils/errors';
@@ -142,6 +143,10 @@ export class OpenAICompatibleClient implements LlmClient {
     // The Kaggle notebook (Ollama underneath) has no limit of its own: a model that fell into repeating one line
     // wrote 8,000 tokens — ten minutes on a T4 — before it stopped. A step, or an answer, is far shorter.
     else if (this.provider.preset === 'kaggle') body.max_tokens = { off: 4_096, low: 8_192, high: 16_384 }[thinkingOf(this.provider) ?? 'off'];
+    // Headroom, when the connection names its proxy: the messages compressed there first (tool output most — page
+    // reads, records). Everything else of the request — tools, cache marks, OpenRouter's settings — stays ours.
+    const squeezed = await headroomCompress(this.provider, body.messages as unknown[], req.model);
+    if (squeezed) body.messages = squeezed.messages;
     const send = () =>
       requestJson<OpenAIResponse>(joinUrl(this.provider.baseUrl, 'chat/completions'), {
         method: 'POST',
@@ -183,7 +188,7 @@ export class OpenAICompatibleClient implements LlmClient {
       content,
       toolCalls,
       finishReason: choice.finish_reason,
-      usage: usageOf(data),
+      usage: { ...usageOf(data), ...(squeezed ? { headroom: { before: squeezed.before, after: squeezed.after } } : {}) },
       ...(choice.message.reasoning_details?.length ? { reasoning: choice.message.reasoning_details } : {}),
     };
   }

@@ -17,6 +17,7 @@
     "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
     "@reduxjs/toolkit": "^2.13.0",
     "antd": "^5.29.3",
+    "headroom-ai": "0.44.0",
     "lucide-react": "^0.468.0",
     "pdfjs-dist": "6.3.289",
     "react": "^18.3.1",

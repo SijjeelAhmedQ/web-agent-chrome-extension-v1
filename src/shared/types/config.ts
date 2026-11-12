@@ -34,6 +34,14 @@ export interface ProviderConfig {
   keyHeader?: string;
   /** How long to wait for one answer. Remote GPUs behind a tunnel can take minutes to load a model. */
   timeoutMs?: number;
+  /**
+   * Headroom (github.com/headroomlabs-ai/headroom): its proxy's address — each call's messages are compressed there
+   * (`/v1/compress`) before they go to the model. e.g. http://localhost:8787, or the Kaggle notebook's address + /headroom.
+   * Empty: off. Not reachable: the messages go as they are.
+   */
+  headroomUrl?: string;
+  /** The Headroom proxy's token (HEADROOM_PROXY_TOKEN), when it asks for one. */
+  headroomToken?: string;
   createdAt: number;
 }
 
@@ -290,6 +298,11 @@ export interface Settings {
    * Only servers that report a cost count (OpenRouter); Kaggle and local models cost nothing.
    */
   maxTaskCost?: number;
+  /**
+   * The extension's own compaction of the conversation (older page reads made a line). On by default; off only to
+   * measure Headroom on its own.
+   */
+  ownCompaction?: boolean;
 }
 
 export interface AppConfig {

@@ -47,6 +47,8 @@ export interface Usage {
   cost?: number;
   /** The model that answered — a router (Jev Router) picks one per request. */
   servedBy?: string;
+  /** Headroom's compression of this call's messages: tokens before and after, as its proxy counted them. */
+  headroom?: { before: number; after: number };
 }
 
 export interface ChatResponse {

@@ -30,7 +30,7 @@ export const CostLog = memo(function CostLog({ calls, route }: { calls: ModelCal
     <section className="cost-log" aria-label="Model calls">
       <button type="button" className="cost-head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
         <span>
-          Model calls · {s.calls} · {formatTokens(s.inputTokens)} tokens in{s.cachedTokens ? ` (${formatTokens(s.cachedTokens)} cached)` : ''} · {formatTokens(s.outputTokens)} out ·{' '}
+          Model calls · {s.calls} · {formatTokens(s.inputTokens)} tokens in{s.cachedTokens ? ` (${formatTokens(s.cachedTokens)} cached)` : ''}{headroomSaved(calls) ? ` · Headroom saved ${formatTokens(headroomSaved(calls))}` : ''} · {formatTokens(s.outputTokens)} out ·{' '}
           <strong>{cost}</strong>
         </span>
         <ChevronDown size={14} className={`chev ${open ? 'open' : ''}`} aria-hidden />
@@ -59,6 +59,7 @@ export const CostLog = memo(function CostLog({ calls, route }: { calls: ModelCal
                 {c.estimated ? '~' : ''}
                 {formatTokens(c.inputTokens ?? 0)} in{c.cachedTokens ? ` (${formatTokens(c.cachedTokens)} cached)` : ''} · {c.outputTokens !== undefined ? formatTokens(c.outputTokens) : '?'} out
                 {c.reasoningTokens ? ` (${formatTokens(c.reasoningTokens)} thinking)` : ''}
+                {c.headroom ? ` · Headroom ${formatTokens(c.headroom.before)} → ${formatTokens(c.headroom.after)}` : ''}
               </div>
               <div className="cost-detail muted">
                 Prompt: knowledge {formatTokens(c.parts.knowledge)} · instructions {formatTokens(c.parts.system)} · tools {formatTokens(c.parts.tools)} · pages {formatTokens(c.parts.pages)} · steps{' '}
@@ -71,4 +72,7 @@ export const CostLog = memo(function CostLog({ calls, route }: { calls: ModelCal
       )}
     </section>
   );
-});
+});/** Tokens Headroom took out of a task's calls (before − after, as its proxy counted). */
+const headroomSaved = (calls: { headroom?: { before: number; after: number } }[]) => calls.reduce((n, c) => n + (c.headroom ? Math.max(0, c.headroom.before - c.headroom.after) : 0), 0);
+
+

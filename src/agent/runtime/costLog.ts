@@ -76,6 +76,7 @@ export function meteredClient(
         ...(u.servedBy && u.servedBy !== req.model ? { servedBy: u.servedBy } : {}),
         inputTokens: u.inputTokens ?? parts.system + parts.knowledge + parts.tools + parts.pages + parts.rest,
         ...(u.cachedTokens ? { cachedTokens: u.cachedTokens } : {}),
+        ...(u.headroom ? { headroom: u.headroom } : {}),
         ...(u.outputTokens !== undefined ? { outputTokens: u.outputTokens } : {}),
         ...(u.reasoningTokens ? { reasoningTokens: u.reasoningTokens } : {}),
         ...(u.cost !== undefined ? { cost: u.cost } : {}),

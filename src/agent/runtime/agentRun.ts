@@ -432,7 +432,7 @@ export class AgentRun {
     for (let step = 0; step < stepLimit; step++) {
       this.throwIfCancelled();
       // A page read a newer one replaced: one line from now on, not the whole page with every call.
-      retireEarlierPages(messages);
+      if (config.settings.ownCompaction !== false) retireEarlierPages(messages);
       // The task moved to another site (Indici → its Smart Inbox, in a new tab): the knowledge of that site, as if
       // the task had started there — a title search would miss its workflows. Back on the first site, its own again.
       if (this.hereSites.length && siteKey(this.hereSites) !== knowledgeOf) {

@@ -230,6 +230,31 @@ def cuda_libs():
             pass
     return ":".join(found + [os.environ.get("LD_LIBRARY_PATH", "")]).strip(":")
 
+# 2b. Headroom (github.com/headroomlabs-ai/headroom): its proxy compresses each call's messages before the model gets
+#     them — the extension asks it at <address>/headroom/v1/compress (Models → Kaggle GPU → Headroom proxy). Here only,
+#     on loopback; nothing about the patients leaves the notebook: its beacon, update check and telemetry are off, and
+#     CCR (originals fetched back through a tool the model doesn't have here) is off too.
+HEADROOM_LOG = "/kaggle/working/headroom.log"
+HEADROOM_ENV = {"HEADROOM_TELEMETRY": "off", "HEADROOM_BEACON": "off", "DO_NOT_TRACK": "1", "HEADROOM_UPDATE_CHECK": "off", "HEADROOM_NO_CCR": "1"}
+sh('pip install -q "headroom-ai[proxy]"', check=False)
+
+def start_headroom():
+    """Headroom's proxy on 127.0.0.1:8787 (None when it didn't install: the extension then sends messages as they are)."""
+    if not shutil.which("headroom"):
+        print("Headroom did not install — the extension will send messages uncompressed.", flush=True)
+        return None
+    sh("pkill -f '[h]eadroom proxy'; sleep 1", check=False)
+    proc = subprocess.Popen(["headroom", "proxy", "--host", "127.0.0.1", "--port", "8787", "--no-ccr", "--no-telemetry"],
+                            env={**os.environ, **HEADROOM_ENV}, stdout=open(HEADROOM_LOG, "a"), stderr=subprocess.STDOUT, start_new_session=True)
+    for _ in range(60):
+        time.sleep(2)
+        if answers("http://127.0.0.1:8787/health") or proc.poll() is not None:
+            break
+    print("Headroom proxy:", "up" if answers("http://127.0.0.1:8787/health") else "NOT answering — " + tail(HEADROOM_LOG, 5), flush=True)
+    return proc
+
+headroom = start_headroom()
+
 # 3. The server (port 8000): the extension's address, key check, Ollama's chat with thinking off, /transcribe.
 #    It restarts a stuck Ollama by itself, with the same settings (OLLAMA_ENV).
 def start_server():
@@ -318,6 +343,7 @@ def banner(url, note=""):
     print("  Model:         ", MODEL, "— in GPU memory now:", ", ".join(in_memory()) or "none yet")
     print("  Context window:", CTX, "— set the same number in the extension")
     print("  Voice:          Whisper large-v3-turbo (same address and key)")
+    print("  Headroom proxy:", f"{url}/headroom  — in the extension's Kaggle GPU connection (same key)" if headroom else "off (it didn't install)")
     print("For the test scripts (C:/Users/92313/.webagent-kaggle.env), these two lines:")
     print(f"  KAGGLE_URL={url}")
     print(f"  KAGGLE_KEY={KEY}")
@@ -334,6 +360,10 @@ banner(url)
 started_at, last_note = time.time(), 0.0
 while True:
     time.sleep(60)
+    if headroom is not None and headroom.poll() is not None:
+        print(tail(HEADROOM_LOG, 20))
+        print("Headroom stopped — starting it again.", flush=True)
+        headroom = start_headroom()
     if server.poll() is not None:
         print(tail("/kaggle/working/server.log", 30))
         print("The server stopped — starting it again.", flush=True)

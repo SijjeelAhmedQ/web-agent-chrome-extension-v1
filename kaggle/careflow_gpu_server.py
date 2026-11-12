@@ -518,6 +518,24 @@ async def ollama_proxy(path: str, request: Request, x_careflow_key: str = Header
     return await passthrough(f"{OLLAMA}/{path}", request, await request.body())
 
 
+#: Headroom's proxy in this notebook (github.com/headroomlabs-ai/headroom), on its own loopback port.
+HEADROOM = os.getenv("HEADROOM_URL", "http://127.0.0.1:8787")
+
+
+@app.api_route("/headroom/{path:path}", methods=["GET", "POST"])
+async def headroom_proxy(path: str, request: Request, x_careflow_key: str = Header(default=""), x_headroom_proxy_token: str = Header(default="")) -> Response:
+    """Headroom's proxy behind this address, with this server's key — the extension compresses each call's messages
+    here (/headroom/v1/compress) before it sends them to the model. Its SDK sends the key as X-Headroom-Proxy-Token."""
+    check_key(x_careflow_key or x_headroom_proxy_token)
+    headers = {"Content-Type": request.headers.get("content-type", "application/json")}
+    upstream = CLIENT.build_request(request.method, f"{HEADROOM}/{path}", content=await request.body(), headers=headers, params=request.query_params)
+    try:
+        res = await CLIENT.send(upstream, stream=True)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail=f"Headroom is not running in this notebook ({type(exc).__name__})") from exc
+    return StreamingResponse(res.aiter_raw(), status_code=res.status_code, media_type=res.headers.get("content-type"), background=BackgroundTask(res.aclose))
+
+
 _SPEECH_LOCK = threading.Lock()
 
 

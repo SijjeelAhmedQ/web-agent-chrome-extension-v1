@@ -60,6 +60,8 @@ export interface ModelCallRecord {
   inputTokens?: number;
   /** Of the input, read from the prompt cache — billed at a fraction. */
   cachedTokens?: number;
+  /** Headroom compressed this call's messages: tokens before and after (its proxy's count). */
+  headroom?: { before: number; after: number };
   outputTokens?: number;
   /** Of the output, the model's thinking. */
   reasoningTokens?: number;
