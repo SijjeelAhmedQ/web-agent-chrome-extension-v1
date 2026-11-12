@@ -418,7 +418,11 @@
         "Add recall",
         "Dismiss suggestion",
         "Dismiss",
-        "Update & Search"
+        "Update & Search",
+        "Assign",
+        "Pin patient",
+        "Unpin patient",
+        "Sign Out"
       ],
       "knowledge": [
         {
@@ -444,20 +448,20 @@
           "kind": "workflow",
           "title": "Find records — search and filters",
           "content": "The search bar at the top. Each step once:\n1. The bar is closed (\"Expand search controls\" shows): click it.\n2. Set everything in ONE fill_form, with the ids of your latest read:\n   - First look at the Filters bar above the list: it says what is set now (\"Status: Abnormal\", \"Category: Lab\"; \"All\" = not set). Then: each filter the user names. And each filter the bar shows that this request doesn't name: its \"(All)\" option, in the same fill_form (the list shows Abnormal, the user now asks for all lab records → Status \"Status (All)\", Category \"Lab\"). A set dropdown shows its choice instead of \"(All)\": \"Abnormal\" or \"Normal\" is the Status one, \"Filed\" or \"Unfiled\" the File one, \"Lab\", \"Rad\", \"Discharge\" or \"Referrals\" the Category one. A filter named again is just set again — no Reset.\n   - Dates: the two textboxes named \"Date range\" — placeholder \"From\" and \"To\". Type the dates as DD/MM/YYYY, as the user wrote them (\"10/03/2026\" is 10 March 2026). Only when the user gave dates — without, leave both as they are. Given: replace both. One date given: From. \"today\": both today. Some dates may be disabled — which ones can change. A date the box refuses (the result says so): don't type it again or search — tell the user which one (From or To) can't be chosen, and ask for another.\n   - Text: \"Patient Name\", \"NHI\", \"Date of birth\" (DD/MM/YYYY), \"Phone\".\n   - Dropdowns (option = the choice): \"Status (All)\" — Status (All), Normal, Abnormal; \"File (All)\" — File (All), Filed, Unfiled; \"Category (All)\" — Category (All), Lab, Rad, Discharge, Referrals; \"AI (All)\" — AI (All), AI-Autofile; \"Providers (All)\" — a provider's name, e.g. \"Adele VASTA\"; \"Sender (All)\" — a sender, e.g. \"Bay Radiology\" (these two narrow as they type; they have no \"(All)\" in their list — to clear one, click the × (\"close\") on its box).\n   - \"Message Subject (All)\": a picker — option = the subject's words; it types them and picks the matching subject. A choice that isn't there: the result lists the ones there — ask the user which.\n   e.g. fill_form([{id: <Status>, option: \"Abnormal\"}, {id: <File>, option: \"Filed\"}, {id: <Category>, option: \"Category (All)\"}]). Never click a dropdown open and then its option.\n3. Click \"Search\" once — never \"Update & Search\": it saves the filters over a saved search (\"Applied: <name>\" shows one is applied).\n4. After Search the bar closes: don't open it again unless a filter is still to set. The page comes with the click: the Filters bar above the list shows each filter, the date boxes the dates. One that didn't take: set it again, once — then tell the user which one didn't.\n5. The counts \"Normal: N\", \"Abnormal: N\", \"Unfiled Records: N\" are for the list now; say them when the user asks how many.\n\"Reset\" clears every filter and closes the bar: only when the user asks to clear the filters. Then \"Expand search controls\" again.\nSort: its button is in the search bar — \"Expand search controls\" first if the bar is closed. It shows the sort now (\"Latest Received\" or \"Patient Name A–Z\"): click it, then the option under \"Sort patients\" — it sorts at once, no Search.",
-          "trigger": "show all inbox records from 10/03/2026 to 10/11/2026; find arya stark’s unfiled abnormal lab results; show rad records of provider adele vasta",
+          "trigger": "show all inbox records from 10/03/2026 to 10/11/2026; find arya stark’s unfiled abnormal lab results; show rad records of provider adele vasta; sort the patients by name; sort by newest",
           "enabled": true,
           "createdAt": 1792999777295,
-          "updatedAt": 1794391303242
+          "updatedAt": 1794479255780
         },
         {
           "id": "kb_smart_show",
           "kind": "workflow",
           "title": "Show records — the filter, and nothing more",
-          "content": "A patient's records too (\"show this patient's abnormal records\", \"Arya's filed records\"): a filter — Patient Name = the name (\"this patient\" = the patient open in the consult, named in your messages), and the status or file filter — then Search. Don't open the patient, don't click or read a record.\nThe user asked to see a list, in whatever words — by status, filed or not, dates, category, subject, provider, sender, patient: only filter it, with your tools. This is the site working, not a task to read.\n1. Look at the Filters bar first: it already shows exactly what the user asks for, and nothing more → don't search again; go to 3. Otherwise filter as \"Find records — search and filters\" says — a filter the Filters bar shows that the request doesn't name goes back to its \"(All)\" in the same fill_form (\"show me all discharge records\" with \"Status: Abnormal\" set → fill_form: Status \"Status (All)\", Category \"Discharge\"). (abnormal → select_option(\"Status (All)\", \"Abnormal\"); filed → \"File (All)\" \"Filed\"; dates → the two \"Date range\" boxes; and so on), and click \"Search\". Never \"Update & Search\".\n2. Stop. Don't open or read any record, don't call read_records, don't summarise: reading marks records read in the app.\n3. Say in one line which filters are set — as the Filters bar shows them after Search, every one that isn't \"All\" — and the counts at the top (\"Normal: N\", \"Abnormal: N\") — no patient names, no other numbers: the list loads more as it scrolls, so what shows is not all of it. Then ask: \"What would you like to do with these records?\" — or, filtered by status, \"What would you like to do with these abnormal records?\" (\"… these normal records?\" for normal).\nRead records (read_records) only when the user asks for what is in them: a summary, the issues, a trend, why one is abnormal, which tests. A reply about the list showing (\"summarize these\", \"file them\") works on that list as it is: no Reset, no new search.",
+          "content": "A patient's records too (\"show this patient's abnormal records\", \"Arya's filed records\"): a filter — Patient Name = the name (\"this patient\" = the patient open in the consult, named in your messages), and the status or file filter — then Search. Don't open the patient, don't click or read a record.\nThe user asked to see a list, in whatever words — by status, filed or not, dates, category, subject, provider, sender, patient: only filter it, with your tools. This is the site working, not a task to read.\n1. Look at the Filters bar first: it already shows exactly what the user asks for, and nothing more → don't search again; go to 3. Otherwise filter as \"Find records — search and filters\" says — a filter the Filters bar shows that the request doesn't name goes back to its \"(All)\" in the same fill_form (\"show me all discharge records\" with \"Status: Abnormal\" set → fill_form: Status \"Status (All)\", Category \"Discharge\"). (abnormal → select_option(\"Status (All)\", \"Abnormal\"); filed → \"File (All)\" \"Filed\"; dates → the two \"Date range\" boxes; and so on), and click \"Search\". Never \"Update & Search\".\n2. Stop. Don't open or read any record, don't call read_records, don't summarise: reading marks records read in the app.\n3. Say in one line which filters are set — as the Filters bar shows them after Search, every one that isn't \"All\" — and the counts at the top (\"Normal: N\", \"Abnormal: N\") — no patient names, no other numbers: the list loads more as it scrolls, so what shows is not all of it. Then ask: \"What would you like to do with these records?\" — or, filtered by status, \"What would you like to do with these abnormal records?\" (\"… these normal records?\" for normal). Only after showing records this way — not after opening a patient, sorting, resetting or answering a question.\nRead records (read_records) only when the user asks for what is in them: a summary, the issues, a trend, why one is abnormal, which tests. A reply about the list showing (\"summarize these\", \"file them\") works on that list as it is: no Reset, no new search.",
           "trigger": "show me all abnormal records; show me all filed records; show all inbox records from 10/03/2026 to 10/11/2026; show lab records",
           "enabled": true,
           "createdAt": 1793923200000,
-          "updatedAt": 1794392241610
+          "updatedAt": 1794477027202
         },
         {
           "id": "kb_smart_count",
@@ -474,10 +478,10 @@
           "kind": "workflow",
           "title": "Open a patient and a record",
           "content": "0. Only when the user asks to open or select a patient — \"show <patient>'s records\" is a filter (\"Show records\").\n1. The patient's name is in the list on the left: click it at once (e.g. \"Arya STARK. Abnormal\" or \"Mic MOUSE\") — no Search, Reset or \"Expand search controls\" first. Only if it isn't in the list: \"Expand search controls\" if the search fields don't show, type the name into Patient Name, then Search. Never press Search with nothing typed. Several patients with that name: ask which (name, NHI, age).\n2. A name whose button says \"(expanded)\" is open already — its records show under it: it is selected, don't click it (a click closes it). Otherwise one click opens it: its records show under it and the first opens on the right a moment later, so the result may say only its look changed — don't click again; read_page once if the records don't show. Open another with its \"<subject> <date>\" button in the list or its \"Open result: <subject>\" tab; or go through them with Previous / Next.\n3. The list starts with the default scope (unfiled). For all of a patient's records, filed ones too: open_menu [\"Inbox scope for <name>\", \"Show all for this patient\"] (or \"Show all filed for this patient\"); \"Show Default\" goes back.\n4. Read the record from the page: who, which test, its values and STATUS (rule \"Normal and abnormal\").\n5. The patient's name at the top of the open record (e.g. \"Aqib JAVED\", underlined) is a link to the consult in Indici, like \"Go to Consult\": to open a patient here, click the name in the patient list on the left instead. To open the consult, see \"Open a patient's consult in Indici\".",
-          "trigger": "open arya stark’s results in the smart inbox",
+          "trigger": "open arya stark’s results in the smart inbox; show all of her records, filed ones too; show her filed records; open her next record",
           "enabled": true,
           "createdAt": 1792999777295,
-          "updatedAt": 1794392241610
+          "updatedAt": 1794479255780
         },
         {
           "id": "kb_smart_consult",
@@ -512,11 +516,11 @@
           "id": "kb_smart_6",
           "kind": "workflow",
           "title": "File and unfile records — File, Unfile, File All, File All Normal",
-          "content": "- \"File\": the open record. \"Unfile\": a record already filed. \"File All Normal <n>\": the patient's n unfiled normal records. \"File All <n>\": all n unfiled records of the patient.\n- \"file all normal records\" → \"File All Normal <n>\" — never \"File All\" (that files the abnormal ones too). n is 0: nothing to file — say so, click nothing. \"file all records\" → \"File All <n>\".\n1. Open the patient (and the record, for File), then click the button at once — its approval card shows the user what is filed. In your answer say how many records were filed and whether any was abnormal.\n2. Never use \"File All\" when an abnormal record is among them unless the user said so.\n3. Check it: the record now shows \"Unfile\", and the counts on the buttons went down. Tell the user.\n4. Unfile: a filed record doesn't show in the patient's default scope — open_menu [\"Inbox scope for <name>\", \"Show all filed for this patient\"], open the record, click \"Unfile\"; the user approves it. Check: the record shows \"File\" again.\n5. \"File this record and go to the next patient\" (in either order of words) — two steps, in this order:\n   a) The record open now: its button says \"File\" → click it (the user approves). It says \"Unfile\" → it is filed already: click nothing for it, and say so at the end. Never click \"Unfile\" when asked to file.\n   Only the record open now — never File on another record.\n   b) The next patient: click the name right below the open patient in the list on the left (after \"Arya STARK\" comes the next name there, e.g. \"Imran RASHID\"). Not \"Next\" at the bottom — that is the same patient's next record. No name below hers (the last or only patient the filters show): say there is no next patient in this list — don't change the filters, open other records or file anything else.\n6. \"Unfile the one you just filed\": only a record filed in this chat — if none was, say so and unfile nothing.",
+          "content": "- \"File\": the open record. \"Unfile\": a record already filed. \"File All Normal <n>\": the patient's n unfiled normal records. \"File All <n>\": all n unfiled records of the patient.\n- \"file all normal records\" → \"File All Normal <n>\" — never \"File All\" (that files the abnormal ones too). n is 0: nothing to file — say so, click nothing. \"file all records\" → \"File All <n>\".\n1. Open the patient (and the record, for File), then click the button at once — its approval card shows the user what is filed. In your answer say how many records were filed and whether any was abnormal.\n2. Never use \"File All\" when an abnormal record is among them unless the user said so.\n3. Check it: \"Item filed successfully\" shows and the counts on the buttons went down. The app then opens the next record by itself (the filed one leaves the list), so the button you see after is the next record's. Tell the user which record you filed — its subject and date (e.g. \"[web agent test] Discharge summary, 04/11/2026\").\n4. Unfile: a filed record doesn't show in the patient's default scope — open_menu [\"Inbox scope for <name>\", \"Show all filed for this patient\"], open the record, click \"Unfile\"; the user approves it. Check: the record shows \"File\" again.\n5. \"File this record and go to the next patient\" (in either order of words) — two steps, in this order:\n   a) The record open now: its button says \"File\" → click it (the user approves). It says \"Unfile\" → it is filed already: click nothing for it, and say so at the end. Never click \"Unfile\" when asked to file.\n   Only the record open now — never File on another record.\n   b) The next patient: click the name right below the open patient in the list on the left (after \"Arya STARK\" comes the next name there, e.g. \"Imran RASHID\"). Not \"Next\" at the bottom — that is the same patient's next record. No name below hers (the last or only patient the filters show): say there is no next patient in this list — don't change the filters, open other records or file anything else.\n6. \"Unfile it\" / \"unfile the one you just filed\": the record your earlier answer in this chat says you filed (its subject and date) — not the record open now. Unfile it as in 4. None was filed in this chat: say so and unfile nothing.",
           "trigger": "file arya stark’s normal results; file, unfile, filed, file all, file all normal, next patient",
           "enabled": true,
           "createdAt": 1792999777295,
-          "updatedAt": 1794401871148
+          "updatedAt": 1794481939179
         },
         {
           "id": "kb_smart_7",
@@ -555,16 +559,18 @@
           "content": "\"Clinical Summary\" (above the open record) opens a drawer for the open patient: tabs Clinical Notes, Medications, Diagnosis and Allergies; Date From / Date To (the last six months to start), Search, Reset, and \"Back to List\". It only shows — nothing in it saves.\n1. Click \"Clinical Summary\": the drawer comes with the click.\n2. Click the tabs the user asked about in ONE reply — several clicks, run in order — and each tab's list comes with its click: no wait, no read_page, never a tab twice. Medication(s) → \"Medications\"; medical history → \"Diagnosis\" and \"Allergies\"; notes → \"Clinical Notes\"; everything → all four.\n3. Answer from what the tabs showed, tab by tab, as they say it — nothing of your own (no advice, no notes). Only a tab whose result says \"Loading…\": read_page once.",
           "enabled": true,
           "createdAt": 1792999777295,
-          "updatedAt": 1794383266505
+          "updatedAt": 1794479255780,
+          "trigger": "what are her allergies and medications; show her clinical summary"
         },
         {
           "id": "kb_smart_11",
           "kind": "workflow",
           "title": "Saved searches",
-          "content": "- \"Saved\" opens \"Saved Search Filters\": each saved filter with its values, and Mark as Primary, Apply, Delete. Apply sets those filters (\"Applied: <name>\" shows by the Saved button). Mark as Primary and Delete change the saved filters — only when the user asks; the user approves.\n- \"Save Search Criteria\" saves the current filters under a name: ask the user for the name.\n- \"Update & Search\" (beside Search, when a saved search is applied) opens \"Update Search Criteria\" and saves the current filters over that saved search: only when the user asks to update the saved search; the user approves. To search, click \"Search\".",
+          "content": "- \"Saved\" opens the drawer \"Saved Search Filters\": each saved search by its name (e.g. \"Collapse Test\" is a name, not a button), with its values, and Mark as Primary, Apply, Delete. Clicking a saved search's card or Apply applies it: the filters change and the drawer closes (\"Applied: <name>\" shows by the Saved button). Mark as Primary and Delete change the saved searches — only when the user asks; the user approves.\n- \"Which saved searches are there?\": open Saved, read the drawer (read_page content), answer from it, then close the drawer (its close button, or Saved again) — never click a card to read it.\n- Apply one only when the user asks to apply or use it.\n- \"Save Search Criteria\" saves the current filters under a name: ask the user for the name.\n- \"Update & Search\" (beside Search, when a saved search is applied) opens \"Update Search Criteria\" and saves the current filters over that saved search: only when the user asks to update the saved search; the user approves. To search, click \"Search\".",
           "enabled": true,
           "createdAt": 1792999777295,
-          "updatedAt": 1792999777295
+          "updatedAt": 1794479255780,
+          "trigger": "what saved searches are there; apply the saved search test"
         },
         {
           "id": "kb_smart_12",
@@ -662,10 +668,50 @@
           "enabled": true,
           "createdAt": 1793710937289,
           "updatedAt": 1793867453564
+        },
+        {
+          "id": "kb_smart_attention",
+          "kind": "workflow",
+          "title": "Attention Providers — send a record to a provider",
+          "content": "\"Attention Providers\" (on the open record, beside the Diagnostic Comment) opens the pop-up \"Attention Providers\": \"Assigning this record only.\", \"Selected: <provider>\" (who has it now), the box \"Search provider by name\", one choice per provider (\"<initials> <name> Provider\"), Cancel and Assign.\n- To send the record to a provider (or \"assign it to <name>\"): type the name into \"Search provider by name\", click that provider's choice, then Assign — the user approves Assign. Several providers match: list them and ask which.\n- \"Who is this record assigned to?\": open it and read \"Selected:\", then Cancel — nothing changes.\n- It assigns the open record only; for several records, do it record by record.",
+          "enabled": true,
+          "createdAt": 1794475629670,
+          "updatedAt": 1794479255780,
+          "trigger": "who is this record assigned to; assign this record to peter parker"
+        },
+        {
+          "id": "kb_smart_topbar",
+          "kind": "page",
+          "title": "Practice, location, sign-in and what the screen shows",
+          "content": "- The practice button at the top (\"Victoria Clinic\") opens the practices: \"Currently Selected\" marks the one in use. The location button beside it (\"Victoria Clinic 1\") opens the locations the same way. Choosing another changes whose inbox shows: only when the user asks for that practice or location by name — use the names the menu shows, never assume one.\n- The user's button (\"<name> <practice> - <location>\") opens System Settings and Sign Out. Sign Out ends the sign-in: only when the user asks; the user approves.\n- \"Toggle patient list\" hides or shows the patient list on the left; \"Collapse search controls\" / \"Expand search controls\" hide or show the search bar; \"Pin search controls\" keeps the bar open after a search. They change only the view.\n- A patient's \"Collapse test records\" / \"Expand test records\" hides or shows its records under its name in the list.\n- \"Refresh inbox\" loads new records now (it refreshes every 60 s on its own).",
+          "enabled": true,
+          "createdAt": 1794475629670,
+          "updatedAt": 1794479255780,
+          "trigger": "which practice and location am i on; switch to kingsland location; sign out; hide the patient list"
+        },
+        {
+          "id": "kb_smart_pin",
+          "kind": "workflow",
+          "title": "Pin a patient (keep at the top)",
+          "content": "\"Pin patient\" beside a patient's name marks the patient as critical: the patient stays at the top of the list. It saves at once (for every user of the inbox); \"Unpin patient\" undoes it. Click it only when the user asks to pin or unpin that patient — the user approves. \"Which patients are pinned?\": the ones whose button says \"Unpin patient\".",
+          "enabled": true,
+          "createdAt": 1794475629670,
+          "updatedAt": 1794479255780,
+          "trigger": "pin arya stark; unpin this patient; which patients are pinned"
+        },
+        {
+          "id": "kb_smart_viewer",
+          "kind": "workflow",
+          "title": "The document of a record (viewer)",
+          "content": "A record with a document (a referral, discharge summary, scanned letter) shows it under \"Document — Original report\", with its own bar: the zoom (\"80%\", \"Zoom in\", \"Zoom out\"), \"Toggle page view mode\" (All pages, or Single page with \"n / m\"), \"Toggle fullscreen\" and \"Open in new tab\". They change only the view; read the document's text from the page (read_page content) — zooming or opening it in a new tab is only when the user asks for it.\n- Only a record with a document has this bar. The open record has none (\"No document attachment\", or its text and results show without a document): say so in one line — never open other records to find one with a document, unless the user names that record.\n- The patient's email address and phone at the top are buttons: the email opens \"Send Email\" for that address, the phone opens Call and Send Text (workflow \"Actions menu\").",
+          "enabled": true,
+          "createdAt": 1794475629670,
+          "updatedAt": 1794481226526,
+          "trigger": "zoom in on the document; open the document in a new tab; show all pages"
         }
       ],
       "createdAt": 1792999777295,
-      "updatedAt": 1792999777295
+      "updatedAt": 1794475629670
     }
   ]
 }

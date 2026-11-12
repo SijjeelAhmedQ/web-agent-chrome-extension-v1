@@ -1382,14 +1382,15 @@ const READ_PAGE = BROWSER_TOOLS.find((t) => t.name === 'read_page')!;
 
 /**
  * The steps that would repeat for the third time if `next` ran: the trail ends with the same
- * 2–4 steps twice and `next` starts them again. Typing the same text into the same field
+ * 2–12 steps twice and `next` starts them again (the Smart Inbox's 7 records opened one after another, round and
+ * round, looking for a document none of them had). Typing the same text into the same field
  * counts on its own too. (A single click repeated — "Next page" — is normal and not counted.)
  */
 export function repeatedCycle(trail: string[], next: string): string[] | null {
   // Going through records with Next and doing the same on each (a comment on every abnormal result) repeats
   // by design: a cycle with paging in it is not a loop.
   const paging = (l: string) => /^Clicking “(next|previous|prev|load more|show more|[›»>‹«<])”/i.test(l);
-  for (let len = 2; len <= 4; len++) {
+  for (let len = 2; len <= 12; len++) {
     if (trail.length < 2 * len) continue;
     const last = trail.slice(-len);
     const before = trail.slice(-2 * len, -len);

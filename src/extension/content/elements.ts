@@ -474,9 +474,11 @@ export function collectInteractive(limitNodes = 150_000): { elements: Element[];
       visited++;
       const el = node;
       if (el.id === OVERLAY_HOST_ID || done.has(el)) {
-        node = walker.nextSibling() as Element | null;
-        // Skip the overlay subtree entirely.
-        if (!node) node = walker.nextNode() as Element | null;
+        // Skip the subtree entirely (the overlay, or a pop-up read already): the next node after it, climbing up
+        // when it is the last child — nextNode() would walk into it, and a pop-up's controls were listed twice.
+        let next = walker.nextSibling();
+        while (!next && walker.parentNode()) next = walker.nextSibling();
+        node = next as Element | null;
         continue;
       }
       if (isExplicitlyInteractive(el)) {

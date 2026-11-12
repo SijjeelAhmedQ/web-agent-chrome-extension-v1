@@ -92,6 +92,13 @@ describe('loop guard: repeated cycles of steps', () => {
     expect(repeatedCycle(['A', 'B', 'A', 'B'], 'A')).toEqual(['A', 'B']);
   });
 
+  it('a long round too: 7 records opened in turn, twice, looking for a document none had (Smart Inbox, 2026-11-12)', async () => {
+    const { repeatedCycle } = await import('./runtime/agentRun');
+    const round = ['CBC 04/11/2026', 'CBC 04/11/2026', 'inbox 26/10/2026', 'CBC 21/10/2026', 'Test Web Agent 21/10/2026', 'Test 21/10/2026', 'test result normal 21/10/2026'].map((r) => `Clicking “${r}”`);
+    expect(repeatedCycle([...round], round[0])).toBeNull(); // once round is going through them
+    expect(repeatedCycle([...round, ...round], round[0])).toEqual(round);
+  });
+
   it('lets a single repeated click through (paging), but not the same typing a third time', async () => {
     const { repeatedCycle } = await import('./runtime/agentRun');
     const next = 'Clicking “Next”';

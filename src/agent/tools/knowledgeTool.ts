@@ -10,6 +10,9 @@ import type { AgentTool, ToolContext } from './types';
  */
 export function knowledgeTool(sites: SiteProfile[], here?: (ctx: ToolContext) => Promise<SiteProfile[]>): AgentTool<{ topic: string }> {
   const names = sites.map((s) => s.name).join(', ') || 'the sites you set up';
+  // Entries this task was already told are in its instructions. Asked again, the model didn't find it there: it
+  // looked "File and unfile records" up six times, about 11k tokens each — the entry itself is some 600.
+  const pointedAt = new Set<string>();
   return {
     name: 'site_knowledge',
     description: `Look up what the user has taught you about ${names}: its pages, controls and workflows. Use it before guessing.`,
@@ -26,7 +29,12 @@ export function knowledgeTool(sites: SiteProfile[], here?: (ctx: ToolContext) =>
       // Already in the instructions, word for word: not again in the steps, where it would go with every later call.
       const prompt = ctx.knowledgeInPrompt?.() ?? '';
       const newHere = found.filter((e) => !prompt.includes(formatEntry(e)));
-      if (!newHere.length) return { output: `“${found[0].title.trim()}” is already in your instructions, in full. Follow it there.`, note: 'Already in the instructions' };
+      if (!newHere.length) {
+        const title = found[0].title.trim();
+        if (pointedAt.has(title)) return { output: formatEntry(found[0]), note: 'From the instructions, again' };
+        pointedAt.add(title);
+        return { output: `“${title}” is already in your instructions, in full. Follow it there.`, note: 'Already in the instructions' };
+      }
       // A small context (a slow local model): the best entry in full, the others by name — a page of
       // workflows would push out the steps the task is on.
       const [best, ...rest] = newHere;
