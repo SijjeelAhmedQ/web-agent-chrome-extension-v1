@@ -53,10 +53,10 @@ try {
   });
   if (!sidePanel) await panel.goto(`chrome-extension://${extId}/sidepanel.html`);
   const provider = useKaggle
-    ? { id: 'p', name: 'Kaggle GPU', kind: 'openai', preset: 'kaggle', baseUrl: `${kaggleUrl}/vllm/v1`, apiKey: key, keyHeader: 'X-CareFlow-Key', timeoutMs: 600000, contextWindow: Number(process.env.CTX ?? 16384), defaultModel: process.env.MODEL ?? 'qwen3.8:27b-q4_K_M', ...(process.env.HEADROOM === '1' ? { headroomOn: true, headroomUrl: `${kaggleUrl}/headroom` } : {}), createdAt: 1 }
+    ? { id: 'p', name: 'Kaggle GPU', kind: 'openai', preset: 'kaggle', baseUrl: `${kaggleUrl}/vllm/v1`, apiKey: key, keyHeader: 'X-CareFlow-Key', timeoutMs: 600000, contextWindow: Number(process.env.CTX ?? 16384), defaultModel: process.env.MODEL ?? 'qwen3.8:27b-q4_K_M', ...(process.env.HEADROOM ? { headroomOn: process.env.HEADROOM === '1', headroomUrl: `${kaggleUrl}/headroom` } : {}), createdAt: 1 }
     : { id: 'p', name: 'OpenRouter', kind: 'openai', preset: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', apiKey: key, timeoutMs: 300000, defaultModel: process.env.MODEL ?? '~deepseek/deepseek-v4-flash-latest', createdAt: 1 };
   // The model and knowledge are set every run; KEEP_CHAT keeps the conversation (a reply to the agent's question).
-  // HEADROOM=1: the notebook's Headroom proxy compresses each call; OWN_COMPACTION=0: the extension's own compaction off.
+  // HEADROOM=1: the notebook's Headroom proxy compresses each call (HEADROOM=0: its address saved, the switch off); OWN_COMPACTION=0: the extension's own compaction off.
   await panel.evaluate(async (provider, agents, sites, keep, own) => {
     const toolIds = agents[0].toolIds;
     await chrome.storage.local.set({ 'wa.config': { version: 1, providers: [provider], agents: agents.map((a) => ({ ...a, providerId: 'p' })), skills: [], customTools: [], sites, settings: { defaultProviderId: 'p', defaultAgentId: agents[0].id, developerMode: true, expandActivity: true, autoBackup: false, knownToolIds: toolIds, ...(own ? {} : { ownCompaction: false }) } } });
