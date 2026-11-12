@@ -35,7 +35,7 @@ describe('Headroom (the official SDK and proxy) before each call', () => {
 
   it('the model gets the messages Headroom compressed, and the log its numbers', async () => {
     const calls = fakeServers('ok');
-    const provider = { id: 'p', name: 'OpenRouter', kind: 'openai', preset: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', apiKey: 'sk-or', defaultModel: 'm', headroomUrl: 'http://localhost:8787', createdAt: 1 } as never;
+    const provider = { id: 'p', name: 'OpenRouter', kind: 'openai', preset: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', apiKey: 'sk-or', defaultModel: 'm', headroomOn: true, headroomUrl: 'http://localhost:8787', createdAt: 1 } as never;
     const res = await createClient(provider).chat({ model: 'anthropic/claude-haiku-5.5', messages: conversation, tools: [], temperature: 0 });
     expect(calls[0].url).toBe('http://localhost:8787/v1/compress');
     // The OpenRouter key never goes to the proxy.
@@ -49,7 +49,7 @@ describe('Headroom (the official SDK and proxy) before each call', () => {
 
   it('a proxy out of reach: the messages go as they are, and the task goes on', async () => {
     const calls = fakeServers('down');
-    const provider = { id: 'p', name: 'OpenRouter', kind: 'openai', preset: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', apiKey: 'sk-or', defaultModel: 'm', headroomUrl: 'http://localhost:8787', createdAt: 1 } as never;
+    const provider = { id: 'p', name: 'OpenRouter', kind: 'openai', preset: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', apiKey: 'sk-or', defaultModel: 'm', headroomOn: true, headroomUrl: 'http://localhost:8787', createdAt: 1 } as never;
     const res = await createClient(provider).chat({ model: 'm', messages: conversation, tools: [], temperature: 0 });
     const sent = JSON.parse(calls.at(-1)!.init.body as string);
     expect(sent.messages.at(-1).content).toContain('[1] button "Search"');
@@ -64,9 +64,17 @@ describe('Headroom (the official SDK and proxy) before each call', () => {
     expect(calls.some((c) => c.url.includes('/v1/compress'))).toBe(false);
   });
 
+  it('switched off: nothing goes to Headroom, though its address is saved', async () => {
+    const calls = fakeServers('ok');
+    const provider = { id: 'p', name: 'OpenRouter', kind: 'openai', preset: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', apiKey: 'k', defaultModel: 'm', headroomUrl: 'http://localhost:8787', createdAt: 1 } as never;
+    const res = await createClient(provider).chat({ model: 'm', messages: conversation, tools: [], temperature: 0 });
+    expect(calls.some((c) => c.url.includes('/v1/compress'))).toBe(false);
+    expect(res.usage?.headroom).toBeUndefined();
+  });
+
   it('the proxy behind the Kaggle notebook gets the notebook’s key, as the model does', async () => {
     const calls = fakeServers('ok');
-    const provider = { id: 'k', name: 'Kaggle GPU', kind: 'openai', preset: 'kaggle', baseUrl: 'https://x.trycloudflare.com/vllm/v1', apiKey: 'notebook-key', keyHeader: 'X-CareFlow-Key', defaultModel: 'qwen', headroomUrl: 'https://x.trycloudflare.com/headroom', createdAt: 1 } as never;
+    const provider = { id: 'k', name: 'Kaggle GPU', kind: 'openai', preset: 'kaggle', baseUrl: 'https://x.trycloudflare.com/vllm/v1', apiKey: 'notebook-key', keyHeader: 'X-CareFlow-Key', defaultModel: 'qwen', headroomOn: true, headroomUrl: 'https://x.trycloudflare.com/headroom', createdAt: 1 } as never;
     await createClient(provider).chat({ model: 'qwen', messages: conversation, tools: [], temperature: 0 });
     expect(calls[0].url).toBe('https://x.trycloudflare.com/headroom/v1/compress');
     expect((calls[0].init.headers as Record<string, string>)['X-Headroom-Proxy-Token']).toBe('notebook-key');

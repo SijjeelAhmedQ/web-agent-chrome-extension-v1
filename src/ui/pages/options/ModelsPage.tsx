@@ -1,4 +1,4 @@
-import { App, AutoComplete, Button, Dropdown, Input, InputNumber, Modal, Segmented, Tooltip } from 'antd';
+import { App, AutoComplete, Button, Dropdown, Input, InputNumber, Modal, Segmented, Switch, Tooltip } from 'antd';
 import { DEFAULT_CONTEXT_WINDOW } from '@/agent/llm/ollama';
 import { CheckCircle2, ExternalLink, Laptop, MoreHorizontal, Plus, RefreshCw, Star, Trash2, XCircle, Zap } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -390,15 +390,26 @@ function ProviderEditor({ value, onClose, onSave }: { value: { provider: Provide
           </div>
         )}
         {draft.kind === 'openai' && (
+          <div className="setting-row bare">
+            <div className="setting-text">
+              <div className="setting-label">Headroom</div>
+              <div className="setting-desc">
+                Compresses each call's messages before they go to the model, with Headroom (github.com/headroomlabs-ai/headroom). It saves
+                a few percent of the tokens, and it can drop words from the site's instructions — off unless you want to try it.
+              </div>
+            </div>
+            <Switch checked={!!draft.headroomOn} onChange={(on) => set({ headroomOn: on || undefined })} aria-label="Headroom" />
+          </div>
+        )}
+        {draft.kind === 'openai' && draft.headroomOn && (
           <div className="setting-row bare stacked">
             <div className="setting-text">
               <label className="setting-label" htmlFor="prov-headroom">
-                Headroom proxy (optional)
+                Headroom proxy
               </label>
               <div className="setting-desc">
-                Compresses each call's messages before they go to the model, with Headroom (github.com/headroomlabs-ai/headroom). Its
-                proxy's address — http://localhost:8787 when it runs on this computer, or this notebook's address followed by /headroom on
-                Kaggle. Empty: off. When it can't be reached, the messages go as they are.
+                Its address — http://localhost:8787 when it runs on this computer, or this notebook's address followed by /headroom on
+                Kaggle. When it can't be reached, the messages go as they are.
               </div>
             </div>
             <Input

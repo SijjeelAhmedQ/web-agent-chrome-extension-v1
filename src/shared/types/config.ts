@@ -37,9 +37,15 @@ export interface ProviderConfig {
   /**
    * Headroom (github.com/headroomlabs-ai/headroom): its proxy's address — each call's messages are compressed there
    * (`/v1/compress`) before they go to the model. e.g. http://localhost:8787, or the Kaggle notebook's address + /headroom.
-   * Empty: off. Not reachable: the messages go as they are.
+   * Not reachable: the messages go as they are.
    */
   headroomUrl?: string;
+  /**
+   * Headroom's switch: on, each call goes through the proxy at `headroomUrl`. Off by default — measured on the Smart
+   * Inbox (2026-11-12) it saved 3–4% of the tokens and dropped words from the knowledge's instructions; the address
+   * stays saved while it is off.
+   */
+  headroomOn?: boolean;
   /** The Headroom proxy's token (HEADROOM_PROXY_TOKEN), when it asks for one. */
   headroomToken?: string;
   createdAt: number;

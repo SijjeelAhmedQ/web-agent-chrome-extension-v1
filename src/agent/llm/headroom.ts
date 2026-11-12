@@ -24,12 +24,12 @@ const origin = (url: string) => {
  * on (the SDK's own fallback).
  */
 export async function headroomCompress(
-  provider: Pick<ProviderConfig, 'headroomUrl' | 'headroomToken' | 'baseUrl' | 'apiKey'>,
+  provider: Pick<ProviderConfig, 'headroomOn' | 'headroomUrl' | 'headroomToken' | 'baseUrl' | 'apiKey'>,
   messages: unknown[],
   model: string,
 ): Promise<Compressed | null> {
   const base = provider.headroomUrl?.trim().replace(/\/+$/, '');
-  if (!base || !messages.length) return null;
+  if (!provider.headroomOn || !base || !messages.length) return null;
   const key = provider.headroomToken?.trim() || (origin(base) === origin(provider.baseUrl) ? provider.apiKey : '');
   const client = new HeadroomClient({
     baseUrl: base,

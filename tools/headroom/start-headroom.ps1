@@ -3,7 +3,7 @@
 #
 #   powershell -ExecutionPolicy Bypass -File tools\headroom\start-headroom.ps1
 #
-# Then: Web Agent → Settings → Models → your OpenRouter connection → Headroom proxy = http://localhost:8787.
+# Then: Web Agent → Settings → Models → your OpenRouter connection → turn Headroom on, Headroom proxy = http://localhost:8787.
 # Keep this window open while you use the extension. Nothing leaves this computer from Headroom: its beacon, update
 # check and telemetry are off, and it only listens on 127.0.0.1. The OpenRouter key never goes to it.
 $ErrorActionPreference = 'Stop'
@@ -32,7 +32,7 @@ $env:HEADROOM_NO_CCR = '1'
 
 Write-Host ''
 Write-Host 'Headroom proxy: http://localhost:8787'
-Write-Host 'Put it in Web Agent -> Settings -> Models -> OpenRouter -> Headroom proxy. Keep this window open.'
+Write-Host 'In Web Agent -> Settings -> Models -> OpenRouter: turn Headroom on, then put this in Headroom proxy. Keep this window open.'
 Write-Host '(The first request after start waits a few seconds while its text model loads.)'
 Write-Host ''
 & $headroom proxy --host 127.0.0.1 --port 8787 --no-ccr --no-telemetry
