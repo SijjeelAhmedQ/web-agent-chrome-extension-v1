@@ -339,6 +339,11 @@ async function clickAndReport(ctx: ToolContext, elementId: number, double: boole
       if (!changed()) await tabIn(12_000);
     }
   }
+  // “Open …” that only reloaded the page it is on (Indici's dashboard came back as “…/DashBoard”): the tab it opens
+  // comes after the reload — waited for, or the agent says “opened a new page”, looks for tabs and clicks again.
+  if (!openedTab() && after.navigated && saysOpen(res.element.name ?? '') && (after.url ?? '').toLowerCase() === before.toLowerCase()) {
+    for (let waited = 0; !openedTab() && waited < 12_000; waited += 300) await sleep(300);
+  }
   const tab = openedTab();
   if (tab) return followNewTab(ctx, tab, label);
 

@@ -573,12 +573,24 @@ async function chooseInCustom(el: Element, option: string, show: boolean): Promi
   await prepare(box, 'Selecting', show);
   const input = box.querySelector('input') as HTMLInputElement | null;
   const opener = box.querySelector('.ant-select-selector') ?? box;
-  const popup = (): Element | null => {
+  const openLists = () => Array.from(document.querySelectorAll('.ant-select-dropdown')).filter((d) => isVisible(d) && !d.matches('.ant-select-dropdown-hidden'));
+  const ownList = (): Element | null => {
     const list = input?.getAttribute('aria-controls') || input?.getAttribute('aria-owns');
-    const own = list ? document.getElementById(list)?.closest('.ant-select-dropdown') : null;
-    if (own && isVisible(own)) return own;
-    return Array.from(document.querySelectorAll('.ant-select-dropdown')).filter((d) => isVisible(d) && !d.matches('.ant-select-dropdown-hidden')).at(-1) ?? null;
+    return (list && document.getElementById(list)?.closest('.ant-select-dropdown')) || null;
   };
+  // Its own list once it has one — never another dropdown's: a list left open by a choice that failed (“Abnormal”
+  // in File) was searched for Status's “Abnormal”, and “isn't in the list” came back.
+  const popup = (): Element | null => {
+    const own = ownList();
+    if (own) return isVisible(own) && !own.matches('.ant-select-dropdown-hidden') ? own : null;
+    return openLists().at(-1) ?? null;
+  };
+  // Another dropdown still open: closed first, as a click elsewhere would.
+  if (openLists().some((d) => d !== ownList())) {
+    (document.activeElement as HTMLElement | null)?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true } as KeyboardEventInit));
+    for (const type of ['mousedown', 'mouseup']) document.body.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true }));
+    await sleep(250);
+  }
   // Its list is made the first time it opens, and slides in: wait for the options (up to 2 s), not a fixed moment —
   // after 350 ms the first time, it was still empty (“no option Abnormal”), and the model clicked its way round.
   // Still nothing open then: a second press, on its text box this time.
