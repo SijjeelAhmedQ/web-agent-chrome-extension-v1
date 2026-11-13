@@ -560,7 +560,7 @@ export async function select(id: number, option: string, show: boolean): Promise
  * narrowed by typing when it has a search box, scrolled through when its list is long (only the options in
  * view are on the page), and the option clicked. Null when it isn't one.
  */
-async function chooseInCustom(el: Element, option: string, show: boolean): Promise<SelectResult | null> {
+export async function chooseInCustom(el: Element, option: string, show: boolean): Promise<SelectResult | null> {
   const box = el.closest('.ant-select') ?? el.querySelector('.ant-select');
   if (!box) return null;
   // Its label on the form, not its generated id (“rc_select_40”).
@@ -580,13 +580,17 @@ async function chooseInCustom(el: Element, option: string, show: boolean): Promi
   };
   // Its own list once it has one — never another dropdown's: a list left open by a choice that failed (“Abnormal”
   // in File) was searched for Status's “Abnormal”, and “isn't in the list” came back.
+  // Not one that was open before this one was pressed: Ant makes a list the first time it opens, so until then this
+  // one has none, and Status's list — still closing, or left open — was taken for File's: “Unfiled” wasn't in it, and
+  // the model opened every dropdown by hand (12 calls for three filters).
+  const stale = new Set(openLists().filter((d) => d !== ownList()));
   const popup = (): Element | null => {
     const own = ownList();
     if (own) return isVisible(own) && !own.matches('.ant-select-dropdown-hidden') ? own : null;
-    return openLists().at(-1) ?? null;
+    return openLists().filter((d) => !stale.has(d)).at(-1) ?? null;
   };
   // Another dropdown still open: closed first, as a click elsewhere would.
-  if (openLists().some((d) => d !== ownList())) {
+  if (stale.size) {
     (document.activeElement as HTMLElement | null)?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true } as KeyboardEventInit));
     for (const type of ['mousedown', 'mouseup']) document.body.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true }));
     await sleep(250);
