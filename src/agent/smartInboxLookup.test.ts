@@ -16,6 +16,8 @@ describe('looking up the Smart AI Inbox knowledge finds the workflow asked about
     ['what saved searches are there', 'kb_smart_11'],
     ['pin a patient', 'kb_smart_pin'],
     ['which practice and location', 'kb_smart_topbar'],
+    ['goto next patient', 'kb_smart_3'],
+    ['next patient in the list', 'kb_smart_3'],
   ])('“%s” → %s', (topic, id) => expect(best(topic)).toBe(id));
 });
 
