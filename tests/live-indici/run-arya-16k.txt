@@ -1,0 +1,62 @@
+
+>>> goto patients and select arya STARK
+--- 164s ---
+goto patients and select arya STARK
+Completed
+11 steps · 2m 44s
+Reading the page
+Done
+0.4s
+180 controls · Provider Dashboard
+read_page Details
+Opening “Patients” › “Search & List”
+Done
+1s
+“Search & List” is showing
+open_menu Details
+Clicking “Search & List”
+Done
+9s
+Opened a new page
+click Details
+Reading the page
+Done
+0.3s
+287 controls · Patient Search
+read_page Details
+Typing “Arya STARK” into “Surname First Name”
+Done
+1s
+type Details
+Clicking “Search”
+Done
+2s
+click Details
+Reading the page
+Done
+0.1s
+84 controls · Patient Search
+read_page Details
+Clicking “Arya STARK” (with “03-12-2015”)
+Done
+15s
+Opened in a new tab · a dialog is showing
+click_text Details
+Reading the page
+Done
+1s
+441 controls · Consult Detail
+read_page Details
+Clicking “×”
+Done
+4s
+click Details
+Reading the page
+Done
+0.6s
+438 controls · Consult Detail · only the changes
+read_page Details
+
+I've opened Arya STARK's consult (DOB 03-12-2015) and closed the Patient Alerts pop-up (Tramadol allergy alert).
+
+There's one pop-up left — "Add reason to view patient file" — that has no close button and needs a reason entered. What reason should I add to view the patient file?

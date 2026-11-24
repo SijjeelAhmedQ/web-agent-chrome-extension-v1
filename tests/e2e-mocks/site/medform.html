@@ -1,0 +1,24 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Consult Detail</title>
+<style>
+  body { font: 12px Arial, sans-serif; margin: 12px; }
+  td { padding: 4px 6px; color: #2a7ab0; font-weight: bold; }
+  .btn { background: #0e7490; color: #fff; border: 0; padding: 5px 8px; }
+</style></head>
+<body>
+<!-- Like Indici's medication panel: labels and fields in table cells, ids for names. -->
+<table>
+  <tr><td>Find Medicine:</td><td><input id="MedicineNameSearch" style="width:220px"></td><td><button id="btnFind" title="search">🔍</button></td></tr>
+</table>
+<div>
+  <button class="btn" onclick="say('Pharmac clicked')">Pharmac</button>
+  <button class="btn" onclick="say('Saved')">Save</button>
+  <button class="btn" onclick="say('Cancelled')">Cancel</button>
+</div>
+<h3>Metformin Viatris - metformin hydrochloride 850 mg tablet</h3>
+<table>
+  <tr><td>Take:</td><td><input id="txtTake" size="4"> <input value="tablet" readonly size="6"></td><td>Frequency: *</td><td><select id="ddlFrequency"><option>--Select--</option><option>Once Daily</option><option>Twice Daily</option></select></td></tr>
+  <tr><td>Duration: *</td><td><input id="txtDuration" size="4"> <select id="ddlDurationType"><option>Day/s</option><option>Week/s</option><option>Month/s</option></select></td><td>Quantity: *</td><td><input id="txtQty" size="6"></td></tr>
+</table>
+<p id="result">Nothing clicked</p>
+<script>function say(t) { document.getElementById('result').textContent = t; }</script>
+</body></html>

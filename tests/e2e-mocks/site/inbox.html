@@ -1,0 +1,37 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Provider Dashboard</title>
+<style>body{font:13px Arial,sans-serif;margin:0}table{border-collapse:collapse;width:900px}td,th{border:1px solid #ccc;padding:4px 6px;text-align:left;vertical-align:top}
+.subj{color:#035;cursor:pointer}.modal{position:fixed;top:30px;left:30px;width:900px;background:#fff;border:1px solid #999;padding:12px;z-index:20;display:none}
+textarea{width:600px;height:70px}.ab{color:red}</style></head>
+<body>
+<h3>Mailbox › Inbox</h3>
+<label>File Status: <select id="fs"><option>All</option><option>Filed</option><option selected>Not Filed</option></select></label> <button type="button" onclick="render()">Search</button>
+<table id="list"><thead><tr><th>Imported Date</th><th>Patient</th><th>Subject</th><th>Comments</th><th>Actions</th></tr></thead><tbody></tbody></table>
+<p id="pager"><a href="#" onclick="window.__pagerClicks=(window.__pagerClicks||0)+1;return false">Next</a></p>
+<div class="modal in" role="dialog" id="viewer">
+  <h4 class="modal-title" id="vtitle"></h4>
+  <textarea id="comment" title="Enter comments" placeholder="Enter comments"></textarea>
+  <div><span>Subject:</span> <input id="vsubj"> <span>Result Date:</span> <input id="vdate"></div>
+  <div id="body"></div>
+  <p><input type="button" id="fileBtn" value="File" onclick="toggleFile()"> <input type="button" value="Previous" onclick="go(-1)"> <input type="button" value="Next" onclick="go(1)"> <input type="button" value="OK" onclick="save();close_()"> <input type="button" value="Cancel" onclick="close_()"></p>
+</div>
+<script>
+const recs = [
+  { date: '30-09-2026', patient: 'John BROWN AR ONE', subject: 'LFT', comments: '', filed: false, body: '<table><tr><td>ALT</td><td>34 U/L</td><td>Normal</td></tr><tr><td>AST</td><td>29 U/L</td><td>Normal</td></tr></table>' },
+  { date: '18-08-2026', patient: 'Arya STARKK', subject: 'LAB TEST RESULT', comments: 'Testing', filed: false, body: '<table><tr><td>ALT1</td><td>Test 1</td><td class="ab">Abnormal</td></tr><tr><td>Bilirubin</td><td>12</td><td>Normal</td></tr></table>' },
+  { date: '13-02-2026', patient: 'Tui BABU', subject: 'Scanned Document', comments: '', filed: true, body: '<iframe src="/discharge.pdf" style="width:600px;height:260px"></iframe>' },
+  { date: '10-10-2025', patient: 'Ckl MOUSE', subject: 'Scanned Referral', comments: '', filed: false, body: '<iframe src="/scan.pdf" style="width:600px;height:260px"></iframe>' },
+  { date: '11-11-2025', patient: 'Ckl MOUSE', subject: 'Care Plan Patient Image', comments: '', filed: false, body: '<img alt="" src="data:," style="width:300px;height:200px;background:#ddd">' },
+];
+let cur = -1;
+const shown = () => { const f = document.getElementById('fs').value; return recs.map((r, i) => i).filter((i) => f === 'All' || (f === 'Filed') === recs[i].filed); };
+function render() {
+  document.querySelector('#list tbody').innerHTML = shown().map((i) => { const r = recs[i]; return `<tr><td>${r.date}</td><td>${r.patient}</td><td class="subj" onclick="openRec(${i})">${r.subject}</td><td style="white-space:pre-line">${r.comments}</td><td><img title="View Audit Log" src="data:,"> <img title="Mark as unread" src="data:,"></td></tr>`; }).join('');
+}
+function openRec(i) { cur = i; const r = recs[i]; document.getElementById('vtitle').textContent = `${r.patient} — ${r.subject}`; document.getElementById('vsubj').value = r.subject; document.getElementById('vdate').value = r.date; document.getElementById('comment').value = r.comments; document.getElementById('body').innerHTML = r.body; document.getElementById('fileBtn').value = r.filed ? 'Un File' : 'File'; document.getElementById('viewer').style.display = 'block'; }
+function save() { if (cur >= 0) recs[cur].comments = document.getElementById('comment').value; render(); }
+function go(d) { save(); const list = shown(); const k = list.indexOf(cur) + d; if (k >= 0 && k < list.length) openRec(list[k]); }
+function close_() { document.getElementById('viewer').style.display = 'none'; cur = -1; render(); }
+function toggleFile() { recs[cur].filed = !recs[cur].filed; document.getElementById('fileBtn').value = recs[cur].filed ? 'Un File' : 'File'; render(); }
+window.__recs = recs;
+render();
+</script></body></html>

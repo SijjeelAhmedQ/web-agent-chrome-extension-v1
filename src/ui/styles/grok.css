@@ -1,0 +1,719 @@
+/*
+ * Grok-style look for both pages. Every selector starts with `html` so it wins over the
+ * page stylesheets, which Vite loads after this shared chunk. Only appearance changes here — every class,
+ * control and behaviour stays the same. Monochrome surfaces, pill-shaped controls, a big
+ * rounded composer, plain assistant answers and a quiet “thinking” trace.
+ */
+
+/* ---------- Canvas & type ---------- */
+
+html body {
+  background: var(--bg);
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+html h1,
+html h2,
+html h3,
+html .display {
+  letter-spacing: -0.02em;
+}
+
+html .gradient-text {
+  background: none;
+  color: inherit;
+}
+
+html ::selection {
+  background: color-mix(in srgb, var(--text) 18%, transparent);
+}
+
+html :where(button, a, summary, [tabindex], [role='button']):not([class*='ant-']):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--text) 55%, transparent);
+}
+
+/* The brand mark: a solid monochrome tile, like Grok's logo button. */
+html .brand-mark {
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: none;
+}
+
+html .icon-btn {
+  border-radius: 999px;
+}
+
+html .pill {
+  font-weight: 500;
+}
+
+html .pill.success {
+  background: var(--primary-soft);
+  color: var(--text);
+}
+
+html .link-btn {
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 3px;
+}
+
+html .link-btn:hover {
+  color: var(--text);
+  text-decoration-color: var(--text-muted);
+}
+
+/* ---------- Side panel: header ---------- */
+
+html .panel-head {
+  border-bottom-color: transparent;
+  background: var(--bg);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html .agent-switch {
+  border-radius: 999px;
+  padding: 0 10px 0 6px;
+}
+
+html .agent-menu .ant-dropdown-menu-item {
+  border-radius: 12px !important;
+}
+
+html .agent-option-check {
+  color: var(--text);
+}
+
+/* ---------- Conversation ---------- */
+
+html .turns {
+  gap: 28px;
+  padding-top: 22px;
+}
+
+html .user-msg .bubble {
+  max-width: 82%;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 24px 24px 8px 24px;
+  background: var(--user-bubble);
+  line-height: 1.5;
+}
+
+html .agent-tag {
+  font-weight: 500;
+}
+
+/* Answers: plain text on the canvas, no card — like Grok. */
+html .answer {
+  padding: 0;
+  font-size: calc(var(--fs-base) + 1px);
+  line-height: 1.68;
+  color: var(--text);
+}
+
+html .answer-actions {
+  margin-top: 8px;
+  margin-left: -6px;
+  opacity: 0.75;
+}
+
+html .answer-actions .icon-btn {
+  color: var(--text-muted);
+}
+
+/* ---------- Activity: a quiet “thinking” trace instead of a card ---------- */
+
+html .activity,
+html .activity.running {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+html .activity.running::before {
+  content: none;
+}
+
+html .activity-head {
+  display: inline-flex;
+  width: auto;
+  max-width: 100%;
+  gap: 7px;
+  padding: 4px 10px 4px 6px;
+  margin-left: -6px;
+  border-radius: 999px;
+  color: var(--text-muted);
+}
+
+html .activity-head:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+html .activity-status,
+html .activity-status.running,
+html .activity-status.done,
+html .activity-status.cancelled {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+html .activity-status.failed {
+  background: transparent;
+}
+
+html .activity-title {
+  font-weight: 500;
+  font-size: 13.5px;
+  color: inherit;
+}
+
+html .activity-meta {
+  margin-left: 0;
+  color: var(--text-faint);
+}
+
+html .activity-meta::before {
+  content: '·';
+  margin-right: 7px;
+}
+
+html .activity-title + .chev,
+html .activity-meta + .chev {
+  margin-left: 2px;
+}
+
+/* The steps hang off a thin line, like Grok's thought trace. */
+html .steps {
+  margin: 6px 0 2px 8px;
+  padding: 2px 0 2px 16px;
+  border-left: 2px solid var(--border-subtle);
+}
+
+html .step-icon.done,
+html .step-icon.skipped {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+html .step-icon.running {
+  border-color: color-mix(in srgb, var(--text) 18%, transparent);
+  border-top-color: var(--text);
+  background: transparent;
+}
+
+html .step:not(:last-child)::before {
+  display: none;
+}
+
+html .step-label {
+  color: var(--text-secondary);
+}
+
+html .step.done .step-label {
+  color: var(--text-secondary);
+}
+
+html .step-note {
+  color: var(--text-faint);
+}
+
+html .step-detail {
+  border-radius: 12px;
+}
+
+/* Grey shimmer on “thinking” text. */
+html .shimmer {
+  background: linear-gradient(90deg, var(--text-muted) 0%, var(--text-muted) 35%, var(--text) 50%, var(--text-muted) 65%, var(--text-muted) 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ---------- Approval & notices ---------- */
+
+html .approval {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  backdrop-filter: none;
+  box-shadow: var(--shadow-md);
+}
+
+html .approval-icon {
+  border-radius: 999px;
+}
+
+html .notice {
+  border-radius: 16px;
+}
+
+html .notice.quiet {
+  color: var(--text-muted);
+}
+
+/* ---------- Empty state: centred, Grok-like ---------- */
+
+html .empty {
+  align-items: center;
+  text-align: center;
+  gap: 28px;
+}
+
+html .empty-hero {
+  align-items: center;
+  gap: 8px;
+}
+
+html .hero-aura {
+  display: none;
+}
+
+html .hero-mark .brand-mark,
+html .hero-mark .agent-avatar {
+  box-shadow: none;
+}
+
+html .empty-eyebrow {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+html .empty-title {
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  font-size: clamp(24px, 7cqi, 32px);
+}
+
+html .empty-sub {
+  margin-inline: auto;
+  max-width: 36ch;
+}
+
+/* Suggestions as pills. */
+html .suggestions,
+html .suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+html .suggestion {
+  width: auto;
+  min-height: 40px;
+  padding: 8px 15px 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  box-shadow: none;
+}
+
+html .suggestion:hover {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--hover);
+  box-shadow: none;
+  transform: none;
+}
+
+html .suggestion-icon,
+html .suggestion:hover .suggestion-icon {
+  width: auto;
+  height: auto;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+html .suggestion-label {
+  font-weight: 500;
+  color: inherit;
+}
+
+html .suggestion-desc,
+html .suggestion-arrow {
+  display: none;
+}
+
+html .setup-card {
+  border-radius: 24px;
+  background: var(--surface);
+  backdrop-filter: none;
+  box-shadow: var(--shadow-md);
+  text-align: left;
+}
+
+html .setup-icon {
+  border-radius: 999px;
+  background: var(--bg-muted);
+  color: var(--text);
+}
+
+html .voice-hint {
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+html .voice-hint svg {
+  color: var(--text-muted);
+}
+
+/* ---------- Composer: Grok's big rounded box ---------- */
+
+html .panel-foot {
+  padding: 6px 12px 14px;
+  background: linear-gradient(to top, var(--bg) 70%, transparent);
+}
+
+html .composer {
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  background: var(--surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: var(--shadow-md);
+}
+
+html .composer:focus-within {
+  border-color: color-mix(in srgb, var(--text) 28%, var(--border));
+  box-shadow: var(--shadow-md);
+}
+
+html .composer.is-running {
+  background:
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    conic-gradient(from var(--spin), transparent 0 60%, var(--text-faint) 78%, var(--text) 88%, transparent 100%) border-box;
+}
+
+html .composer-top {
+  padding: 10px 14px 0;
+}
+
+html .composer textarea {
+  min-height: 48px;
+  padding: 12px 18px 6px;
+  font-size: calc(var(--fs-base) + 1px);
+}
+
+html .composer-bar {
+  padding: 4px 10px 10px 10px;
+}
+
+html .ctx-chip {
+  height: 26px;
+  padding: 0 10px;
+  background: var(--bg-muted);
+}
+
+/* Round send button: black on white, white on black. */
+html .send-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: none;
+}
+
+html .send-btn:hover:not(:disabled) {
+  background: var(--text);
+  opacity: 0.86;
+}
+
+html .send-btn:disabled {
+  background: var(--bg-muted);
+  color: var(--text-faint);
+}
+
+html .stop-btn {
+  border-radius: 999px;
+}
+
+html .composer.is-recording {
+  box-shadow: var(--shadow-md);
+}
+
+html .live-bar,
+html .queued-note {
+  border-radius: 20px;
+}
+
+/* ---------- Runtime chips ---------- */
+
+html .runtime-bar {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: transparent;
+}
+
+html .rt-chip {
+  background: transparent;
+  border-color: var(--border);
+}
+
+/* Status dots keep their meaning: green connected, amber attention, red unreachable. */
+html .rt-dot.ok {
+  background: var(--success);
+  box-shadow: none;
+}
+
+html .rt-chip.rt-site svg {
+  color: var(--text-muted);
+}
+
+html .rt-popover .ant-popover-inner {
+  border-radius: 18px !important;
+}
+
+/* ---------- History & team ---------- */
+
+html .task-row {
+  border-radius: 14px;
+}
+
+html .task-icon.running {
+  color: var(--text);
+}
+
+html .member.running {
+  border-color: var(--border);
+}
+
+/* ---------- Configuration page ---------- */
+
+html .sidebar {
+  border-right-color: var(--border-subtle);
+  background: var(--bg-subtle);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html .sidebar-title {
+  font-weight: 600;
+}
+
+html .nav-item {
+  border-radius: 999px;
+}
+
+html .nav-item.active {
+  background: var(--bg-muted);
+  color: var(--text);
+  font-weight: 600;
+}
+
+html .nav-item.active svg {
+  color: var(--text);
+}
+
+html .nav-item.active::before {
+  content: none;
+}
+
+html .page-head h1 {
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+html .section-card,
+html .list-card,
+html .agent-card,
+html .provider-card,
+html .empty-block {
+  border-radius: 20px;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+
+html .agent-card:not(.add)::before {
+  height: 0;
+}
+
+html .agent-card:hover {
+  border-color: var(--border);
+  box-shadow: none;
+  background: var(--hover);
+  transform: none;
+}
+
+html .radio-card {
+  border-radius: 16px;
+}
+
+html .radio-card.on {
+  border-color: var(--text);
+  background: var(--primary-soft);
+}
+
+html .tp-bar {
+  background: var(--text-muted);
+}
+
+html .mobile-bar {
+  background: var(--bg);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html .site-agent.on .site-agent-head {
+  background: var(--hover);
+}
+
+html .color-dot.on {
+  border-color: var(--text);
+}
+
+/* Ant Design pieces that keep a coloured default. */
+html .ant-switch.ant-switch-checked {
+  background: var(--text) !important;
+}
+
+html .ant-switch.ant-switch-checked .ant-switch-handle::before {
+  background: var(--bg);
+}
+
+html .ant-checkbox-checked .ant-checkbox-inner {
+  background-color: var(--text) !important;
+  border-color: var(--text) !important;
+}
+
+html .ant-checkbox-checked .ant-checkbox-inner::after {
+  border-color: var(--bg) !important;
+}
+
+html .ant-modal .ant-modal-content,
+html .ant-drawer-content,
+html .ant-dropdown .ant-dropdown-menu,
+html .ant-popover .ant-popover-inner {
+  border-radius: 20px;
+}
+
+html .ant-drawer-content {
+  border-radius: 0;
+}
+
+html .ant-message-notice-content {
+  border-radius: 999px !important;
+}
+
+/* ---------- Answers: Grok-like typography and a streaming feel ---------- */
+
+html .answer .md p {
+  margin-bottom: 0.85em;
+}
+
+html .answer .md strong {
+  font-weight: 650;
+  color: var(--text);
+}
+
+html .answer .md h1,
+html .answer .md h2,
+html .answer .md h3,
+html .answer .md h4 {
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+html .answer .md h1 {
+  font-size: 1.25em;
+}
+
+html .answer .md h2 {
+  font-size: 1.12em;
+}
+
+html .answer .md a {
+  color: var(--text);
+  border-bottom: 1px solid var(--text-faint);
+}
+
+html .answer .md a:hover {
+  border-bottom-color: var(--text);
+}
+
+html .answer .md code {
+  border-radius: 6px;
+}
+
+html .answer .md pre {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border-subtle);
+}
+
+html .answer .md table {
+  width: max-content;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+}
+
+/* The newest answer arrives block by block, like Grok writing it. The text is in the page
+   from the start (copy and screen readers get all of it); html only its appearance is eased in. */
+.turn:last-child .answer .md > * {
+  animation: grok-in 460ms var(--ease) both;
+}
+
+html .turn:last-child .answer .md > :nth-child(2) { animation-delay: 80ms; }
+html .turn:last-child .answer .md > :nth-child(3) { animation-delay: 160ms; }
+html .turn:last-child .answer .md > :nth-child(4) { animation-delay: 240ms; }
+html .turn:last-child .answer .md > :nth-child(5) { animation-delay: 320ms; }
+html .turn:last-child .answer .md > :nth-child(6) { animation-delay: 400ms; }
+html .turn:last-child .answer .md > :nth-child(n + 7) { animation-delay: 480ms; }
+
+@keyframes grok-in {
+  from {
+    opacity: 0;
+    filter: blur(5px);
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+    transform: none;
+  }
+}
+
+:root[data-motion='reduce'] .turn:last-child .answer .md > * {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html .turn:last-child .answer .md > * {
+    animation: none;
+  }
+}
+
+/* Grok's buttons are flat: no glow on the primary button in dark mode. */
+html:root[data-theme='dark'] .ant-btn-primary:not(:disabled),
+html:root[data-theme='dark'] .ant-btn-primary:not(:disabled):hover {
+  box-shadow: none;
+}
+
+html:root[data-theme='dark'] .preset-card:hover,
+html:root[data-theme='dark'] .radio-card.on,
+html:root[data-theme='dark'] .model-option.on {
+  box-shadow: 0 0 0 1px var(--text);
+}
+
+html .notice.quiet .link-btn {
+  white-space: nowrap;
+}

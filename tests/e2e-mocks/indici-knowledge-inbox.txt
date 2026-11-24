@@ -1,0 +1,85 @@
+### Navigation: Inboxes, recalls and tasks
+- Patient Inbox: inside a patient's consult, the right panel has the tab "Inbox" (next to Timeline, Prompts, Outbox). It lists that patient's records.
+- Provider Inbox: "Home" in the top bar opens the provider's dashboard; the left panel "Mailbox › Inbox" lists the records of all the provider's patients (sub-folders: Lab, Rad, Referrals, Discharge Summary, Patient Portal, Other Docs).
+- Recall and Task: in a patient's consult, the left sidebar items "Recall" and "Task" open their lists; the ⊕ icon at the top right of the list adds a new one.
+
+### Page: Inbox list and record viewer
+- The list's columns: Imported Date, (Provider Inbox only) Patient, Subject, Comments, Actions.
+- Click a record's Subject to open it in the record viewer. In Actions, the envelope icon marks the record as unread; the list icon opens "View Audit Log", whose "Audit Log History" button opens "View Audit Log History". Use those only when the user asks.
+- Filters: Provider Inbox — From, To, Subject, Organisation, Patient (with a Patient Search pop-up), Provider, File Status (Not Filed / Filed / All — starts at Not Filed), Status (Active / Inactive / All); the ^ / ⌄ icon at the right end of the bar hides and shows them. Patient Inbox — it shows all records when it opens; the ⌄ icon shows its filters: From, To, Subject, Folder, Provider, File Status, Status. Then click "Search".
+- In the viewer: the comment box is at the top ("Enter comments"); a lab result shows each test with "Normal" or "Abnormal"; a scanned document shows its PDF. Buttons: "File" (or "Un File" when the record is already filed), "Previous", "Next" (saves the comment and opens the next record), "OK" (saves the comment and closes the viewer), "Cancel".
+
+### Rule: Inbox records — what the agent decides and what it doesn't
+- Normal or abnormal: a lab result says it ("Normal"/"Abnormal" next to each test) — any abnormal test makes the record abnormal. A PDF: read it and decide; say it was a PDF and give a one-line reason. An image you can't read: say "this record is an image — I couldn't read it" and name the record (date, patient, subject). Never guess.
+- Comments: always the user's words — ask the user for the comment. A record that already has a comment keeps it: type the new comment with clear: false, starting with a new line, so it goes on a new line after the old one. Never replace a comment.
+- Several records: first list them (date, patient, subject, normal/abnormal, reason) and ask the user once to confirm; after the user says yes, do them all with no more questions.
+- Never File or Un File a record unless the user asks for it. Commenting does not file.
+
+### Workflow: Review inbox results (normal and abnormal)
+For requests like: “review inbox results”
+Also for: "show abnormal results", "review unfiled results in my inbox".
+1. Patient Inbox if a patient's consult is open and the user means that patient; otherwise the Provider Inbox (Home).
+2. Which records: Provider Inbox — set "File Status" above the list to All (or to filed / not filed if the user asked for those) and click "Search". Patient Inbox — it shows all records when it opens; only if the user asked for filed or not-filed records, open the filter with the ⌄ icon above the list, set "File Status" and click "Search".
+3. Call read_records with first = the Subject of the first record in the list (and near = its date). It opens every record with "Next", reads them all and closes the viewer — don't open records one by one.
+   Don't click "Click here to load the data from archive" unless the user asked for older records. Call read_records once: its result has every record of the list.
+4. Decide each record normal/abnormal (see the rule) and answer with a short summary: abnormal records first (date, patient, subject, the abnormal tests or the reason), then normal ones, then the ones you couldn't read.
+### Workflow: Add a comment to inbox records
+For requests like: “comment on all abnormal results”
+Also for: "add a comment to the LFT result", "add a comment to all normal records".
+1. Find the records the user means (one record, all abnormal, or all normal) — with read_records as in "Review inbox results" if you don't know them yet.
+2. Several records: list them and ask the user for the comment and to confirm, in one question. One record: ask for the comment.
+3. Make a checklist (task_list) of the records. For each: open it (click its Subject), type the comment into the comment box (clear: false, starting with a new line if a comment is already there), then "Next" for the next record — or "OK" for the last one. Tick it off.
+4. Don't File them. Tell the user which records got the comment.
+
+### Workflow: File, Un File, mark as unread, audit log
+For requests like: “file the normal results”
+Also for: "un file this record", "mark it as unread", "show the audit log of the LFT result".
+- File / Un File: open the record and click "File" (or "Un File"). Several records: list them and confirm once first.
+- Mark as unread: click the envelope icon in the record's Actions.
+- Audit log: click the list icon in the record's Actions; for the full history click "Audit Log History". Read and tell the user what it shows.
+
+### Workflow: Add a recall
+For requests like: “add a recall for bowel screening in 3 months”
+1. The consult of the patient it is for must be open. If it already is (the patient's name is at the top of the consult), work there — don't search for the patient again. If no consult or another patient's consult is open, tell the user to open the patient first.
+   Then click "Recall" in the left sidebar, and the ⊕ icon at the top right of the Recall list. The "Recall" form opens.
+2. Ask the user for what they didn't give: Recall Group, Description (its options depend on the Recall Group — choose the group first, then read the description options and offer them), and when: a period for "Recall-in" (e.g. 2 Day(s), 3 weeks, 3 months) or a date.
+3. Fill: Recall Group, then Description, Note (if given), Recall-in (choose the period) — Due Date fills itself; or type the date the user gave into Due Date. Priority, Cycle, Confidential, Do not show on Portal: only if the user said. Leave Provider and Active as they are.
+4. Click "Save" (not "Complete") — the user approves it. Check the recall is in the list, then tell the user.
+
+### Workflow: Add a task
+For requests like: “add a task for Arya to review her bloods next week”
+1. The consult of the patient it is for must be open. If it already is (the patient's name is at the top of the consult), work there — don't search for the patient again. If no consult or another patient's consult is open, tell the user to open the patient first.
+   Then click "Task" in the left sidebar, and the ⊕ icon at the top right of the task list. "Add Task" opens.
+2. Ask the user for what they didn't give: the subject, who it is "To" (a provider — read the options), the "Type" (read the options), the priority and the due date.
+3. Fill: Subject / Progress, To (remove the provider already there if the user named another), Priority, Due (DD/MM/YYYY), Type; Start stays today unless the user said. Leave Patient, From, Status and the checkboxes as they are unless the user said.
+4. Click "Save" (not "Complete" or "Reset") — the user approves it. Check it is in the task list, then tell the user.
+
+### Workflow: Patient summary (read only)
+For requests like: “summarise Arya's medications, diagnoses and abnormal results”
+1. A patient's consult must be open. Read the page: "Long Term Medications", "Problem List", "Alerts", "Recent Measurements".
+2. For results, do "Review inbox results" in the Patient Inbox.
+3. Answer with short sections: Medications, Diagnoses (Problem List), Abnormal results, Normal results. Change nothing.
+
+### Navigation: Inbox filters and folders (labs, rads, referrals…)
+- Which inbox: if a patient's consult is open and the user means that patient, the Patient Inbox; otherwise the Provider Inbox.
+- Patient Inbox (the consult's right panel, tab "Inbox"): the buttons above the list filter it — "Flagged", "All", "Disc.", "Lab", "Rad", "Ref", "MyIndi", "Scan" (some show a count, e.g. "All 19"). "go to labs" → click "Lab"; rads / radiology → "Rad"; referrals → "Ref"; discharge summaries → "Disc."; scans → "Scan"; MyIndici → "MyIndi"; flagged → "Flagged"; all / everything → "All".
+- Provider Inbox (Home → Provider Dashboard): the left panel "Mailbox › Inbox" has the folders "Lab", "Rad", "Referrals", "Discharge Summary", "Patient Portal", "Other Docs". If they are not showing under "Inbox", expand it first: click the small arrow icon left of "Inbox". Then click the folder ("go to labs" → "Lab"). Don't use the coloured boxes at the top ("Lab/Rad", "Urgent", "Overdue"…) for this.
+- After a filter or folder, read the list. To review its records, use read_records as in "Review inbox results".
+
+### Rule: Empty inbox list — ask before loading the archive
+If the list shows "No new messages." and the button "Click here to load the data from archive.", don't click it yourself: tell the user there are no records here and ask "Do you want me to load the archived records?". Click it only if the user says yes, then read the list again. When the list has records, never load the archive unless the user asks for older records.
+
+### Workflow: Search the inbox with filters
+For requests like: “show lab results for arya stark from last month”
+Also for: "find unfiled records from 01/10/2026 to 20/10/2026", "show inactive records of Jake", "show filed scan documents".
+1. Which inbox: a patient's consult is open and the user means that patient → Patient Inbox; otherwise the Provider Inbox (Home).
+2. Show the filters if they are hidden: the ⌄ icon at the right end of the bar above the list (Patient Inbox: Flagged, All, Lab… bar).
+3. Set only what the user asked for — leave the other filters as they are, except File Status: All unless the user said filed or not filed.
+   - From / To: type the date as DD/MM/YYYY (clear the field first). Work out "today", "last week", "last month", "since 1 October" from today's date.
+   - Subject (both) and Organisation (Provider Inbox): type the words the user gave.
+   - Patient (Provider Inbox only): type the patient's name, then click the magnifier next to the field. The "Patient Search" pop-up opens — it is part of the task, don't close it. Pick the patient as the rule "Open a patient by clicking the name" says: exactly one row matches → click the name (near = its DOB); several → list them and ask the user; none → tell the user. Clicking the name selects the patient: the pop-up closes and the Patient field shows the name.
+   - Folder (Patient Inbox only): Inbox, Lab, Scan Document, Other Docs, BPAC, Photos, Allied Health Service — "labs" → Lab, "scans" → Scan Document.
+   - Provider (both): the provider the user named, or All. Read the options and choose the matching one.
+   - File Status: Filed / Not Filed / All. Status: Active / Inactive / All.
+4. Click the inbox's "Search" (not one inside the Patient Search pop-up). Read the list.
+5. Empty list: follow the rule "Empty inbox list — ask before loading the archive". Otherwise tell the user what the list shows (date, patient, subject, comments) — and if the user asked to review them, use read_records as in "Review inbox results".

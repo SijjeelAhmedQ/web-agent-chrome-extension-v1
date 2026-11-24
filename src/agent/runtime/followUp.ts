@@ -1,0 +1,136 @@
+import type { ChecklistItem, StepRecord } from '@/shared/types/history';
+import type { ChatMessage } from '../llm/types';
+
+/**
+ * A task that ends by asking the user something (“What reason should I add?”) is not over: the
+ * user's next message is the answer, and the agent must carry on from where it stopped — not
+ * start the task again. The answer kept in memory therefore lists the steps already done.
+ */
+
+const STOPPED = '[Where I stopped — steps already done in this task:';
+/** An item something was saved for before the question — its save is not done again after the reply. */
+const SAVED = ' ⟪saved, not ticked yet⟫';
+
+/** Polite offers at the end of an answer are not questions the task is waiting on. */
+// “What would you like to do with these records?” — asked after every list shown — is an open offer too: taken for
+// a question the task waits on, the user's next command (“summarize first record”) became a reply to the list's
+// task, its knowledge was the list's, and the model answered with the filters again.
+const OFFER = /\b(is there anything|anything else|something else|let me know|else (can|could|should) i|help (you )?with|(would|do) you (like|want) me to|you'?d like me to|shall i|want me to|need (any|more|further)|what (else )?(would|do) you (like|want)( me)? to do|how would you like (me )?to (proceed|continue|go on))\b[^?]*\?/gi;
+
+/**
+ * A question that offers choices (“Do you want me to press OK or Cancel?”, “Arya STARK or Arya STARKK?”): the task
+ * waits on the answer, however politely it is worded — taken for an offer, the task was pushed on and the model
+ * pressed a pop-up's OK itself.
+ */
+const CHOICE = /[^.!?\n]*\S\s+or\s+\S[^.!?\n]*\?/gi;
+const NOT_A_CHOICE = /\b(anything else|something else|let me know)\b/i;
+
+/** True when an answer ends by asking the user something the task needs. */
+export function asksUser(answer: string): boolean {
+  const tail = answer.trim().slice(-500);
+  if ((tail.match(CHOICE) ?? []).some((q) => !NOT_A_CHOICE.test(q))) return true;
+  return /\?/.test(tail.replace(OFFER, ''));
+}
+
+/** The answer as remembered for the next turn: when it asks the user something, with the steps done so far. */
+export function rememberedAnswer(answer: string, steps: StepRecord[], checklist: ChecklistItem[] = []): string {
+  if (!asksUser(answer)) return answer;
+  return withStoppedList(answer, steps, checklist, false);
+}
+
+/** The answer with the steps done so far (and the checklist) — the list a reply carries on from. */
+function withStoppedList(answer: string, steps: StepRecord[], checklist: ChecklistItem[], always: boolean): string {
+  const done = steps.filter((s) => s.status === 'done' && s.tool !== 'verify' && s.tool !== 'task_list' && s.tool !== 'decision').slice(-15);
+  if (!done.length && !checklist.length && !always) return answer;
+  const lines = done.map((s, i) => `${i + 1}. ${s.label}${s.note ? ` → ${s.note}` : ''}`);
+  // The checklist goes along, so the reply carries on with the same items ticked.
+  const list = checklist.map((c) => `${c.done ? '☑' : '☐'} ${c.text}${c.note ? ` ⟨${c.note}⟩` : ''}${c.saved && !c.done ? SAVED : ''}`);
+  return `${answer}\n\n${STOPPED}\n${[...lines, ...(list.length ? ['Checklist:', ...list] : [])].join('\n')}]`;
+}
+
+/** What Resume sends: a reply that carries a stopped or failed task on from where it stopped. */
+export const RESUME_REQUEST = 'Resume — carry on from where you stopped.';
+
+/**
+ * A stopped or failed task, as remembered for Resume: its request, and an answer listing what was done —
+ * so “Resume” reads as a reply to it and the task carries on instead of starting again.
+ */
+export function resumeMemory(task: { request: string; steps: StepRecord[]; checklist?: ChecklistItem[]; error?: string }): ChatMessage[] {
+  const why = task.error ? ` (${task.error.replace(/\.$/, '')})` : '';
+  return [
+    { role: 'user', content: task.request },
+    { role: 'assistant', content: withStoppedList(`I stopped before finishing${why}. Shall I carry on from here?`, task.steps, task.checklist ?? [], true) },
+  ];
+}
+
+/**
+ * A model's answer without a “Where I stopped” list it wrote itself, copying the earlier answers it saw —
+ * the runtime adds the real one; a copied one hides the question the answer ends with.
+ */
+export function withoutStoppedList(answer: string): string {
+  const at = answer.indexOf(STOPPED);
+  return at < 0 ? answer : answer.slice(0, at).trim();
+}
+
+export interface FollowUp {
+  /** What the model is sent in place of the bare reply. */
+  request: string;
+  /** The earlier request this reply belongs to (for picking site knowledge). */
+  task: string;
+  /** Labels of the page actions already done before the question. */
+  doneSteps: string[];
+  /** The checklist as it was when the question was asked. */
+  checklist: ChecklistItem[];
+}
+
+/** Words a new task starts with (“goto patients and select…”, “add medication…”); a reply rarely does. */
+const TASK_START = /^(please\s+)?(go ?to|go|open|select|add|search|find|look ?up|create|make|book|schedule|navigate|show|click|remove|delete|update|change|edit|fill|check|send|start|close|log ?in|sign ?in|summari[sz]e|file|unfile|sort|filter|read|list|tell me|give me|what is|what are|how many)\b/i;
+
+/**
+ * Is this message a new task rather than an answer? It starts like a request and has a few words —
+ * “goto patients and select arya stark”. Answers are “OK”, “routine follow-up”, “Park SA Request”,
+ * “the second one”.
+ */
+export function looksLikeNewTask(message: string): boolean {
+  const text = message.trim();
+  return TASK_START.test(text) && text.split(/\s+/).length >= 3;
+}
+
+/** When the last answer asked the user something, the new message is their reply: frame it as one. */
+export function followUpOf(history: ChatMessage[], reply: string): FollowUp | null {
+  const last = history.at(-1);
+  const asked = history.at(-2);
+  if (!last || last.role !== 'assistant' || asked?.role !== 'user') return null;
+  // The list of steps is what closes the answer — not the same words quoted inside it.
+  const stopped = (m: ChatMessage | undefined) => m?.role === 'assistant' && m.content.lastIndexOf(STOPPED) >= 0 && m.content.trimEnd().endsWith(']');
+  if (!stopped(last)) return null;
+  const at = last.content.lastIndexOf(STOPPED);
+  // A reply to a second question (“follow up”, then “OK”): the task is the request the questions came from,
+  // not the reply before — and “OK” twice is two answers, not the same request run again.
+  let k = history.length - 2;
+  while (k >= 2 && history[k].role === 'user' && stopped(history[k - 1]) && history[k - 2].role === 'user' && !looksLikeNewTask(history[k].content)) k -= 2;
+  const task = history[k].content.trim();
+  // The same request again (Run again), or a new task, is a fresh start — not a reply (and no old checklist).
+  if (reply.trim().toLowerCase() === task.toLowerCase() || looksLikeNewTask(reply)) return null;
+  const block = last.content.slice(at + STOPPED.length).replace(/\]\s*$/, '').split('\n');
+  const doneSteps = block.map((l) => l.match(/^\d+\. (.*?)(?: → .*)?$/)?.[1]?.trim() ?? '').filter(Boolean);
+  const checklist = block.flatMap((l): ChecklistItem[] => {
+    const m = l.match(/^([☑☐]) (.*?)(?: ⟨(.*)⟩)?( ⟪saved, not ticked yet⟫)?$/);
+    return m ? [{ text: m[2].trim(), done: m[1] === '☑', ...(m[3] ? { note: m[3] } : {}), ...(m[4] ? { saved: true } : {}) }] : [];
+  });
+  const request = [
+    `My reply to your question: “${reply.trim()}”`,
+    '',
+    `Carry on with the task I gave you before (“${task}”) from where you stopped. The browser is as you left it, and the steps listed at the end of your last answer are already done — don't do them again and don't start the task over. Check the page (it is read for you below), use my reply where it was needed, do only the steps that are left, then answer. If you asked which button to press and my reply names none of them (“OK” when the choices are “Yes - Add new”, “No - Overwrite All Existing”, “Cancel - Do Nothing”), don't pick one: ask me again, naming them. (If my message is a new request rather than a reply, do it as a new task.)`,
+  ].join('\n');
+  return { request, task, doneSteps, checklist };
+}
+
+/** Earlier turns as the model sees them: old answers flagged as possibly out of date — except the question being answered now. */
+export function historyForModel(history: ChatMessage[], followUp: FollowUp | null): ChatMessage[] {
+  return history.map((m, i): ChatMessage => {
+    if (m.role !== 'assistant') return m;
+    const current = followUp && i === history.length - 1;
+    return { ...m, content: `${current ? '(Your last answer — you stopped here to ask the user)' : '(Earlier answer — may be out of date)'}\n${m.content}` };
+  });
+}

@@ -1,0 +1,17 @@
+
+>>> open the clinical summary of Aqib JAVED, then close it
+--- 46s ---
+open the clinical summary of Aqib JAVED, then close it
+Completed
+2 steps · 44s
+Looking for “Aqib JAVED patient name in list”
+Done
+0.1s
+Found “Back to List”
+find_element Details
+Clicking “Close”
+Done
+3s
+click Details
+
+Done — the Clinical Summary for Aqib JAVED was open and I closed it.

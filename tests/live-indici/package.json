@@ -1,0 +1,8 @@
+{
+  "name": "web-agent-live-indici-tests",
+  "private": true,
+  "description": "The Web Agent on the live Indici training site — see tests/README.md",
+  "dependencies": {
+    "puppeteer": "^25.12.0"
+  }
+}

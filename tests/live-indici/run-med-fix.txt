@@ -1,0 +1,140 @@
+
+>>> select arya STARK patient
+--- 30s ---
+select arya STARK patient
+Completed
+1 step · 29s
+Reading the page
+Done
+0.1s
+168 controls · Smart AI Inbox
+read_page Details
+Model calls · 1 · 12k tokens in · 37 out · cost not reported
+Not billed here — on OpenRouter's Gemini 3.8 Flash about $0.0099
+1. First step
+—
+qwen3.8:27b-q4_K_M · 29s
+12k in · 37 out
+Prompt: knowledge 5.3k · instructions 2.3k · tools 2.9k · pages 3.0k · steps 74
+→ answer: Arya STARK is already selected and open on the right — her records are listed under her name on the left, and her first record is sh…
+
+Arya STARK is already selected and open on the right — her records are listed under her name on the left, and her first record is showing. Nothing to change.
+
+>>> what is this patient's medication and medical history
+--- 158s ---
+what is this patient's medication and medical history
+Completed
+11 steps · 2m 36s
+Reading the page
+Done
+0.1s
+168 controls · Smart AI Inbox
+read_page Details
+Clicking “Clinical Summary”
+Done
+6s
+The page changed
+click Details
+Reading the page
+Done
+0.1s
+192 controls · Smart AI Inbox · only the changes
+read_page Details
+Clicking “Medications”
+Done
+8s
+The page changed
+click Details
+Reading the page
+Done
+0.1s
+216 controls · Smart AI Inbox
+read_page Details
+Clicking “Diagnosis”
+Done
+6s
+The page changed
+click Details
+Reading the page
+Done
+0.1s
+192 controls · Smart AI Inbox · only the changes
+read_page Details
+Clicking “Allergies”
+Done
+8s
+The page changed
+click Details
+Reading the page
+Done
+0.1s
+188 controls · Smart AI Inbox · only the changes
+read_page Details
+Clicking “Diagnosis”
+Done
+4s
+The page changed
+click Details
+Reading the page
+Done
+0.1s
+192 controls · Smart AI Inbox · only the changes
+read_page Details
+Model calls · 4 · 55k tokens in · 890 out · cost not reported
+Not billed here — on OpenRouter's Gemini 3.8 Flash about $0.030 (with the cache) to $0.049
+1. First step
+—
+qwen3.8:27b-q4_K_M · 27s
+11k in · 40 out
+Prompt: knowledge 4.2k · instructions 2.3k · tools 2.9k · pages 3.0k · steps 153
+→ click 5710 "Clinical Summary"
+2. Doing a step
+—
+qwen3.8:27b-q4_K_M · 17s
+13k in · 121 out
+Prompt: knowledge 4.2k · instructions 2.3k · tools 2.9k · pages 5.2k · steps 183
+→ click 5771 "Medications"; click 5772 "Diagnosis"; click 5773 "Allergies"
+3. Doing a step
+—
+qwen3.8:27b-q4_K_M · 10s
+15k in · 40 out
+Prompt: knowledge 4.2k · instructions 2.3k · tools 2.9k · pages 6.1k · steps 1.3k
+→ click 5772 "Diagnosis"
+4. Doing a step
+—
+qwen3.8:27b-q4_K_M · 1m 8s
+16k in · 689 out
+Prompt: knowledge 4.2k · instructions 2.3k · tools 2.9k · pages 7.2k · steps 1.3k
+→ answer: Here's Arya STARK's medication and medical history from the Clinical Summary: **Medications** - **Long-term:** - **Panadol** (parace…
+
+Here's Arya STARK's medication and medical history from the Clinical Summary:
+
+Medications
+
+Long-term:
+Panadol (paracetamol 500 mg) — 1 tablet three times a day (03/11/2026)
+Mabthera (rituximab 500 mg/50 mL) — 500 mg IV every 3 months (07/04/2026)
+Antithymocyte immunoglobulin, equine 250 mg/5 mL — 1 ampoule IV once daily for 10 days (07/04/2026)
+GlucaGen Hypokit (glucagon 1 mg) — 1 unit once daily (02/04/2026)
+Panadeine Caplet (paracetamol 500 mg + codeine 8 mg) — 1 tablet once daily (15/08/2025)
+Paramax (paracetamol 500 mg + metoclopramide 5 mg) — 1 tablet after three months (15/08/2025)
+Last three months:
+Panadol (paracetamol 500 mg) — 1 tablet three times a day (03/11/2026, repeated)
+Gabapentin 100 mg capsule — 2 capsules twice daily (21/10/2026)
+Amoxicillin 250 mg/5 mL oral liquid — 5 mL twice daily (14/10/2026)
+
+Diagnosis (medical history) — 5 active records
+
+Acute myocardial infarction (Confirmed) — 02/11/2026
+Diabetes mellitus type 2 (Confirmed) — 02/11/2026
+Brief smoking cessation advice (Long Term) — 26/10/2026
+Both eyes (Confirmed) — 20/06/2025
+Is informed (Probable, test) — 30/07/2024
+
+Allergies — 3 active
+
+Avalglucosidase alfa — Low, Medicine (15/08/2025)
+Paracetamol (Noumed) 500 mg — Active, reaction: rash (26/10/2026)
+Amoxicillin + clavulanic acid — High, Medicine (02/11/2026)
+
+Note: there's a conflict worth flagging — paracetamol is listed both as a long-term medication (Panadol) and as an active allergy (rash), and amoxicillin appears as both a recent medication and a High allergy.

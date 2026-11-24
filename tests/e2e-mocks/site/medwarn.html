@@ -1,0 +1,11 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Medications</title>
+<style>.modal { position: fixed; top: 60px; left: 40px; width: 460px; background: #fff; border: 1px solid #999; padding: 14px; } .close { float: right; border: 0; background: none; font-size: 18px; }</style></head>
+<body>
+<h2>Medication Advanced Search</h2>
+<button type="button" onclick="document.getElementById('warn').style.display='block'">Gabapentin 100 mg capsule</button>
+<div class="modal in" role="dialog" id="warn" style="display:none">
+  <button type="button" class="close" onclick="this.parentElement.style.display='none'">×</button>
+  <p>This medicine is already in the active medicines list in the same strength and form. Are you sure you want to add it again?</p>
+  <input type="button" value="Yes"> <input type="button" value="No">
+</div>
+</body></html>

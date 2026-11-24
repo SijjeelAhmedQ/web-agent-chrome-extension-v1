@@ -1,0 +1,8 @@
+file:///D:/learing%20AI%20after%20Movement%20in%20Syed%20Ammar's%20Team/web-agent-chrome-extension/tests/live-indici/live-agent.mjs:64
+  await site.bringToFront();
+             ^
+
+TypeError: Cannot read properties of undefined (reading 'bringToFront')
+    at file:///D:/learing%20AI%20after%20Movement%20in%20Syed%20Ammar's%20Team/web-agent-chrome-extension/tests/live-indici/live-agent.mjs:64:14
+
+Node.js v22.23.1

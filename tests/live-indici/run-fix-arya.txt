@@ -1,0 +1,108 @@
+
+>>> goto patients and select arya Stark
+--- 132s ---
+goto patients and select arya Stark
+Completed
+7 steps · 2m 11s
+Reading the page
+Done
+0.4s
+181 controls · Provider Dashboard
+read_page Details
+Opening “Patients” › “Search & List”
+Done
+1s
+“Search & List” is showing
+open_menu Details
+Clicking “Search & List”
+Done
+9s
+Opened a new page
+click Details
+Reading the page
+Done
+0.5s
+288 controls · Patient Search
+read_page Details
+Typing “Arya Stark” into “Surname First Name”
+Done
+1s
+type Details
+Clicking “Search”
+Done
+2s
+click Details
+Reading the page
+Done
+0.2s
+85 controls · Patient Search
+read_page Details
+
+Two patients match — which one should I open?
+
+Arya STARK — DOB 03-12-2015, NHI ZAA3490
+Arya STARKK — DOB 13-10-1965, NHI ZAA6146
+
+>>> the one born 03-12-2015
+--- 115s ---
+the one born 03-12-2015
+Completed
+5 steps · 1m 54s
+Reading the page
+Done
+0.1s
+85 controls · Patient Search
+read_page Details
+Clicking “Arya STARK” (with “03-12-2015”)
+Done
+16s
+Opened in a new tab · a dialog is showing
+click_text Details
+Reading the page
+Done
+0.8s
+452 controls · Consult Detail
+read_page Details
+Clicking “×”
+Done
+4s
+click Details
+Reading the page
+Done
+0.7s
+449 controls · Consult Detail · only the changes
+read_page Details
+
+I've opened Arya STARK's consult (DOB 03-12-2015, NHI ZAA3490) and closed the Patient Alerts pop-up (allergy alert: Tramadol).
+
+One pop-up is still showing — "Add reason to view patient file" — and I need your words for it. What reason should I add to view the patient file?
+
+>>> follow up
+  approval: Click “Save”? This will save or submit changes on pmstraining.vitonta.com. Check the details: Add reason to view patient file follow up Cancel Confirm → APPROVED
+--- 90s ---
+follow up
+Completed
+4 steps · 1m 29s
+Looking for “reason field in Add reason to view pati…”
+Done
+0.3s
+Found “Add reason to view patient file”
+find_element Details
+Typing “follow up” into “Add reason to view patient file”
+Done
+1s
+type Details
+Clicking “Save”
+Done
+3s
+The page changed
+click Details
+Reading the page
+Done
+0.9s
+448 controls · Consult Detail
+read_page Details
+
+Done — Arya STARK's consult is open (DOB 03-12-2015, NHI ZAA3490).
+
+I saved the reason "follow up" to view the patient file ("Reason saved successfully"), and the Patient Alerts pop-up was closed earlier. The consult is ready for whatever you'd like to do next.

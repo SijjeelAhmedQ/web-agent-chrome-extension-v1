@@ -1,0 +1,17 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Patient Search</title>
+<style>body{font:13px Arial,sans-serif;margin:10px}.row{display:flex;gap:10px;margin:4px 0;align-items:center}.lbl{width:110px;text-align:right}.fld{width:220px}
+table{border-collapse:collapse;margin-top:8px}td,th{border:1px solid #ccc;padding:3px 6px}.nm{cursor:pointer;color:#035}</style></head>
+<body>
+<nav><a href="#">Home</a> <a href="#">Patient Queues</a> <a href="#">Patients</a> <input placeholder="Search Patient" title="Search Patient"></nav>
+<h3>Patient Search</h3>
+<!-- Like Indici: labels in their own columns, fields nested in boxes, a masked DOB, a status drop-down. -->
+<div class="row"><div class="lbl"><span>Patient Name:</span></div><div class="fld"><div class="input-group"><input id="pn" placeholder="Surname First Name"></div></div>
+  <div class="lbl"><span>DOB:</span></div><div class="fld"><div><input id="dob" value="__/__/____"></div></div></div>
+<div class="row"><div class="lbl"><span>NHI:</span></div><div class="fld"><div><input id="nhi"></div></div>
+  <div class="lbl"><span>Status:</span></div><div class="fld"><select><option>Active</option><option>Inactive</option></select></div></div>
+<button type="button" onclick="search()">Search</button> <button type="button">Clear</button>
+<table id="res"><tr><th>Name</th><th>DOB</th><th>NHI</th><th>Actions</th></tr>
+<tr data-n="kook jung"><td class="nm" onclick="location.href='/consult.html'">Kook JUNG</td><td>01-09-2000</td><td>IND-1</td><td><img title="Edit" src="data:,"></td></tr>
+<tr data-n="arya stark"><td class="nm" onclick="location.href='/consult.html'">Arya STARK</td><td>03-12-2015</td><td>ZAA3490</td><td><img title="Edit" src="data:,"></td></tr></table>
+<script>function search(){const w=document.getElementById('pn').value.toLowerCase().split(/\s+/).filter(Boolean);document.querySelectorAll('#res tr[data-n]').forEach(r=>r.style.display=w.every(x=>r.dataset.n.includes(x))?'':'none');}</script>
+</body></html>

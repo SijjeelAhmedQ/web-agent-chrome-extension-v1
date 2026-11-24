@@ -1,0 +1,104 @@
+
+>>> show the medications in Arya STARK's clinical summary
+--- 197s ---
+show the medications in Arya STARK's clinical summary
+Completed
+12 steps · 3m 16s
+Looking for “Arya STARK patient name in the left list”
+Done
+0.1s
+Found “Draft Email”
+find_element Details
+Reading the page
+Done
+0.1s
+151 controls · Smart AI Inbox
+read_page Details
+Clicking “Expand search controls”
+Done
+1s
+The page changed
+click Details
+Looking for “Patient Name search field”
+Done
+0.1s
+Found “Search”
+find_element Details
+Typing “Arya STARK” into “Patient Name”
+Done
+5s
+type Details
+Reading the page
+Done
+0.1s
+54 controls · Smart AI Inbox
+read_page Details
+Clicking “Arya STARK. Abnormal”
+Done
+1s
+The page changed
+click Details
+Looking for “Clinical Summary button for Arya STARK”
+Done
+0.1s
+Found “Inbox scope for Arya STARKK”
+find_element Details
+Clicking “Clinical Summary”
+Done
+3s
+The page changed
+click Details
+Reading the page
+Done
+0.1s
+86 controls · Smart AI Inbox
+read_page Details
+Clicking “Medications”
+Done
+6s
+The page changed
+click Details
+Reading the page content
+Done
+0.1s
+100 controls · Smart AI Inbox
+read_page Details
+
+Here are Arya STARK's (NHI: ZAA3490, 10y) medications from the Clinical Summary:
+
+Today's Medication
+
+Panadol – paracetamol 500 mg tablet — 1 tablet three times a day, qty 9, Provider: ChCh02, 02/11/2026
+
+Long Term Medications
+
+Mabthera – rituximab 500 mg/50 mL injection — 500 mg IV every 3 months, 1 vial, Provider: Jake, 07/04/2026
+antithymocyte immunoglobulin, equine 250 mg/5 mL injection — 1 ampoule IV once daily for 10 days, 10 ampoules, Provider: Jake, 07/04/2026
+GlucaGen Hypokit – glucagon hydrochloride 1 mg injection — 1 Unit once daily, qty 10, Provider: ChCh02, 02/04/2026
+Panadeine Caplet – paracetamol 500 mg + codeine phosphate 8 mg — 1 tablet once daily, qty 6, Provider: Jake, 15/08/2025
+antithymocyte immunoglobulin, equine 250 mg/5 mL injection — 1 Unit once daily, Provider: Jake, 15/08/2025
+Paramax – paracetamol 500 mg + metoclopramide 5 mg — 1 tablet after three months, qty 1, Provider: Jake, 15/08/2025
+
+Last Three Months
+
+Panadol – paracetamol 500 mg tablet — 1 tablet three times a day, qty 9, Provider: ChCh02, 02/11/2026
+paracetamol 500 mg tablet — 1 tablet three times a day, qty 9, Provider: ChCh02, 23/10/2026
+gabapentin 100 mg capsule — 2 capsules twice daily, qty 20, Provider: ChCh02, 21/10/2026 (×2 entries)
+amoxicillin 250 mg/5 mL oral liquid — 5 mL twice daily, qty 70, Provider: medo, 14/10/2026
+
+>>> close the clinical summary
+--- 23s ---
+close the clinical summary
+Completed
+2 steps · 22s
+Looking for “Back to List button in Clinical Summary…”
+Done
+0.1s
+Found “Back to List”
+find_element Details
+Clicking “Back to List”
+Done
+3s
+click Details
+
+Closed — the Clinical Summary pop-up is gone and you're back on Arya STARK's inbox view.

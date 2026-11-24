@@ -1,0 +1,25 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Consult Detail</title>
+<style>
+  body { font: 13px Arial, sans-serif; margin: 12px; }
+  .modal { position: fixed; background: #fff; border: 1px solid #999; padding: 14px; box-shadow: 0 8px 30px #0004; width: 380px; }
+  .close { float: right; border: 0; background: none; font-size: 18px; cursor: pointer; }
+</style></head>
+<body>
+<h2>Consult — Arya STARK</h2>
+<p id="result">Not saved</p>
+<!-- Like a consult: pop-ups stacked on top of each other as the page opens. -->
+<div class="modal in" role="dialog" id="m1" style="top:40px;left:40px">
+  <button type="button" class="close" onclick="hide('m1')">×</button>
+  <h4 class="modal-title">Alerts</h4><p>Patient has a penicillin allergy.</p>
+</div>
+<div class="modal in" role="dialog" id="m2" style="top:180px;left:40px">
+  <h4 class="modal-title">Recalls due</h4><p>Cervical screening overdue.</p>
+  <input type="button" value="Close" onclick="hide('m2')">
+</div>
+<div class="modal in" role="dialog" id="m3" style="top:320px;left:40px">
+  <b>Add reason to view patient file</b><br><input id="reason" title="Add reason to view patient file"> <input type="button" value="Save" onclick="document.getElementById('result').textContent='Saved: '+document.getElementById('reason').value">
+</div>
+<script>
+  function hide(id) { document.getElementById(id).style.display = 'none'; }
+  if (location.search.includes('big')) document.body.insertAdjacentHTML('beforeend', Array.from({ length: 200 }, (_, i) => `<a href="#">Timeline item ${i} 16-10-2026</a> `).join(''));
+</script></body></html>

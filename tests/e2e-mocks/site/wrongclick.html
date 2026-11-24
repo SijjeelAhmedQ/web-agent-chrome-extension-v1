@@ -1,0 +1,10 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Patient Search</title>
+<style>.modal{position:fixed;top:40px;left:40px;width:400px;background:#fff;border:1px solid #999;padding:10px;display:none}.close{float:right;border:0;background:none;font-size:18px}img.i{width:16px;height:16px;cursor:pointer}</style></head>
+<body>
+<a href="/results.html" target="_blank">Reports</a>
+<table><tr><th>Name</th><th>DOB</th><th>Actions</th></tr>
+<tr><td style="cursor:pointer" onclick="location.href='/consult.html'">Arya STARK</td><td>03-12-2015</td>
+<td><img class="i" title="Book appointment" src="data:," onclick="window.open('/results.html')"> <img class="i" title="Details" src="data:," onclick="document.getElementById('det').style.display='block'"></td></tr>
+</table>
+<div class="modal in" role="dialog" id="det"><button type="button" class="close" onclick="this.parentElement.style.display='none'">×</button><h4>Patient Details</h4><p>Arya STARK</p></div>
+</body></html>

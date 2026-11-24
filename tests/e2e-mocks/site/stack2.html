@@ -1,0 +1,15 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Consult Detail</title>
+<style>body{font:13px Arial,sans-serif;margin:12px}.modal{position:fixed;background:#fff;border:1px solid #999;padding:14px;box-shadow:0 8px 30px #0004}.close{float:right;border:0;background:none;font-size:18px;cursor:pointer}</style></head>
+<body><h2>Consult — Arya STARK</h2>
+<!-- ?nested: the alerts are put inside the reason pop-up (in front of it); ?late: they come 6 s later, on their own. -->
+<div class="modal in" id="reason" style="top:60px;left:40px;width:560px;height:240px;z-index:10;display:none">
+  <h4 class="modal-title">Add reason to view patient file</h4><input id="r" title="Add reason to view patient file">
+  <div style="position:absolute;bottom:12px;right:12px"><input type="button" value="Save"></div>
+  <div id="slot"></div>
+</div>
+<script>
+  const nested = location.search.includes('nested');
+  const alerts = '<div class="modal in" role="dialog" id="alerts" style="top:50px;left:90px;width:460px;z-index:30"><button type="button" class="close" onclick="document.getElementById(\'alerts\').style.display=\'none\'">×</button><h4 class="modal-title">Patient Alerts</h4><p>**ALLERGY ALERT** **CLINICAL ALERT**</p></div>';
+  setTimeout(() => (document.getElementById('reason').style.display = 'block'), 300);
+  setTimeout(() => (nested ? document.getElementById('slot') : document.body).insertAdjacentHTML('beforeend', alerts), nested ? 1200 : 6000);
+</script></body></html>

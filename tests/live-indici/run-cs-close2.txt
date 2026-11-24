@@ -1,0 +1,80 @@
+
+>>> show the medications in Aqib JAVED's clinical summary
+--- 120s ---
+show the medications in Aqib JAVED's clinical summary
+Completed
+7 steps · 1m 58s
+Looking for “Aqib JAVED patient name in the left list”
+Done
+0.1s
+Found “Pin patient”
+find_element Details
+Looking for “Clinical Summary button”
+Done
+0.1s
+Found “Clinical Summary”
+find_element Details
+Clicking “Clinical Summary”
+Done
+4s
+The page changed
+click Details
+Calling “click”
+Failed
+0.1s
+Not run — bad call
+click Details
+Looking for “Medications tab”
+Done
+0.1s
+Found “Medications”
+find_element Details
+Clicking “Medications”
+Done
+6s
+The page changed
+click Details
+Reading the page content
+Done
+0.1s
+181 controls · Smart AI Inbox
+read_page Details
+
+Here are Aqib JAVED's medications from the Clinical Summary (last six months):
+
+Today's Medication
+
+No current medications
+
+Long Term Medication
+
+paracetamol 500 mg tablet — 1 once daily, qty 1.00 (ChCh02, 18/05/2026)
+Albalon (naphazoline hydrochloride 0.1% eye drops) — 2 drops twice daily (MuHa, 06/01/2026)
+Omeprazole (Teva) 20 mg capsule — 1 capsule twice daily, qty 14 (MuHa, 06/01/2026)
+Brufen Extra (ibuprofen 200 mg + paracetamol 500 mg) — 5 tablets twice daily, qty 100 (MuHa, 06/01/2026)
+Augmentin (amoxicillin 125 mg/5 mL + clavulanic acid 31.25 mg/5 mL oral liquid) — 2 mL twice daily, qty 20 (MuHa, 06/01/2026)
+omeprazole 10 mg capsule — 2 capsules twice daily, qty 20 (MuHa, 06/01/2026)
+Zista (cetirizine hydrochloride 10 mg tablet) — 26 tablets after three months, qty 8 (MU, 19/06/2024)
+
+Last Three Months Medication
+
+No medications in last three months
+
+There's a "Load More" button if you want older entries.
+
+>>> close the clinical summary
+--- 42s ---
+close the clinical summary
+Completed
+2 steps · 41s
+Looking for “Back to List button in Clinical Summary…”
+Done
+0.1s
+Found “Back to List”
+find_element Details
+Clicking “Back to List”
+Done
+3s
+click Details
+
+Closed the Clinical Summary — you're back on Aqib JAVED's inbox view.

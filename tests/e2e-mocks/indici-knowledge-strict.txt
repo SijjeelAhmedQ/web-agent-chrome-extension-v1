@@ -1,0 +1,104 @@
+### Rule: Never guess medication details
+Use only the medicine, dose, frequency, duration and options (like long term) the user gave. If something the form needs is missing or unclear, ask the user instead of choosing a value.
+Read numbers from words: "one" = 1, "two" = 2, "three" = 3, "half" = 0.5. "once daily" = 1 a day, "twice daily" = 2 a day, "three times daily" = 3 a day.
+After filling the form, check every field you filled against the request, then click the form's Save — the user will be asked to approve it. If the user said not to save, stop and tell them the form is ready.
+
+### Rule: Open a patient by clicking the name — never an icon
+Never click a patient's name until, in this task, you have typed what the user gave into "Patient Name:" (or "DOB:" / "NHI:") and clicked the "Search" button — even if the patient is already visible in the list. The list that shows before you search is NOT the search result.
+Open only a patient whose row matches what the user asked for — the name, the DOB or the NHI they gave. If no row matches, tell the user; never open a different patient. If several rows match, ask the user which one.
+Open the patient by clicking their name in the Name column with click_text — one click — adding near with that row's DOB or NHI. The consult then opens (it may open in a new tab — continue there).
+Never double-click. Never click an icon in the Actions column to open a patient.
+
+### Rule: Pop-ups when a consult opens
+This rule is ONLY for the pop-ups that come up when a patient's consult opens (alerts, recalls, the reason to view the file) — in front of each other or behind, wherever they are. Pop-ups that open later, while you add a medication, a diagnosis or anything else ("Find Diagnosis", "Medication Advanced Search", "New Zealand Formulary", "already in the active medicines list"), are part of that task: never close them yourself — follow the medication and diagnosis workflows for them.
+When the consult opens, read_page lists the pop-ups at the top under "Pop-ups showing" (the one in front first), with how each one closes:
+1. First close EVERY pop-up that "can be closed" (it has a ×, "Close" or "Cancel" button) — in front or behind — by clicking that button's id, the one in front first. Don't ask the user. Read the page again after each one — another may appear.
+2. Only when none of those is left: a pop-up that "has no ×, Close or Cancel button" (for example "Add reason to view patient file") — do not type anything yourself. Stop and ask the user what to enter, using the pop-up's title, e.g. "What reason should I add to view the patient file?". When the user answers, type exactly their answer into its field and click the pop-up's Save button (if click_text can't find Save, use find_element "Save button" and click it by its id). The user will be asked to confirm the save.
+3. When you finish, tell the user which pop-ups you closed.
+
+### Rule: Already on the patient's consult — ask before opening it again
+Before you open the menu or search for a patient, read the current tab first (do not switch tabs). If it is a patient's consult (the page is "Consult Detail") and the patient shown there is the one the user asked for — same name (ignore upper/lower case and the order of first name and surname, e.g. "Arya Stark" = "Arya STARK" = "STARK, Arya"), and the same DOB or NHI if the user gave one — then do NOT navigate, search or click anything.
+Just answer, short and friendly, for example:
+"You're already on **Arya STARK**'s consult (DOB 03-12-2015). Do you still want me to go to Patients and open her consult again?"
+Then stop and wait.
+- If the user says yes (yes, haan, ji, ok, go ahead): do the "Select a patient from Search & List" workflow from step 1.
+- If the user says no (no, nahi, stay): don't do anything — just say you're staying on the current consult.
+If the open consult is a different patient, or the current page is not a consult, ignore this rule and do the workflow as usual.
+
+### Navigation: Top navigation menus open on hover
+The menus in the top navigation bar (Patients and the others) open when the mouse is over them — clicking "Patients" does not open the list. Use open_menu with the path ["Patients", "Search & List"], then click "Search & List" from the items it returns.
+Do not open a menu to reach a page you are already on: the Patient Search page is https://pmstraining.vitonta.com/Patient/Patients — if the current tab is already there, use it as it is.
+
+### Navigation: Medications and diagnoses are in the consult's left sidebar
+Inside a patient's consult, the left sidebar has "Medications" (the medication screen with the "Find Medicine:" field) and "Diagnosis/Coding" (the diagnosis screen with the "Find:" field). Medications and diagnoses can only be added while a patient's consult is open.
+
+### Page: Patient Search page (Patients › Search & List)
+- The search field is labelled "Patient Name:" — its placeholder is "Surname First Name".
+- Other fields: DOB, NHI, Street. Leave them empty unless the user gives them.
+- To search, click the "Search" button — not "Search Vault", not "Show Adv. Search".
+- Results are a table. The first column "Name" has the patient's name as plain text.
+- The Actions column icons (details, edit, $, calendar, family, print…) do NOT open the patient. Never click them to select a patient.
+
+### Workflow: Select a patient from Search & List (by name, DOB or NHI)
+For requests like: “goto patients and select patient who's DOB is 01-01-1900”
+First work out what the user gave to find the patient:
+- a name ("select luke king", "select Patient 1") — names can look like numbers; "Patient 1" is a name, not "the first patient";
+- a date of birth ("DOB is 01-01-1900");
+- an NHI ("NHI ZAA0652").
+0. First apply the rule "Already on the patient's consult — ask before opening it again". Continue below only if that rule says so.
+1. Look at the current tab's address. If it already contains "/Patient/Patients", or the page already shows the "Patient Name:" field and the "Search" button, you are on the Patient Search page: do NOT open the menu again — go straight to step 2.
+   Only if you are on another page: hover "Patients" in the top navigation bar with open_menu ["Patients", "Search & List"], then click "Search & List".
+2. Read the page. Click "Clear" first if the search fields already have old values.
+3. Type what the user gave into the matching field — this step is required:
+   - name → "Patient Name:"
+   - date of birth → "DOB:" written as DD/MM/YYYY (01-01-1900 → 01/01/1900)
+   - NHI → "NHI:"
+4. Click the "Search" button. Wait, then read the page again to see the results.
+5. Find the row that matches what the user gave (same name, or same DOB, or same NHI).
+   - Exactly one row matches → click that patient's name with click_text, with near = the DOB or NHI from that row.
+   - Several rows match → do not choose: list them for the user (name, DOB, NHI) and ask which one.
+   - None match → tell the user nobody was found.
+6. The patient's consult opens (maybe in a new tab — continue there). Read the page.
+7. Handle the pop-ups as the "Pop-ups when a consult opens" rule says.
+8. Read the page again to confirm it is the right patient, then tell the user which patient is open: name, DOB and NHI.
+
+### Workflow: Add a medication in the consult
+For requests like: “add medication gabapentin 100 mg capsule take 2 tablets twice daily for 5 days, long term”
+From the request: medicine = gabapentin 100 mg capsule; Take = 2; Frequency = twice daily; Duration = 5 days; Long Term = yes (only if the user said long term).
+1. A patient's consult must be open. If not, tell the user to open a patient first.
+2. Click "Medications" in the left sidebar, then read the page.
+3. Look at "Today's Medication Activity" and "Long Term Medications". If the same medicine, strength and form was already added today, don't add it again — tell the user.
+4. Type only the medicine's name (e.g. "gabapentin") into "Find Medicine:" and click the magnifier icon next to it.
+5. The "Medication Advanced Search" pop-up opens — it is part of the task, don't close it. Wait until "Processing..." is gone and the results show.
+6. Find the row with the same medicine, strength and form (e.g. "… gabapentin 100 mg capsule"); use the page numbers at the bottom if needed.
+   - Exactly one row → click its name once with click_text. The medicine form opens straight away — never click the pop-up's Save button.
+   - Several rows (different brands) → don't choose: list them and ask the user which one.
+   - None → tell the user.
+7. Pop-ups that can appear now:
+   - "This medicine is already in the active medicines list … add it again?" → don't click Yes, No or ×. Stop and ask the user, then click what they say.
+   - "New Zealand Formulary" (interactions) → read it. If any interaction's action is "avoid", stop and ask the user whether to continue. Otherwise click "OK", and list the interactions briefly in your answer.
+8. The medicine form opens with the medicine's name as its title. The "Find Medicine" box empties itself — that is normal. Never search again.
+9. Fill only these:
+   - Take/Insert: the first box on that row (left of "capsule(s)", "tablet(s)" or "supp(s)") → the number (2).
+   - Frequency: read its options, choose the matching one ("twice daily").
+   - Duration: the number (5); leave "Day/s" unless the user said weeks or months.
+   - Quantity: don't type it — the app fills it in after Take, Frequency and Duration. Read the page and check it is filled; if it stays empty, tell the user instead of calculating it.
+   - Long Term: tick it only if the user said long term.
+   Leave everything else as it is (Current Diagnosis, Route, Repeats, Directions, Pres. Date, Prescriber, other checkboxes).
+10. Click the form's "Save" — top right of the form, next to "Cancel" — not the Save of "Update Height", never "Pharmac".
+11. Read the page: the medicine must be in "Today's Medication Activity" (and "Long Term Medications" if ticked). Then tell the user what was added.
+
+### Workflow: Add a diagnosis in the consult
+For requests like: “add diagnosis Hypertension onset is 01-05-2026”
+From the request: diagnosis = Hypertension; Onset Date = 01-05-2026; anything else the user said (long term, confirmed, suspected, probable, interim, problem list).
+1. A patient's consult must be open. If not, tell the user to open a patient first.
+2. Click "Diagnosis/Coding" in the left sidebar, then read the page (tab "Diagnosis").
+3. Look at "Long Term Diagnosis" and "Recent Diagnosis". If the same diagnosis with the same onset date is already there, don't add it again — tell the user.
+4. Type the diagnosis name into the "Find:" field above the lists and click the magnifier icon next to it.
+5. The "Find Diagnosis" pop-up opens with Name, Type and Concept ID — it is part of the task, don't close it. Wait until the results show.
+6. Click the row whose Name is exactly the diagnosis, with Type "disorder" — e.g. "Hypertension", not "FH: Hypertension", "H/O: hypertension", "Hypertension risk" or "Renal hypertension". Click once with click_text. If there's no exact match, list the closest few and ask the user.
+7. The "Add Diagnosis" form opens. Check that "Synonym" shows the diagnosis.
+8. Onset Date: type the date the user gave, as DD-MM-YYYY (e.g. 01-05-2026), into the "Onset Date:" field — don't use the calendar icon.
+9. Tick only what the user asked for: "long term" → Long Term; "problem list" → Problem List; confirmed / interim / suspected / probable → that option. Leave the rest and Notes as they are.
+10. Click "Save" at the bottom of the form, next to "Cancel" — not "Up-to Date" or "Health Pathways", and not the Save of "Update Height" at the top.
+11. Read the page: the diagnosis must be in "Recent Diagnosis" (or "Long Term Diagnosis") with its onset date. Then tell the user.

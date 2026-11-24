@@ -1,0 +1,16 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Diagnosis</title></head>
+<body>
+<h2>Diagnosis — Arya STARK</h2>
+<label>Find: <input id="find" title="Find diagnosis"></label>
+<button type="button" id="add" onclick="add()">Add</button>
+<h3>Recent Diagnosis</h3>
+<ul id="list"></ul>
+<script>
+  function add() {
+    const v = document.getElementById('find').value.trim();
+    if (!v) return;
+    const li = document.createElement('li'); li.textContent = v;
+    document.getElementById('list').appendChild(li);
+    document.getElementById('find').value = '';
+  }
+</script></body></html>

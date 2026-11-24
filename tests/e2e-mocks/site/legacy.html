@@ -1,0 +1,100 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Patient Search</title>
+<style>
+  body { font: 12px Arial, sans-serif; margin: 12px; }
+  label { color: #2a7ab0; font-weight: bold; }
+  table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+  th, td { padding: 6px; text-align: left; border-bottom: 1px solid #eee; }
+  .pname { color: #1d4ed8; font-weight: bold; cursor: pointer; }
+  .acts a, .acts span { display: inline-block; margin-right: 4px; cursor: pointer; }
+  i.fa, span.glyphicon { display: inline-block; width: 14px; height: 14px; background: #1e3a8a; }
+  tr.sel { background: #bae6fd; }
+  .btn { background: #0e7490; color: #fff; border: 0; padding: 5px 8px; }
+</style></head>
+<body>
+<table style="width:auto"><tr>
+  <td><label>Patient Name:</label></td><td><input id="pn" placeholder="Surname First Name" value="Arya STARK"></td>
+  <td><label>NHI:</label></td><td><input id="nhi"></td>
+</tr></table>
+<input type="button" class="btn" value="Search" onclick="search()">
+<input type="button" class="btn" value="Search Vault">
+<input type="button" class="btn" value="Clear" onclick="document.getElementById('pn').value='';search()">
+<table id="grid">
+  <thead><tr><th>Name</th><th>DOB</th><th>Chart No</th><th>Actions</th></tr></thead>
+  <tbody></tbody>
+</table>
+<p id="result">Nothing opened</p>
+<!-- Old apps keep their modals in the page, hidden, until needed. -->
+<div class="modal" role="dialog" style="display:none"><h3>Edit Patient</h3><button>Close</button></div>
+<script>
+  const people = [
+    ['Sarah DAVIES', '25-10-1920', '21-SHC-7870'],
+    ['Cantona DAVID', '12-11-1999', '21-R-1138'],
+    ['Arya STARK', '03-12-2015', '21-SHC-6844'],
+    ['Arya STARK', '14-06-1988', '21-SHC-9120'],
+    ['Peter PARKER', '07-08-2000', '21-SHC-14408'],
+  ];
+  // ?plain=1: the name is plain cell text; one listener on the table handles clicks (like the user's app).
+  const plain = location.search.includes('plain');
+  // ?dbl=1: one click only selects the row (highlight); a double-click opens the patient.
+  const dbl = location.search.includes('dbl');
+  // ?popup=1: the patient opens in a new window (blocked for script clicks).
+  // ?trusted=1: the app ignores clicks that aren't real (event.isTrusted).
+  const popup = location.search.includes('popup');
+  const trustedOnly = location.search.includes('trusted');
+  const open = (cell) => {
+    const chart = cell.parentElement.children[2].textContent;
+    if (popup) return window.open(`/patients-page.html?chart=${chart}`, '_blank', 'width=900,height=700');
+    const show = () => {
+      if (location.search.includes('frame')) {
+        // A modal that loads the patient page in an iframe.
+        const m = document.createElement('div');
+        m.innerHTML = `<iframe src="/patients-page.html?chart=${chart}" style="width:600px;height:300px"></iframe>`;
+        document.body.appendChild(m);
+        return;
+      }
+      say(`Opened patient: ${cell.textContent} (${chart})`);
+    };
+    // ?slow=1: the server takes 1.5 s to answer.
+    if (location.search.includes('slow')) setTimeout(show, 1500);
+    else show();
+  };
+  document.querySelector('#grid').addEventListener('click', (e) => {
+    const cell = e.target.closest('td.pn');
+    if (!cell) return;
+    document.querySelectorAll('#grid tr.sel').forEach((r) => r.classList.remove('sel'));
+    cell.parentElement.classList.add('sel');
+    if (trustedOnly && !e.isTrusted) return;
+    if (!dbl) return open(cell);
+    document.querySelectorAll('#grid tr.sel').forEach((r) => r.classList.remove('sel'));
+    cell.parentElement.classList.add('sel');
+  });
+  document.querySelector('#grid').addEventListener('dblclick', (e) => {
+    const cell = e.target.closest('td.pn');
+    if (cell && dbl) open(cell);
+  });
+  const say = (t) => (document.getElementById('result').textContent = t);
+  function render(list) {
+    const body = document.querySelector('#grid tbody');
+    body.innerHTML = '';
+    for (const [name, dob, chart] of list) {
+      const tr = document.createElement('tr');
+      // Like many older apps: the name is an <a> with no href and a script click handler,
+      // and the action icons have no text or title at all.
+      tr.innerHTML = `<td${plain ? ' class="pn"' : ''}>${plain ? name : `<a class="pname">${name}</a>`}</td><td>${dob}</td><td>${chart}</td>
+        <td class="acts">
+          <a href="javascript:void(0)" onclick="say('Opened details: ${chart}')"><img src="/img/user_details.png" width="16" height="16"></a>
+          <span class="glyphicon glyphicon-edit" onclick="say('Edit: ${chart}')"></span>
+          <a href="javascript:void(0)" onclick="bookAppointment('${chart}')"><i class="fa fa-calendar"></i></a>
+          <a href="#" data-original-title="Print label" onclick="event.preventDefault();say('Printed: ${chart}')"><i class="fa fa-print fa-fw"></i></a>
+        </td>`;
+      if (!plain) tr.querySelector('.pname').addEventListener('click', () => say(`Opened patient: ${name} (${chart})`));
+      body.appendChild(tr);
+    }
+  }
+  function bookAppointment(chart) { say('Book appointment: ' + chart); }
+  function search() {
+    const q = document.getElementById('pn').value.toLowerCase().split(/\s+/).filter(Boolean);
+    render(people.filter(([n]) => q.every((w) => n.toLowerCase().includes(w))));
+  }
+  render(people);
+</script></body></html>
