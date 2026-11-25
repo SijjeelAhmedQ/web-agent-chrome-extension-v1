@@ -3,7 +3,7 @@ import { AgentRun } from '@/agent/runtime/agentRun';
 import type { ApprovalAnswer, RunEvent } from '@/agent/runtime/events';
 import { RESUME_REQUEST, rememberedAnswer, resumeMemory } from '@/agent/runtime/followUp';
 import { TeamRun, type TeamEvent } from '@/agent/runtime/teamRun';
-import { getItem, setItem } from '@/shared/storage/kv';
+import { getItem, setItem } from '@/shared/storage/storage';
 import type { TaskRecord } from '@/shared/types/history';
 import { siteOf, uid } from '@/shared/utils';
 import { toAgentError } from '@/shared/utils/errors';

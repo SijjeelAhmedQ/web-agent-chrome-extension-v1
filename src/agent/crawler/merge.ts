@@ -86,19 +86,38 @@ export function addProposals(list: ProposedEntry[], incoming: Omit<ProposedEntry
  * Saves what the user ticked: an entry with the same kind and title gets the new text (it keeps its id and its
  * on/off), new ones are added, and every other entry stays as it was. Never-click names and pages are added.
  */
-export function mergeIntoBase(kb: KnowledgeBase, chosen: ProposedEntry[], neverClick: string[], pages: CrawledPage[], now = Date.now()): { kb: KnowledgeBase; added: number; updated: number } {
+export function mergeIntoBase(
+  kb: KnowledgeBase,
+  chosen: ProposedEntry[],
+  neverClick: string[],
+  pages: CrawledPage[],
+  now = Date.now(),
+  source: 'md' | 'crawl' = 'crawl',
+): { kb: KnowledgeBase; added: number; updated: number; kept: number } {
   const entries = [...kb.entries];
   let added = 0;
   let updated = 0;
+  /** Entries from the user's Markdown file a crawl left as they are (the file wins). */
+  let kept = 0;
   for (const p of chosen) {
     const key = entryKey(p.kind, p.title);
     const i = entries.findIndex((e) => entryKey(e.kind, e.title) === key);
     const fields = { kind: p.kind, title: p.title.trim(), content: p.content.trim(), ...(p.kind === 'workflow' ? { trigger: p.trigger?.trim() ?? '' } : {}) };
     if (i >= 0) {
-      if (entries[i].content.trim() !== fields.content || (entries[i].trigger ?? '') !== (fields.trigger ?? '')) updated++;
-      entries[i] = { ...entries[i], ...fields, updatedAt: now };
+      // What the user wrote in a file is what holds: a crawl doesn't overwrite it.
+      if (source === 'crawl' && entries[i].source === 'md') {
+        kept++;
+        continue;
+      }
+      const changed = entries[i].content.trim() !== fields.content || (entries[i].trigger ?? '') !== (fields.trigger ?? '');
+      // A file that says the same as the entry (an export uploaded again unchanged) leaves it as it was — it
+      // doesn't become the file's, and a crawl may still bring it up to date.
+      if (!changed && source === 'md') continue;
+      if (changed) updated++;
+      entries[i] = { ...entries[i], ...fields, source, updatedAt: now };
     } else {
-      entries.push({ id: uid('kb_'), ...fields, enabled: true, createdAt: now, updatedAt: now });
+      // Its id follows the proposal's: saving again as the crawl goes on keeps the same entry (the same id).
+      entries.push({ id: p.id ? `kb_${p.id.replace(/^prop_/, '')}` : uid('kb_'), ...fields, enabled: true, source, createdAt: now, updatedAt: now });
       added++;
     }
   }
@@ -106,5 +125,5 @@ export function mergeIntoBase(kb: KnowledgeBase, chosen: ProposedEntry[], neverC
   for (const n of neverClick.map((x) => x.trim()).filter(Boolean)) if (!never.some((x) => x.toLowerCase() === n.toLowerCase())) never.push(n);
   const seen = new Set(kb.pages.map((p) => p.url));
   const allPages = [...kb.pages, ...pages.filter((p) => !seen.has(p.url))].slice(-500);
-  return { kb: { ...kb, entries, neverClick: never, pages: allPages, lastCrawlAt: now, updatedAt: now }, added, updated };
+  return { kb: { ...kb, entries, neverClick: never, pages: allPages, ...(source === 'crawl' ? { lastCrawlAt: now } : {}), updatedAt: now }, added, updated, kept };
 }

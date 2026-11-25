@@ -8,6 +8,8 @@ import type { ChatMessage } from '../llm/types';
  */
 
 const STOPPED = '[Where I stopped — steps already done in this task:';
+/** A step whose call the server refused: done as a click, not as what it was for (a save that saved nothing). */
+export const REFUSED_NOTE = 'Refused by the server';
 /** An item something was saved for before the question — its save is not done again after the reply. */
 const SAVED = ' ⟪saved, not ticked yet⟫';
 
@@ -40,7 +42,8 @@ export function rememberedAnswer(answer: string, steps: StepRecord[], checklist:
 
 /** The answer with the steps done so far (and the checklist) — the list a reply carries on from. */
 function withStoppedList(answer: string, steps: StepRecord[], checklist: ChecklistItem[], always: boolean): string {
-  const done = steps.filter((s) => s.status === 'done' && s.tool !== 'verify' && s.tool !== 'task_list' && s.tool !== 'decision').slice(-15);
+  // Not a save the server refused: it saved nothing, and after the user's reply (a corrected NHI) it is pressed again.
+  const done = steps.filter((s) => s.status === 'done' && s.note !== REFUSED_NOTE && s.tool !== 'verify' && s.tool !== 'task_list' && s.tool !== 'decision').slice(-15);
   if (!done.length && !checklist.length && !always) return answer;
   const lines = done.map((s, i) => `${i + 1}. ${s.label}${s.note ? ` → ${s.note}` : ''}`);
   // The checklist goes along, so the reply carries on with the same items ticked.

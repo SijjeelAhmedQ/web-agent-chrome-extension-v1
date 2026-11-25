@@ -2,7 +2,7 @@ import { BUILT_IN_AGENTS, BUILT_IN_SITES, BUILT_IN_SKILLS, BUILT_IN_STAMP } from
 import { defaultConfig, DEFAULT_SETTINGS } from '../constants/defaults';
 import { BUILT_IN_TOOL_IDS, BUILT_IN_TOOLS, LEGACY_TOOL_IDS } from '../constants/tools';
 import type { AppConfig, KnowledgeBase, SiteProfile } from '../types/config';
-import { getItem, setItem, watchItem } from './kv';
+import { getItem, setItem, watchItem } from './storage';
 
 export const CONFIG_KEY = 'wa.config';
 /** When the automatic backup file was last written. */

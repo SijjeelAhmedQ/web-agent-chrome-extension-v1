@@ -1,4 +1,5 @@
 import { LEAVE_GUARD } from './leaveGuard';
+import { describeCall, NET_WATCH, type NetCall } from './netWatch';
 import { CHANNEL, type ContentError, type ContentRequest, type ContentResponse, type Envelope, type ResponseMap, type ClickEffect } from '../messaging/protocol';
 import { sleep } from '@/shared/utils';
 
@@ -179,7 +180,7 @@ export class BrowserController {
    * After a click or key press: waits for a navigation if one starts, otherwise for the DOM
    * to go quiet. Reports whether the page changed.
    */
-  async settleAfterAction(urlBefore: string, signal?: AbortSignal): Promise<{ navigated: boolean; url: string; title: string; alerts: string[]; effect?: ClickEffect }> {
+  async settleAfterAction(urlBefore: string, signal?: AbortSignal): Promise<{ navigated: boolean; url: string; title: string; alerts: string[]; effect?: ClickEffect; api?: string[] }> {
     const tab = await this.currentTab();
     const tabId = tab.id!;
     const navStarted = new Promise<boolean>((resolve) => {
@@ -208,7 +209,10 @@ export class BrowserController {
       effect = result?.effect;
     }
     const after = await chrome.tabs.get(tabId);
-    return { navigated: navigated || after.url !== urlBefore, url: after.url ?? '', title: after.title ?? '', alerts, effect };
+    // What the server answered to the calls this action made (a save refused: “NHI already exists”). A page that
+    // loaded anew has a new watch — its calls before loading are gone with the old page.
+    const api = navigated ? [] : (await this.apiCallsSince().catch(() => [])).map(describeCall);
+    return { navigated: navigated || after.url !== urlBefore, url: after.url ?? '', title: after.title ?? '', alerts, effect, ...(api.length ? { api } : {}) };
   }
 
   /**
@@ -219,9 +223,37 @@ export class BrowserController {
    */
   leaveMode: 'ask' | 'always' = 'ask';
 
-  /** Puts the page's leave guard in place (once per page) — before anything that may leave it. */
+  /**
+   * Before anything that may change the page or leave it (a click, a key, a navigation): the page's leave guard and
+   * its watch on the calls that change data are put in place (once per page), and the moment is noted — the calls
+   * made from then on are what this action did.
+   */
   private async armLeaveGuard(tabId: number): Promise<void> {
+    this.actionAt = Date.now();
     await this.inPage(tabId, LEAVE_GUARD, [this.leaveMode === 'always' ? 'allow' : 'arm']);
+    await chrome.scripting.executeScript({ target: { tabId, frameIds: [0] }, world: 'MAIN', func: NET_WATCH, args: ['install', 0] }).catch(() => []);
+  }
+
+  /** When the last click, key or navigation began. */
+  private actionAt = 0;
+
+  /**
+   * The calls that changed data since a moment (default: since the last action), and what the server answered — a
+   * call still waiting for its answer is waited for, up to `waitMs`.
+   */
+  async apiCallsSince(since = this.actionAt, waitMs = 4000): Promise<NetCall[]> {
+    const tab = await this.currentTab().catch(() => null);
+    if (!tab?.id) return [];
+    const read = async () => {
+      const [r] = await chrome.scripting.executeScript({ target: { tabId: tab.id!, frameIds: [0] }, world: 'MAIN', func: NET_WATCH, args: ['read', since - 50] }).catch(() => []);
+      return (r?.result as { calls: NetCall[]; inflight: number } | undefined) ?? { calls: [], inflight: 0 };
+    };
+    let got = await read();
+    for (let waited = 0; got.inflight > 0 && waited < waitMs; waited += 300) {
+      await sleep(300);
+      got = await read();
+    }
+    return got.calls;
   }
 
   /** Would leaving the page now lose changes (its “Leave site?” question)? */

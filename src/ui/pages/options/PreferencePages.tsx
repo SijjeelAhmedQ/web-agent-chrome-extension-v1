@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { defaultConfig } from '@/shared/constants/defaults';
 import { BACKUP_AT_KEY, mergeConfig, normalizeConfig, stripKeys } from '@/shared/storage/configStore';
 import { ledgerIn, restoreLedger } from '@/shared/storage/costLedger';
-import { getItem } from '@/shared/storage/kv';
+import { getItem } from '@/shared/storage/storage';
 import { clearHistory } from '@/shared/storage/historyStore';
 import type { AppConfig, ConfirmationPolicy, ThemeMode } from '@/shared/types/config';
 import { isExtensionContext } from '@/shared/utils';

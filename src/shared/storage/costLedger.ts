@@ -1,6 +1,6 @@
 import type { ModelCallRecord, TaskRecord } from '../types/history';
 import { loadHistory } from './historyStore';
-import { getItem, setItem, watchItem } from './kv';
+import { getItem, setItem, watchItem } from './storage';
 
 /**
  * What the agents spent, day by day — kept apart from the task history (200 tasks, and the user may clear it or

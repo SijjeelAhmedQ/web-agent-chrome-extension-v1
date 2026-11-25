@@ -30,6 +30,8 @@ export interface ParsedKnowledge {
 }
 
 export const NEVER_CLICK_TITLE = 'Buttons you never click here';
+/** The headings of the knowledge the agent is shown (copied from its preview), which are not part of an entry. */
+const PREVIEW_HEADING = /^\s*##\s+(What the user has taught you|Where you are\b)/i;
 const ORDER: KnowledgeKind[] = ['rule', 'navigation', 'page', 'workflow'];
 
 const KIND_WORDS: Record<string, KnowledgeKind> = {
@@ -93,8 +95,9 @@ export function parseKnowledgeText(text: string): ParsedKnowledge {
       cur = { kind, title: heading[4].trim(), content: '', enabled: !heading[2], lines: [] };
       continue;
     }
-    // The preview's own header and footer lines.
-    if (/^\s*##\s/.test(line) || /^More knowledge for this site/i.test(line.trim())) {
+    // The preview's own header and footer lines — but not an entry's own `## ` sub-heading (“## Floor plan tab”):
+    // cutting there lost the rest of the entry, or all of it, when a knowledge base was exported and uploaded again.
+    if ((/^\s*##\s/.test(line) && (!cur || PREVIEW_HEADING.test(line))) || /^More knowledge for this site/i.test(line.trim())) {
       flush();
       continue;
     }

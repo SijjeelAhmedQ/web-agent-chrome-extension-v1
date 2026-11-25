@@ -3,7 +3,7 @@ import { RotateCcw, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { FRESH_INSTALL_KEY, mergeConfig } from '@/shared/storage/configStore';
 import { restoreLedger } from '@/shared/storage/costLedger';
-import { getItem, removeItem } from '@/shared/storage/kv';
+import { getItem, removeItem } from '@/shared/storage/storage';
 import type { AppConfig } from '@/shared/types/config';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { configActions } from '@/store/configSlice';

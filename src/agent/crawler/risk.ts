@@ -20,12 +20,28 @@ export function wordsPattern(words: string[], whole = false): RegExp | null {
   return whole ? new RegExp(`^${body}(?![\\p{L}\\p{N}])`, 'iu') : new RegExp(`(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`, 'iu');
 }
 
+/**
+ * Controls that change a record's place or state without a word of the editable list — always asked about, whatever
+ * the settings say (a list saved before these were added doesn't have them). “Move Tall Table 2 down” swapped two
+ * stations' order on a real site while it was being learned.
+ */
+export const ALWAYS_ASK_WORDS = [
+  'move', 'reorder', 're-order', 'sort order', 'move up', 'move down', 'drag', 'rank',
+  'duplicate', 'clone', 'copy to', 'enable', 'activate', 'reactivate', 'assign', 'unassign', 'reassign',
+  'pin', 'unpin', 'star', 'unstar', 'favourite', 'favorite', 'set as default', 'make default', 'set default', 'make primary', 'set primary',
+  'check in', 'check out', 'start consult', 'end consult', 'arrive', 'mark',
+];
+
+/** A table row's control that is only an arrow (↑ ↓ ▲ ▼): in a row it moves that record, it does not page the list. */
+const ROW_ARROW = /^\s*[↑↓⇧⇩▲▼⬆⬇]+\s*$/;
+
 /** Why clicking this needs the user's OK, or null when it is only looking around. */
-export function dangerOf(el: Pick<ElementInfo, 'name' | 'role' | 'type' | 'href' | 'label'>, askWords: string[] = DEFAULT_ASK_WORDS): string | null {
+export function dangerOf(el: Pick<ElementInfo, 'name' | 'role' | 'type' | 'href' | 'label' | 'context'>, askWords: string[] = DEFAULT_ASK_WORDS): string | null {
   const name = `${el.name ?? ''} ${el.label ?? ''}`.trim();
   if (el.type === 'submit' || el.type === 'reset') return 'submits a form';
   if (el.href && /(log-?out|sign-?out|log-?off)/i.test(el.href)) return 'signs you out';
-  const hit = wordsPattern(askWords)?.exec(name);
+  if (ROW_ARROW.test(name) && /\brow \d+/i.test(el.context ?? '')) return 'moves this row (changes the order)';
+  const hit = wordsPattern(askWords)?.exec(name) ?? wordsPattern(ALWAYS_ASK_WORDS)?.exec(name);
   return hit ? `may change data (“${hit[1]}”)` : null;
 }
 

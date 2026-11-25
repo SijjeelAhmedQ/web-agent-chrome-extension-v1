@@ -155,6 +155,11 @@ export interface KnowledgeEntry {
   enabled: boolean;
   createdAt: number;
   updatedAt: number;
+  /**
+   * Where it came from: a Markdown file the user uploaded wins over what a crawl learns — a later crawl never
+   * overwrites it. Unset: written by hand or before this was kept.
+   */
+  source?: 'md' | 'crawl';
 }
 
 /**
@@ -266,6 +271,15 @@ export interface CrawlerSettings {
    * for test sites: it can add records. Each press still asks first.
    */
   trySaving: boolean;
+  /** Minutes of exploring before it stops and writes what it learned (0: no limit). Time it waits for the user doesn't count. */
+  timeLimit: number;
+  /**
+   * Runs on its own: a control that deletes, saves, sends or signs out is skipped (not asked about), and at the page
+   * or time limit it stops and writes. Only a sign-in still waits for the user.
+   */
+  unattended: boolean;
+  /** Each page's knowledge goes into the site's knowledge base as soon as it is written — nothing is lost unsaved. */
+  saveAsItGoes: boolean;
   /** Words of controls that wait for the user's OK (delete, save, send…) — any language. */
   askWords: string[];
   /** Words of controls that only page through the same list or fold a panel (next, week, toggle sidebar…): not new screens. */

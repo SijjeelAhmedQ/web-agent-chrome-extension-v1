@@ -131,6 +131,9 @@ export const DEFAULT_CRAWLER: CrawlerSettings = {
   writeWhileExploring: true,
   spendLimit: 1,
   trySaving: false,
+  timeLimit: 20,
+  unattended: false,
+  saveAsItGoes: true,
   askWords: DEFAULT_ASK_WORDS,
   sameScreenWords: DEFAULT_SAME_SCREEN_WORDS,
 };

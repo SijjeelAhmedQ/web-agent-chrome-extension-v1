@@ -2,8 +2,8 @@ import { App, Button, Dropdown, Input, InputNumber, Modal, Segmented, Select, Sw
 import { ArrowLeft, BookOpen, ChevronDown, Download, FileJson, GraduationCap, Plus, Trash2, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { knowledgeFileName, knowledgeFileText } from '@/agent/crawler/mdImport';
 import { hostOf, newKnowledgeBase } from '@/agent/crawler/merge';
-import { knowledgeAsText } from '@/agent/planner/knowledgeText';
 import { KNOWLEDGE_KINDS } from '@/agent/planner/siteKnowledge';
 import { DEFAULT_ASK_WORDS, DEFAULT_SAME_SCREEN_WORDS } from '@/shared/constants/crawlerWords';
 import { crawlerSettings } from '@/shared/constants/defaults';
@@ -158,13 +158,22 @@ function CrawlerSettingsSection() {
       <SettingRow label="Then explore" description="Pages more each time you say carry on.">
         <InputNumber min={1} max={500} value={c.extendBy} onChange={(v) => set({ extendBy: Number(v) || 25 })} />
       </SettingRow>
+      <SettingRow label="Time limit" description="Minutes of exploring before it stops and writes what it learned (0: no limit). Time it waits for you — paused, or a question open — doesn't count.">
+        <InputNumber min={0} max={600} suffix="min" value={c.timeLimit} onChange={(v) => set({ timeLimit: Math.max(0, Number(v) || 0) })} />
+      </SettingRow>
+      <SettingRow label="Run on its own" description="Never stops to ask: a button that deletes, saves, sends, pays or signs out is skipped, and at the page or time limit it stops and writes. Only a sign-in still waits for you.">
+        <Switch checked={c.unattended} onChange={(v) => set({ unattended: v })} aria-label="Run on its own" />
+      </SettingRow>
+      <SettingRow label="Save as it goes" description="Each page's knowledge goes into the site's knowledge base as soon as it is written, with the site and its agent — nothing is lost if the panel closes or nobody presses Save. Off: nothing is saved until you review and save.">
+        <Switch checked={c.saveAsItGoes} onChange={(v) => set({ saveAsItGoes: v })} aria-label="Save as it goes" />
+      </SettingRow>
       <SettingRow label="Write while exploring" description="Off: the whole site is explored first and what was read is shown to you; the model writes when you press Write. On: it writes page by page while exploring (done sooner).">
         <Switch checked={c.writeWhileExploring} onChange={(v) => set({ writeWhileExploring: v })} aria-label="Write while exploring" />
       </SettingRow>
       <SettingRow label="Spending limit for writing" description="Dollars the model may spend writing one site's knowledge before it stops and asks you (0: no limit). Writing has thinking switched off, to keep it cheap.">
         <InputNumber min={0} max={100} step={0.5} prefix="$" value={c.spendLimit} onChange={(v) => set({ spendLimit: Math.max(0, Number(v) || 0) })} />
       </SettingRow>
-      <SettingRow label="Try saving forms (test sites only)" description="Presses a pop-up form's save button with the test values, to learn which fields it requires and the errors it shows. It can add test records, so use it only on a test site. Each press still asks you first.">
+      <SettingRow label="Try saving forms (test sites only)" description="Presses a new pop-up form's save button — empty first, then with the test values — to learn which fields it requires, the errors it shows and what the server refuses (e.g. a duplicate NHI). It can add test records, so use it only on a test site. It asks you once per form, and never saves a form that edits a record, books, pays or sends.">
         <Switch checked={c.trySaving} onChange={(v) => set({ trySaving: v })} aria-label="Try saving forms" />
       </SettingRow>
       <SettingRow label="Clicks per page" description="Most buttons, tabs and menus tried on one page.">
@@ -234,7 +243,6 @@ export function KnowledgeBaseDetailPage() {
     return <EmptyBlock icon={<BookOpen size={22} />} title="This knowledge base isn’t here anymore" text="It may have been deleted." action={<Button onClick={() => navigate('/knowledge')}>Back</Button>} />;
   }
   const update = (patch: Partial<KnowledgeBase>) => dispatch(configActions.upsertKnowledgeBase({ ...kb, ...patch }));
-  const file = kb.name.replace(/[^\w.-]+/g, '-');
 
   return (
     <>
@@ -264,8 +272,8 @@ export function KnowledgeBaseDetailPage() {
               ],
               onClick: ({ key }) =>
                 key === 'md'
-                  ? download(`${file}-knowledge.md`, `# ${kb.name}\n\nSites: ${kb.sites.join(', ')}\n\n${knowledgeAsText({ knowledge: kb.entries, neverClick: kb.neverClick })}`, 'text/markdown')
-                  : download(`${file}-knowledge.json`, JSON.stringify(kb, null, 2), 'application/json'),
+                  ? download(knowledgeFileName(kb), knowledgeFileText(kb), 'text/markdown')
+                  : download(knowledgeFileName(kb, 'json'), JSON.stringify(kb, null, 2), 'application/json'),
             }}
           >
             <Button icon={<Download size={15} />}>

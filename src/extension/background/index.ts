@@ -4,7 +4,7 @@
  */
 
 import { BACKUP_AT_KEY, CONFIG_KEY, FRESH_INSTALL_KEY, loadConfig, stripKeys } from '@/shared/storage/configStore';
-import { getItem, setItem } from '@/shared/storage/kv';
+import { getItem, setItem, watchKeys } from '@/shared/storage/storage';
 import { COST_LEDGER_KEY } from '@/shared/storage/costLedger';
 
 const LOCAL_ORIGIN_RULE_ID = 1;
@@ -99,11 +99,10 @@ function backUpIn(delay: number) {
   backupTimer = setTimeout(() => void backUp(), delay);
 }
 
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local') return;
+watchKeys([CONFIG_KEY, COST_LEDGER_KEY], (changed) => {
   // The setup: a few seconds after a change. The cost record changes with every model call: once a minute at most.
-  if (changes[CONFIG_KEY]) backUpIn(4_000);
-  else if (changes[COST_LEDGER_KEY]) backUpIn(60_000);
+  if (changed.includes(CONFIG_KEY)) backUpIn(4_000);
+  else backUpIn(60_000);
 });
 
 chrome.commands.onCommand.addListener((command, tab) => {

@@ -1,4 +1,5 @@
 import { BrowserController, PageError } from '@/extension/browser/controller';
+import { describeCall } from '@/extension/browser/netWatch';
 import { crawlerSettings } from '@/shared/constants/defaults';
 import { recordCall } from '@/shared/storage/costLedger';
 import type { AgentConfig, AppConfig, CrawledPage, CrawlerSettings, KnowledgeBase, ProviderConfig } from '@/shared/types/config';
@@ -73,6 +74,9 @@ export interface CrawlState {
   otherSites: OtherSite[];
   error?: string;
   startedAt: number;
+  /** Minutes spent exploring (time it waited for the user not counted), and the limit (0: none). */
+  minutes: number;
+  timeLimit: number;
 }
 
 export interface CrawlOptions {
@@ -86,12 +90,39 @@ export interface CrawlOptions {
   existing?: KnowledgeBase;
   /** Overrides of the crawler settings for this crawl (page limit, model). */
   overrides?: Partial<CrawlerSettings>;
+  /** The knowledge base what is learned is saved into as it goes (kept with the crawl, for opening it again). */
+  base?: KnowledgeBase | null;
+  mode?: 'update' | 'replace';
   onState: (state: CrawlState) => void;
 }
 
-interface Target {
+export interface Target {
   url: string;
   from?: { url: string; title: string; via: string };
+}
+
+/** Where exploring was — enough to carry on after the panel closed or the extension reloaded. */
+export interface ExploreState {
+  queue: Target[];
+  /** The page being read when it was kept (read again on carrying on). */
+  visiting: Target | null;
+  seenUrls: string[];
+  templates: string[];
+  clickedNames: [string, string][];
+  skipAll: string[];
+  screens: string[];
+  labelPages: [string, number][];
+  pagesWithControls: number;
+  anyOutcome: [string, string][];
+  siblingClicks: [string, { template: string; outcome: string }][];
+  clickedKinds: [string, string][];
+  filledPopups: string[];
+  savedForms: string[];
+  partOfPage: string[];
+  loginPage: string;
+  limit: number;
+  /** Exploring time used so far. */
+  usedMs: number;
 }
 
 const MAX_LOG = 80;
@@ -204,6 +235,12 @@ export const isListFilter = (e: Pick<ElementInfo, 'role' | 'name' | 'label' | 'p
 export const isDropdown = (e: Pick<ElementInfo, 'role' | 'expanded' | 'readonly' | 'disabled' | 'options' | 'picks'>) =>
   !e.disabled && !e.options?.length && (e.role === 'combobox' || !!e.picks || (e.expanded !== undefined && (e.role === 'textbox' || e.role === 'searchbox')));
 
+/** A control of this pop-up (by the pop-up the page put it in, or its title) — never one of the page behind it. */
+const popupHas = (top: DialogInfo, e: ElementInfo) => !!e.inBlockingPopup || (!!top.title && (e.inDialog === top.title || !!e.context?.includes(top.title)));
+
+/** A pop-up form's own finishing button (Save, Create, Add…). */
+const saveButtonIn = (top: DialogInfo, snap: PageSnapshot) => snap.elements.find((e) => e.role === 'button' && !e.disabled && popupHas(top, e) && SAVE_BUTTON.test(e.name.trim()));
+
 export class CrawlRun {
   private readonly abort = new AbortController();
   /** Pop-up forms already read and filled (title and fields): another button opening one is only noted. */
@@ -296,7 +333,29 @@ export class CrawlRun {
       captures: [],
       otherSites: [],
       startedAt: Date.now(),
+      minutes: 0,
+      timeLimit: this.s.timeLimit,
     };
+  }
+
+  // ---------- Time
+
+  /** When exploring began, and how long it has waited for the user since (paused, or a question open). */
+  private exploreStart = 0;
+  private waitedMs = 0;
+
+  private exploredMs(): number {
+    return this.exploreStart ? Math.max(0, Date.now() - this.exploreStart - this.waitedMs) : 0;
+  }
+
+  /** The time limit is reached: exploring stops and what was learned is written. */
+  private timeUp(): boolean {
+    return this.s.timeLimit > 0 && this.exploredMs() >= this.s.timeLimit * 60_000;
+  }
+
+  private tick() {
+    const minutes = Math.floor(this.exploredMs() / 60_000);
+    if (minutes !== this.state.minutes) this.set({ minutes });
   }
 
   // ---------- Controls from the UI
@@ -361,8 +420,12 @@ export class CrawlRun {
 
   async start(): Promise<CrawlState> {
     // 1. Explore the whole site (and, only when the settings say so, write while exploring).
+    return this.exploreThenWrite(() => this.exploreSite());
+  }
+
+  private async exploreThenWrite(exploring: () => Promise<void>): Promise<CrawlState> {
     try {
-      await this.exploreSite();
+      await exploring();
     } catch (err) {
       if (this.abort.signal.aborted) return this.state;
       const message = err instanceof Error ? err.message : String(err);
@@ -464,13 +527,27 @@ export class CrawlRun {
   }
 
   private async explore() {
+    if (!this.exploreStart) this.exploreStart = Date.now();
     while (!this.stopping) {
       await this.gate();
+      this.tick();
+      if (this.timeUp()) {
+        this.log(`Time limit reached (${this.s.timeLimit} min) — writing what was learned.`, 'ok');
+        break;
+      }
       const target = this.queue.shift();
-      this.set({ queued: this.queue.length });
-      if (!target) break;
+      if (!target) {
+        this.set({ queued: 0 });
+        break;
+      }
       const template = templateOf(target.url);
-      if (this.templates.has(template)) continue;
+      if (this.templates.has(template)) {
+        this.set({ queued: this.queue.length });
+        continue;
+      }
+      // Kept with the crawl while it is read: opened again after a crash, this page is read again first.
+      this.visiting = target;
+      this.set({ queued: this.queue.length });
       if (!(await this.roomForPage())) break;
       this.templates.add(template);
       try {
@@ -479,13 +556,80 @@ export class CrawlRun {
         if (this.abort.signal.aborted) return;
         this.log(`Could not read ${pathOf(target.url)}: ${err instanceof Error ? err.message : String(err)}`, 'warn');
       }
+      this.visiting = null;
+      this.keep(true);
     }
+  }
+
+  /** The calls to the server an action made, and what it answered: written into the page's knowledge (once each). */
+  private noteApi(capture: PageCapture, lines: string[], by: string) {
+    if (!lines.length) return;
+    capture.api ??= [];
+    for (const l of lines) {
+      const line = `${by}: ${l}`;
+      if (!capture.api.includes(line)) capture.api.push(line);
+    }
+    if (capture.api.length > 40) capture.api.splice(0, capture.api.length - 40);
+  }
+
+  /** The page being read now (kept with the crawl, so a crash doesn't lose it). */
+  private visiting: Target | null = null;
+
+  /** Where exploring is, for keeping with the crawl. */
+  private exploreState(): ExploreState {
+    return {
+      queue: this.queue,
+      visiting: this.visiting,
+      seenUrls: [...this.seenUrls],
+      templates: [...this.templates],
+      clickedNames: [...this.clickedNames],
+      skipAll: [...this.skipAll],
+      screens: [...this.screens],
+      labelPages: [...this.labelPages],
+      pagesWithControls: this.pagesWithControls,
+      anyOutcome: [...this.anyOutcome],
+      siblingClicks: [...this.siblingClicks],
+      clickedKinds: [...this.clickedKinds],
+      filledPopups: [...this.filledPopups],
+      savedForms: [...this.savedForms],
+      partOfPage: [...this.partOfPage],
+      loginPage: this.loginPage,
+      limit: this.state.limit,
+      usedMs: this.exploredMs(),
+    };
+  }
+
+  /** Exploring as it was kept: carried on from there (the page being read then is read again). */
+  private takeExploreState(e: ExploreState, captured: Set<string>) {
+    const visiting = e.visiting;
+    const templates = new Set(e.templates);
+    // The page it was reading when it stopped, unless it was finished: back at the front of the queue.
+    if (visiting && !captured.has(visiting.url)) templates.delete(templateOf(visiting.url));
+    this.queue = visiting && !captured.has(visiting.url) ? [visiting, ...e.queue] : [...e.queue];
+    this.seenUrls = new Set(e.seenUrls);
+    this.templates = templates;
+    this.clickedNames = new Map(e.clickedNames);
+    this.skipAll = new Set(e.skipAll);
+    this.screens = new Set(e.screens);
+    this.labelPages = new Map(e.labelPages);
+    this.pagesWithControls = e.pagesWithControls;
+    this.anyOutcome = new Map(e.anyOutcome);
+    this.siblingClicks = new Map(e.siblingClicks);
+    for (const [k, v] of e.clickedKinds) this.clickedKinds.set(k, v);
+    for (const f of e.filledPopups) this.filledPopups.add(f);
+    for (const f of e.savedForms) this.savedForms.add(f);
+    this.partOfPage = new Set(e.partOfPage);
+    this.loginPage = e.loginPage;
+    this.exploreStart = Date.now() - e.usedMs;
+    this.waitedMs = 0;
+    this.set({ limit: e.limit, queued: this.queue.length, minutes: Math.floor(e.usedMs / 60_000) });
   }
 
   /** Under the limit, or the user said “carry on”. */
   private async roomForPage(): Promise<boolean> {
     if (this.state.pagesDone < this.state.limit) return true;
-    const answer = await this.ask({ kind: 'limit', count: this.state.pagesDone, more: this.s.extendBy });
+    // Running on its own: the page limit is where it stops.
+    const answer = this.s.unattended ? 'finish' : await this.ask({ kind: 'limit', count: this.state.pagesDone, more: this.s.extendBy });
     if (answer !== 'more') {
       this.log(`Stopped at the page limit (${this.state.pagesDone} pages).`);
       return false;
@@ -912,7 +1056,7 @@ export class CrawlRun {
     for (const l of labels) this.labelPages.set(l, (this.labelPages.get(l) ?? 0) + 1);
     let clicks = 0;
     for (const el of candidates) {
-      if (clicks >= this.s.clicksPerPage || this.stopping) break;
+      if (clicks >= this.s.clicksPerPage || this.stopping || this.timeUp()) break;
       await this.gate();
       const label = labelOf(el);
       // A run of the same control told apart only by a time, date or number (a calendar's “Book 12:00 in …”, “Book
@@ -950,7 +1094,8 @@ export class CrawlRun {
           capture.clicks.push(`“${label}”: ${why} — not clicked (you said skip these)`);
           continue;
         }
-        const answer = await this.ask({ kind: 'approval', name: label, why, page: capture.title || pathOf(pageUrl) });
+        // Running on its own: never clicked, never asked about.
+        const answer = this.s.unattended ? 'skip' : await this.ask({ kind: 'approval', name: label, why, page: capture.title || pathOf(pageUrl) });
         if (answer === 'skip-all') this.skipAll.add(why);
         if (answer !== 'allow') {
           capture.clicks.push(`“${label}”: ${why} — not clicked (needs the user's OK)`);
@@ -994,6 +1139,7 @@ export class CrawlRun {
         if (!(err instanceof PageError && err.code === 'navigating')) throw err;
       }
       const settled = await this.browser.settleAfterAction(before.url ?? pageUrl, this.abort.signal);
+      this.noteApi(capture, settled.api ?? [], `clicking “${labelOf(el)}”`);
       const opened = watcher.opened();
       if (opened) return await this.newTab(opened, el.name);
       if (res.opensNewTab) {
@@ -1027,7 +1173,9 @@ export class CrawlRun {
       if (top) {
         // The same form, opened by another button (Add NHI, Edit — one “Edit practice member” form): read and filled
         // once; here only noted, and closed.
-        const formKey = `${top.title}|${(top.form ?? []).map((l) => l.split(' — ')[0]).join(',')}`;
+        // By its title and first fields only: filling a form adds fields to it (ACC chosen → its ACC fields), and
+        // the same form opened again then looked like another one — and was filled again, a minute each time.
+        const formKey = `${top.title}|${(top.form ?? []).slice(0, 4).map((l) => l.split(' — ')[0]).join(',')}`;
         if (top.title && top.form?.length && this.filledPopups.has(formKey)) {
           await this.closePopup(top, pageUrl);
           return `opens the pop-up “${top.title}” (the same form as before — its fields are described there)`;
@@ -1048,6 +1196,10 @@ export class CrawlRun {
         const ownField = marked
           ? (e: ElementInfo) => !!e.inDialog && (!top.title || e.inDialog === top.title)
           : (e: ElementInfo) => !!e.inBlockingPopup || (!!top.title && !!e.context?.includes(top.title)) || (!isListFilter(e) && !rowOf(e) && (!this.pageIds.has(e.id) || (!top.title && !behind.has(controlLine(e)))));
+        // On a test site (the user turned this on): saved empty first — what it says then is what it requires.
+        if (this.s.trySaving && inside && depth === 0 && (await this.tryEmptySave(top, inside, capture))) {
+          return `opens the pop-up “${top.title || 'untitled'}”; it saves even when empty`;
+        }
         if (inside) await this.fillForms(inside, capture, ownField, undefined, top.title || UNTITLED);
         const saved = this.s.trySaving && inside && depth === 0 ? await this.trySave(top, inside, capture) : null;
         if (saved) capture.dialogs.push(saved);
@@ -1146,6 +1298,63 @@ export class CrawlRun {
     return now?.elements.find((e) => e.role === el.role && rowOf(e) === row && labelOf(e) === label)?.id ?? null;
   }
 
+  /** The user's answer, per form: may it be saved — empty, then with test values — to learn what it requires? */
+  private readonly saveAnswers = new Map<string, boolean>();
+
+  /**
+   * Asked once per form (one question covers saving it empty and with test values). Never for a form that edits a
+   * record already there, or whose save reaches the world (a booking, a payment, a message) — and never when it runs
+   * on its own.
+   */
+  private async mayTrySaving(top: DialogInfo, buttonName: string, capture: PageCapture): Promise<boolean> {
+    if (!top.title || EDIT_FORM.test(top.title) || REAL_EFFECT_FORM.test(`${top.title} ${top.text ?? ''}`.slice(0, 300)) || this.s.unattended) return false;
+    const known = this.saveAnswers.get(top.title);
+    if (known !== undefined) return known;
+    const answer = await this.ask({ kind: 'approval', name: buttonName, why: 'saves this form — empty first, then with test values — to learn which fields it requires and the messages it shows (test sites only)', page: top.title || capture.title });
+    this.saveAnswers.set(top.title, answer === 'allow');
+    return answer === 'allow';
+  }
+
+  /**
+   * Presses a new form's save button before anything is typed in it: what it says then — the fields it marks
+   * required, its messages, what the server refuses — are the form's requirements, as the site states them.
+   * Returns true when the form closed (it saved even empty: the form is gone, nothing more to fill).
+   */
+  private async tryEmptySave(top: DialogInfo, inside: PageSnapshot, capture: PageCapture): Promise<boolean> {
+    const filled = (top.form ?? []).filter((l) => /— [^:]+: “/.test(l) && !/can’t be changed/.test(l)).length;
+    if (filled >= 3) return false;
+    const button = saveButtonIn(top, inside);
+    if (!button) return false;
+    const key = `${top.title}|empty`;
+    if (this.savedForms.has(key)) return false;
+    this.savedForms.add(key);
+    if (!(await this.mayTrySaving(top, button.name, capture))) return false;
+    this.set({ doing: `Saving “${top.title}” empty, to see which fields it requires` });
+    await this.browser.send({ kind: 'click', id: button.id, highlight: this.o.config.settings.highlightActions }).catch(() => undefined);
+    const settled = await this.browser.send({ kind: 'settle', quietMs: 600, timeoutMs: 7000 }).catch(() => null);
+    const calls = await this.browser.apiCallsSince().catch(() => []);
+    this.noteApi(capture, calls.map(describeCall), `saving “${top.title}” empty`);
+    const { dialogs } = await this.browser.send({ kind: 'dialogs', waitMs: 400 }).catch(() => ({ dialogs: [] as DialogInfo[] }));
+    const still = dialogs.find((d) => d.title === top.title);
+    if (!still) {
+      capture.dialogs.push(`Saving “${top.title}” empty (“${button.name}”): it closed — it saved with nothing filled in (a blank test record was added). Nothing in it is required.`);
+      return true;
+    }
+    const found = await this.browser.send({ kind: 'formErrors', scope: top.title }).catch(() => ({ fields: [], messages: [] as string[] }));
+    const before = new Set((top.fullText ?? top.text ?? '').split('\n').map((l) => l.trim()));
+    const said = (still.fullText ?? still.text ?? '').split('\n').map((l) => l.trim()).filter((l) => l && !before.has(l) && l.length < 200);
+    const appeared = (settled?.effect?.added ?? []).map((t) => t.trim()).filter((t) => t && t.length < 300 && ERROR_WORDS.test(t));
+    const reasons = [
+      ...found.fields.map((f) => `“${f.label || 'a field'}”: ${f.error}`),
+      ...found.messages,
+      ...said.filter((l) => ERROR_WORDS.test(l)),
+      ...appeared,
+      ...calls.filter((c) => !c.ok).map((c) => `the server: ${c.answer}`),
+    ];
+    capture.dialogs.push(`Saving “${top.title}” empty (“${button.name}”): it stayed open${reasons.length ? ` — it said: ${[...new Set(reasons)].slice(0, 15).join(' | ')}` : ' — no message shown'}.`);
+    return false;
+  }
+
   /**
    * Presses a pop-up form's save button with the test values in it, to learn what it requires — and when the form
    * refuses, reads why (each field's error under it, the form's message, a notification), fixes what it said (a
@@ -1162,15 +1371,14 @@ export class CrawlRun {
     const filled = (top.form ?? []).filter((l) => /— [^:]+: “/.test(l) && !/can’t be changed/.test(l)).length;
     if (filled >= 3) return null;
     // Its own button: one the pop-up holds (by its title), never a button of the page behind it.
-    const inPopup = (e: ElementInfo) => !!e.inBlockingPopup || !!e.context?.includes(top.title);
-    const saveButton = (snap: PageSnapshot | null) => (snap ?? inside).elements.find((e) => e.role === 'button' && !e.disabled && inPopup(e) && SAVE_BUTTON.test(e.name.trim()));
+    const inPopup = (e: ElementInfo) => popupHas(top, e);
+    const saveButton = (snap: PageSnapshot | null) => saveButtonIn(top, snap ?? inside);
     let button = saveButton(inside);
     if (!button) return null;
     const key = `${top.title}|save`;
     if (this.savedForms.has(key)) return null;
     this.savedForms.add(key);
-    const answer = await this.ask({ kind: 'approval', name: button.name, why: 'saves this form with the test values (to learn what it requires)', page: top.title || capture.title });
-    if (answer !== 'allow') return null;
+    if (!(await this.mayTrySaving(top, button.name, capture))) return null;
     const lines = (d: DialogInfo | undefined) => new Set((d?.fullText ?? d?.text ?? '').split('\n').map((l) => l.trim()).filter(Boolean));
     let had = lines(top);
     const story: string[] = [];
@@ -1180,7 +1388,11 @@ export class CrawlRun {
       await this.browser.send({ kind: 'click', id: button.id, highlight: this.o.config.settings.highlightActions }).catch(() => undefined);
       // Every text that appeared after the press, wherever on the page — a notification in any corner, even one gone again.
       const settled = await this.browser.send({ kind: 'settle', quietMs: 600, timeoutMs: 7000 }).catch(() => null);
-      const appeared = (settled?.effect?.added ?? []).map((t) => t.trim()).filter((t) => t && t.length < 300);
+      // What the server answered (a refusal it may not show on the page: “NHI already exists”) counts as what it said.
+      const calls = await this.browser.apiCallsSince().catch(() => []);
+      this.noteApi(capture, calls.map(describeCall), `saving “${top.title}”`);
+      const refusals = calls.filter((c) => !c.ok).map((c) => c.answer);
+      const appeared = [...(settled?.effect?.added ?? []).map((t) => t.trim()).filter((t) => t && t.length < 300), ...refusals];
       const { dialogs } = await this.browser.send({ kind: 'dialogs', waitMs: 400 }).catch(() => ({ dialogs: [] as DialogInfo[] }));
       // The form itself, by its title — another pop-up on screen after the save (a notice) is not the form still open.
       const still = dialogs.find((d) => d.title === top.title);
@@ -1208,7 +1420,7 @@ export class CrawlRun {
         else if (e.required && !e.value?.trim() && !e.checked) fix.set(e.id, named || 'required, left empty');
         else if (named) fix.set(e.id, named);
       }
-      const reasons = [...errs.fields.map((f) => `“${f.label || 'a field'}”: ${f.error}`), ...errs.messages, ...said.filter((l) => ERROR_WORDS.test(l)), ...appeared.filter((l) => ERROR_WORDS.test(l))];
+      const reasons = [...errs.fields.map((f) => `“${f.label || 'a field'}”: ${f.error}`), ...errs.messages, ...said.filter((l) => ERROR_WORDS.test(l)), ...appeared.filter((l) => ERROR_WORDS.test(l)), ...refusals.map((r) => `the server: ${r}`)];
       story.push(`${attempt === 1 ? 'it stayed open' : `try ${attempt}: still open`}${reasons.length ? ` — it said: ${[...new Set(reasons)].slice(0, 10).join(' | ')}` : ' — no reason shown'}`);
       if (!fix.size || attempt === 5) break;
       // Each field fixed the way its error asks.
@@ -1408,7 +1620,7 @@ export class CrawlRun {
     // The spending limit: reached, the user says whether it may spend as much again.
     if (this.writingStopped) return null;
     if (this.s.spendLimit > 0 && this.state.spent >= this.spendCap) {
-      const answer = await this.ask({ kind: 'budget', spent: this.state.spent, limit: this.spendCap });
+      const answer = this.s.unattended ? 'finish' : await this.ask({ kind: 'budget', spent: this.state.spent, limit: this.spendCap });
       if (answer !== 'more') {
         this.writingStopped = true;
         this.log(`Stopped writing at ${this.state.spent.toFixed(2)} (the spending limit). What was written so far is kept.`, 'warn');
@@ -1434,6 +1646,7 @@ export class CrawlRun {
         }
         const message = err instanceof Error ? err.message : String(err);
         this.log(`The model did not answer: ${message}`, 'warn');
+        if (this.s.unattended) return null; // on its own: this page goes unwritten, the rest go on
         const answer = await this.ask({ kind: 'model', error: message });
         if (answer === 'retry') {
           attempt = -1;
@@ -1450,13 +1663,26 @@ export class CrawlRun {
     if (this.abort.signal.aborted) return Promise.resolve('finish');
     const prompt = { ...p, id: uid('ask_') } as CrawlPrompt;
     this.set({ prompts: [...this.state.prompts, prompt] });
-    return new Promise((resolve) => this.resolvers.set(prompt.id, resolve));
+    // Time spent waiting for the answer is not exploring time.
+    const since = Date.now();
+    return new Promise((resolve) =>
+      this.resolvers.set(prompt.id, (a) => {
+        this.waitedMs += Date.now() - since;
+        resolve(a);
+      }),
+    );
   }
 
   private async gate() {
     if (this.abort.signal.aborted) throw new Error('cancelled');
-    while (this.paused) await new Promise<void>((r) => (this.resumeWait = r));
+    if (this.paused) {
+      const since = Date.now();
+      while (this.paused) await new Promise<void>((r) => (this.resumeWait = r));
+      this.waitedMs += Date.now() - since;
+    }
     if (this.abort.signal.aborted) throw new Error('cancelled');
+    // Every field and click passes here: the minutes shown keep up while a long page is read.
+    if (this.state.phase === 'exploring') this.tick();
   }
 
   private log(text: string, tone?: 'warn' | 'ok') {
@@ -1474,8 +1700,19 @@ export class CrawlRun {
    * What was read and written, kept in the browser's storage (every few seconds, and at once when the phase changes):
    * a closed panel or a reloaded extension loses nothing — the crawl is opened again from there.
    */
+  /** Its knowledge was saved (or it was thrown away): never kept in storage again — a save waiting is dropped too. */
+  stopKeeping() {
+    this.forgotten = true;
+    if (this.keepTimer) clearTimeout(this.keepTimer);
+    this.keepTimer = null;
+  }
+
+  private forgotten = false;
+
   private keep(now: boolean) {
-    if (!KEPT_PHASES.has(this.state.phase) || !this.state.host || !this.state.captures.length) return;
+    // Kept from the first page on: a page takes a minute or more, and its queue is already the way through the site.
+    const exploring = (this.state.phase === 'exploring' || this.state.phase === 'paused') && (this.queue.length > 0 || !!this.visiting);
+    if (this.forgotten || !KEPT_PHASES.has(this.state.phase) || !this.state.host || (!this.state.captures.length && !exploring)) return;
     // At most every 3 s while it works — a save waiting is not put off by the next change (that starved it while the
     // crawl kept changing) — and at once when the phase changes.
     if (now) {
@@ -1487,6 +1724,7 @@ export class CrawlRun {
     if (this.keepTimer) return;
     this.keepTimer = setTimeout(() => {
       this.keepTimer = null;
+      if (this.forgotten) return;
       void saveCrawl(this.saved()).catch(() => undefined);
     }, 3000);
   }
@@ -1498,6 +1736,10 @@ export class CrawlRun {
       phase: s.phase, pagesDone: s.pagesDone, captures: s.captures, pages: s.pages, proposals: s.proposals,
       neverClick: s.neverClick, otherSites: s.otherSites, spent: s.spent, startedAt: s.startedAt,
       written: [...this.written], notes: this.notes, savedAt: Date.now(),
+      ...(s.phase === 'exploring' || s.phase === 'paused' ? { explore: this.exploreState() } : {}),
+      base: this.o.base ?? null,
+      mode: this.o.mode ?? 'update',
+      overrides: this.o.overrides ?? {},
     };
   }
 
@@ -1509,6 +1751,9 @@ export class CrawlRun {
     this.written = new Set(saved.written ?? []);
     this.notes = [...(saved.notes ?? [])];
     for (const c of saved.captures) if (c.from) this.vias.set(c.url, `${c.from.title || pathOf(c.from.url)} › ${c.from.via}`);
+    // Kept while exploring, with its place in the site: it carries on exploring from there, once the user says so.
+    const e = saved.explore;
+    if (e && (saved.phase === 'exploring' || saved.phase === 'paused') && (e.queue.length || e.visiting)) return this.carryOn(saved, e);
     const review = saved.phase === 'review';
     this.set({
       id: saved.id, host: saved.host, siteName: saved.siteName, startUrl: saved.startUrl, model: saved.model,
@@ -1534,6 +1779,44 @@ export class CrawlRun {
     this.writeQueue.push(...left);
     this.writer = this.writeLoop();
     return this.finishWriting();
+  }
+
+  /** A crawl kept while exploring, opened again: paused where it was; Resume carries on with its queue. */
+  private async carryOn(saved: SavedCrawl, e: ExploreState): Promise<CrawlState> {
+    // The page being read when it stopped is read again: it isn't counted twice.
+    const captured = new Set(saved.captures.map((c) => c.url));
+    const redo = e.visiting && !captured.has(e.visiting.url) ? e.visiting.url : null;
+    const pages = redo ? saved.pages.filter((p) => p.url !== redo) : saved.pages;
+    this.set({
+      id: saved.id, host: saved.host, siteName: saved.siteName, startUrl: saved.startUrl, model: saved.model,
+      pagesDone: Math.max(0, saved.pagesDone - (saved.pages.length - pages.length)), captures: saved.captures, pages, proposals: saved.proposals,
+      neverClick: saved.neverClick, otherSites: saved.otherSites ?? [], spent: saved.spent ?? 0, startedAt: saved.startedAt,
+      prompts: [], current: null, phase: 'paused',
+      writing: { done: this.written.size, total: saved.captures.length },
+    });
+    this.takeExploreState(e, captured);
+    this.paused = true;
+    this.set({ doing: `Opened again: ${this.state.pagesDone} pages read, ${this.queue.length} waiting. Open the site in this tab (signed in), then press Resume to carry on.` });
+    this.log(`Opened the crawl kept from ${new Date(saved.savedAt).toLocaleString()} — it carries on from where it was.`, 'ok');
+    try {
+      this.setupModel();
+    } catch (err) {
+      this.set({ error: err instanceof Error ? err.message : String(err) });
+    }
+    while (this.spendCap > 0 && this.spendCap <= this.state.spent) this.spendCap += this.s.spendLimit;
+    // Pages read but not written yet: written while it explores (or all at the end, when the settings say so).
+    if (this.s.writeWhileExploring) {
+      this.writeQueue.push(...this.state.captures.filter((c) => !this.written.has(captureKey(c))));
+      this.writer = this.writeLoop();
+    }
+    return this.exploreThenWrite(async () => {
+      await this.gate();
+      await this.browser.setPresence(true);
+      this.signedInAt = Date.now();
+      await this.explore();
+      this.log(this.stopping ? 'Exploring stopped.' : 'Every page found has been visited.', 'ok');
+      await this.browser.setPresence(false);
+    });
   }
 }
 

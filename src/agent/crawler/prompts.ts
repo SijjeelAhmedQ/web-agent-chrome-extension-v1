@@ -21,6 +21,11 @@ export interface PageCapture {
   clicks: string[];
   /** Pop-ups seen on this page: title, words, fields. */
   dialogs: string[];
+  /**
+   * Calls to the site's server that change data, made by a click or a save, and what it answered: a refusal's
+   * message (“NHI already exists”), or the shape of what it sent back — never its values.
+   */
+  api?: string[];
 }
 
 export interface WrittenEntry {
@@ -37,10 +42,10 @@ export interface WrittenKnowledge {
 
 const KINDS: KnowledgeKind[] = ['rule', 'navigation', 'page', 'workflow'];
 
-const FORMAT = `Answer with JSON only, no other text:
+export const KNOWLEDGE_FORMAT = `Answer with JSON only, no other text:
 {"entries":[{"kind":"page"|"navigation"|"rule"|"workflow","title":"short title","content":"markdown","trigger":"(workflows only) an example of what a user would ask"}],"neverClick":["exact names of buttons that must never be clicked"]}`;
 
-const ROLE = `You write the knowledge base of a website for a browser automation agent. The agent reads it before it works on the site, so it must say exactly where things are and how to operate them.
+export const KNOWLEDGE_ROLE = `You write the knowledge base of a website for a browser automation agent. The agent reads it before it works on the site, so it must say exactly where things are and how to operate them.
 Write in English. Use the controls' exact names in quotes ("Search & List"). Only write what the page data shows — never invent controls, pages or data. Leave out personal data (patients', customers' names, numbers): describe the kind of data, not the records.
 Kinds:
 - page: one entry per page or screen, titled "<Page name> page": what it shows, its sections, columns, filters, buttons and what they do, its pop-ups and their fields.
@@ -48,6 +53,7 @@ Kinds:
 - rule: an always/never fact about operating the site that the data shows (a menu that opens on hover, a required field, a button that saves at once, a pop-up that must be closed).
 - workflow: a task this page is clearly for (search, open, create, edit, filter), as numbered steps with exact control names. The trigger is a short example request. Steps that save, send or delete end with "(the agent asks the user first)".
 Forms: list each form's fields in its page entry, marking required ones, and every dropdown with its choices ("options: …") so the agent can pick a valid one. A line "Saving … with test values" tells what the form did when saved: the fields it marked wrong and the messages it showed are the form's requirements (required fields, formats such as a date or phone pattern) — write them as a rule titled "<Form name> requirements". Copy each requirement exactly as the form gave it — every field it called required or marked wrong, and each format with its example (e.g. "NHI: 3 letters then 4 characters, e.g. ABC1235"; "Location: latitude,longitude, e.g. -36.8485,174.7633"). A form that "closed — saved" was saved by its button: say which button saves it.
+Calls to the server: each line is what a click or save sent to the site's server (method and address) and its answer. In the form's page entry, say which call its save makes ("Save" → POST /api/patients). A call the server "refused" is a rule of the site, even when the page showed nothing: write it into the "<Form name> requirements" rule with the server's own words (e.g. "The server refuses a second practice member with the same NHI: 'NHI already exists'"). Leave out ids and values; field names are fine.
 neverClick: only buttons that are destructive and irreversible here (e.g. "Delete", "Delete account"). Usually empty.`;
 
 const clip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
@@ -65,6 +71,7 @@ export function describePage(p: PageCapture, budget: number): string {
     // What its forms require (a save refused, the fields it marked, the formats it asked for) comes first and whole:
     // it is what the agent most needs to fill them in right.
     section('Saving forms with test values (what each form requires)', p.dialogs.filter((d) => d.startsWith('Saving ')), b * 0.1),
+    section('Calls to the server (what the site saves, and what it refuses)', p.api ?? [], b * 0.08),
     section('Form fields (dropdowns with their choices)', [...new Set(p.fields)], b * 0.2),
     section('Pop-ups', p.dialogs.filter((d) => !d.startsWith('Saving ')), b * 0.12),
     section('Controls', p.controls, b * 0.22),
@@ -77,7 +84,7 @@ export function describePage(p: PageCapture, budget: number): string {
 
 export function pagePrompt(p: PageCapture, budget: number): ChatMessage[] {
   return [
-    { role: 'system', content: `${ROLE}\n\n${FORMAT}` },
+    { role: 'system', content: `${KNOWLEDGE_ROLE}\n\n${KNOWLEDGE_FORMAT}` },
     {
       role: 'user',
       content: `Write the knowledge for this page: one "page" entry, one "navigation" entry, and rules or workflows only when the data clearly shows them.\n\n${describePage(p, budget)}`,
@@ -92,7 +99,7 @@ export function pagePrompt(p: PageCapture, budget: number): ChatMessage[] {
 export function sitePrompt(siteName: string, pages: { title: string; url: string; via?: string }[], known: string[], notes: string[], budget: number): ChatMessage[] {
   const map = pages.map((p) => `- ${p.title || '(untitled)'} — ${pathOf(p.url)}${p.via ? ` — reached by: ${p.via}` : ''}`);
   return [
-    { role: 'system', content: `${ROLE}\n\n${FORMAT}` },
+    { role: 'system', content: `${KNOWLEDGE_ROLE}\n\n${KNOWLEDGE_FORMAT}` },
     {
       role: 'user',
       content: [

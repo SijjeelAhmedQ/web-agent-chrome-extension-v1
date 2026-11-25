@@ -3,6 +3,7 @@ import { PageError } from '@/extension/browser/controller';
 import { toolMeta } from '@/shared/constants/tools';
 import { clip, siteOf, sleep } from '@/shared/utils';
 import { classifyClick, classifySubmit, classifyTyping } from '../execution/riskPolicy';
+import { REFUSED_NOTE } from '../runtime/followUp';
 import { formatDialogs, formatElement, formatSnapshot } from './format';
 import { memoOf, pageDiff } from './pageDiff';
 import { statusSummary } from './recordStatus';
@@ -79,10 +80,26 @@ async function pageUrl(ctx: ToolContext): Promise<string> {
   return (await ctx.browser.currentTab()).url ?? '';
 }
 
-function changeReport(after: { navigated: boolean; url: string; title: string; alerts?: string[] }): string {
+function changeReport(after: { navigated: boolean; url: string; title: string; alerts?: string[]; api?: string[] }): string {
   const alerts = after.alerts?.length ? ` Messages now on the page: ${after.alerts.map((a) => `“${clip(a, 160)}”`).join('; ')}.` : '';
-  if (after.navigated) return ` The page changed — now “${after.title || 'untitled'}” (${clip(after.url, 120)}). Call read_page before acting on it.${alerts}`;
-  return ` The page may have updated; call read_page if you need to see the result.${alerts}`;
+  const server = apiReport(after.api);
+  if (after.navigated) return ` The page changed — now “${after.title || 'untitled'}” (${clip(after.url, 120)}). Call read_page before acting on it.${alerts}${server}`;
+  return ` The page may have updated; call read_page if you need to see the result.${alerts}${server}`;
+}
+
+/**
+ * What the site's server answered to the calls the action made: the surest sign a save worked — or why it did not
+ * (“NHI already exists”), which the page may show only for a moment, or not at all.
+ */
+export const refusedByServer = (api: string[] | undefined) => !!api?.some((l) => / refused: /.test(l));
+
+export function apiReport(api: string[] | undefined): string {
+  if (!api?.length) return '';
+  const refused = api.filter((l) => / refused: /.test(l));
+  const head = refused.length
+    ? ` The server REFUSED it — nothing was saved by ${refused.length === api.length ? 'it' : 'the refused call'}. Tell the user exactly what the server said, and do not repeat the same save unchanged:`
+    : ' The server accepted it:';
+  return `${head} ${api.slice(-4).map((l) => clip(l, 300)).join(' | ')}.`;
 }
 
 function invalidReport(fields: string[] | undefined): string {
@@ -302,7 +319,8 @@ async function clickAndReport(ctx: ToolContext, elementId: number, double: boole
   if (res.invalidFields) return { output: `Clicked ${label}.${invalidReport(res.invalidFields)}`, note: 'Form has missing or invalid fields' };
   const verb = double ? 'Double-clicked' : 'Clicked';
   let effect = after.navigated ? undefined : after.effect;
-  const changed = () => after.navigated || !!effect?.added.length || !!effect?.removed || after.alerts.length > 0;
+  // A call to the server is a change too: a save refused with nothing on the page still has its answer.
+  const changed = () => after.navigated || !!effect?.added.length || !!effect?.removed || after.alerts.length > 0 || !!after.api?.length;
 
   // Older apps answer slowly (a round trip to the server): give them a few seconds before
   // deciding nothing happened — a new tab or window, a page load, or new content.
@@ -409,7 +427,8 @@ async function clickAndReport(ctx: ToolContext, elementId: number, double: boole
   const dialog = after.navigated ? await dialogReport(ctx) : '';
   return {
     output: `${verb} ${label}.${appeared}${changeReport(after)}${dialog}${covered}`,
-    note: after.navigated ? (dialog ? 'Opened a new page · a dialog is showing' : 'Opened a new page') : effect?.added.length ? 'The page changed' : undefined,
+    // A save the server refused is not done: noted so, it is not on the list of steps a reply must not do again.
+    note: refusedByServer(after.api) ? REFUSED_NOTE : after.navigated ? (dialog ? 'Opened a new page · a dialog is showing' : 'Opened a new page') : effect?.added.length ? 'The page changed' : undefined,
   };
 }
 
@@ -423,11 +442,11 @@ async function realClick(ctx: ToolContext, elementId: number, label: string, dou
   if (opened) return followNewTab(ctx, opened, label, ' (real mouse click)');
   const after = await ctx.browser.settleAfterAction(before, ctx.signal);
   const effect = after.navigated ? undefined : after.effect;
-  if (!after.navigated && !effect?.added.length && !effect?.removed && !after.alerts.length) return null;
+  if (!after.navigated && !effect?.added.length && !effect?.removed && !after.alerts.length && !after.api?.length) return null;
   const appeared = effect?.added.length ? ` New on the page: ${effect.added.map((l) => `“${clip(l, 80)}”`).join(', ')}.` : '';
   return {
     output: `Clicked ${label} (a normal click did nothing, so I used a real mouse click).${appeared}${changeReport(after)}`,
-    note: after.navigated ? 'Opened a new page' : 'The page changed',
+    note: refusedByServer(after.api) ? REFUSED_NOTE : after.navigated ? 'Opened a new page' : 'The page changed',
   };
 }
 

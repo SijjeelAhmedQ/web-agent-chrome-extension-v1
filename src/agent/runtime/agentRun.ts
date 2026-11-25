@@ -372,11 +372,15 @@ export class AgentRun {
     let knowledgeOf = siteKey(toolset.sites);
     // Earlier answers are context, not facts about the page now. The last few turns: each goes with every call.
     const history = historyForModel(this.options.history.slice(-HISTORY_TURNS), followUp);
+    // The request, said to be the request: between the site's knowledge (long, full of rules and headings) and the
+    // page, OpenRouter joins them into one message for Claude — a bare “Open practice members” in the middle was
+    // read as one more note (“your request didn't come through”) once a learned site's knowledge grew to 16k.
+    const asked = followUp?.request ?? request;
     const messages: ChatMessage[] = [
       { role: 'system', content: system },
       ...history,
       { role: 'user', content: contextFor(toolset.sites) },
-      { role: 'user', content: followUp?.request ?? request },
+      { role: 'user', content: `${REQUEST_HEAD}\n${asked}` },
     ];
     /** The task's knowledge again, newer (another site, a bigger model): the one before becomes a line, the new one goes at the end. */
     const renewContext = async (sites: SiteProfile[], note = '') => {
@@ -401,7 +405,8 @@ export class AgentRun {
     if (!pageNote && byName.has('read_page')) {
       const page = await this.runTool({ id: uid('read_'), name: 'read_page', arguments: { mode: 'overview' } }, byName, ctx);
       if (!/^(Error|Not )/.test(page)) {
-        messages.push({ role: 'user', content: `${FIRST_PAGE}\n${page}` });
+        // …and once more after the page: what is read last is what the model acts on.
+        messages.push({ role: 'user', content: `${FIRST_PAGE}\n${page}\n\n${REQUEST_AGAIN} “${asked.length > 600 ? `${asked.slice(0, 599)}…` : asked}”)` });
         // Every control of the page is in this read: find_element would only find again what the model was shown —
         // a call each time (four in one filter). A page too long for one read keeps it.
         // Out of the tools, the rules and the prompt — Qwen called it while it was only named in the rules.
@@ -1485,6 +1490,10 @@ const NOT_FINISHED_PROMPT = 'Not finished yet:';
 /** Tools that only look at the page; this many in a row without an action is searching in circles. */
 /** How a decision reaches the agent's model (and how compaction tells it from the user's request). */
 export const DECISION_HEAD = 'Decision (from';
+/** Heads the user's request, so it is never read as one more note between the site's knowledge and the page. */
+export const REQUEST_HEAD = "(The user's request — this is your task:)";
+/** Ends the first page read: the request once more, last. */
+const REQUEST_AGAIN = "(Your task — the user's request:";
 /** Tools marked read-only that still bring another page: reading it is the model's next step anyway. */
 /** A page read that lists all of the page's controls: none left out for find_element to find. */
 export const listsEveryControl = (page: string) => /Interactive elements/.test(page) && !/more not listed/.test(page);

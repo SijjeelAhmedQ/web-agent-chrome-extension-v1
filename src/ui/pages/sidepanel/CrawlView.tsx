@@ -1,7 +1,8 @@
-import { Button, Checkbox, Input, InputNumber, Progress, Select } from 'antd';
-import { ArrowLeft, BookOpen, CheckCircle2, ChevronDown, ChevronRight, Globe, LogIn, Pause, Play, ShieldAlert, Square, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Button, Checkbox, Input, InputNumber, Popconfirm, Progress, Select, Switch } from 'antd';
+import { ArrowLeft, BookOpen, CheckCircle2, ChevronDown, ChevronRight, Download, Globe, LogIn, Pause, Play, Plus, ShieldAlert, Square, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CrawlPrompt, CrawlState } from '@/agent/crawler/crawlRun';
+import { knowledgeFileName, knowledgeFileText } from '@/agent/crawler/mdImport';
 import { hostOf, type ProposedEntry } from '@/agent/crawler/merge';
 import { deleteSavedCrawl, loadSavedCrawl, type SavedCrawl } from '@/agent/crawler/savedCrawl';
 import { KNOWLEDGE_KINDS } from '@/agent/planner/siteKnowledge';
@@ -11,6 +12,7 @@ import { useAppSelector } from '@/store';
 import type { ActiveTab } from '../../hooks/useActiveTab';
 import { baseOfHost, type LearnMode, type useCrawler } from '../../hooks/useCrawler';
 import { openConfiguration } from '../../utils/navigation';
+import { MdImport, type UploadedFile } from './MdImport';
 
 type Crawler = ReturnType<typeof useCrawler>;
 
@@ -20,6 +22,15 @@ let startedRequest = 0;
 const money = (n: number) => `$${n < 0.01 ? n.toFixed(4) : n.toFixed(2)}`;
 /** Crawls whose reading was already saved to Downloads (once each). */
 const downloadedCrawls = new Set<string>();
+/** A text file saved to Downloads (the knowledge base as Markdown). */
+function downloadText(name: string, text: string, type: string) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 const PHASE_LABEL: Record<CrawlState['phase'], string> = {
   exploring: 'Exploring',
@@ -34,6 +45,8 @@ const PHASE_LABEL: Record<CrawlState['phase'], string> = {
 /** The Knowledge Gather Agent in the side panel: start, live progress, the user's OKs, and the review. */
 export function CrawlView({ tab, crawler, chatBusy, autoStart, onBack }: { tab: ActiveTab; crawler: Crawler; chatBusy: boolean; autoStart?: number; onBack: () => void }) {
   const { state } = crawler;
+  /** A knowledge file the user uploaded, previewed before it is saved. */
+  const [file, setFile] = useState<UploadedFile | null>(null);
   return (
     <main className="chat crawl">
       <div className="crawl-head">
@@ -45,8 +58,10 @@ export function CrawlView({ tab, crawler, chatBusy, autoStart, onBack }: { tab: 
           <div className="crawl-sub">Knowledge Gather Agent</div>
         </div>
       </div>
-      {!state ? (
-        <StartForm tab={tab} crawler={crawler} disabled={chatBusy} autoStart={autoStart} />
+      {file && !state ? (
+        <MdImport file={file} tab={tab} onClose={() => setFile(null)} />
+      ) : !state ? (
+        <StartForm tab={tab} crawler={crawler} disabled={chatBusy} autoStart={autoStart} onUpload={setFile} />
       ) : state.phase === 'review' && crawler.saved ? (
         <Saved crawler={crawler} />
       ) : state.phase === 'review' ? (
@@ -60,11 +75,24 @@ export function CrawlView({ tab, crawler, chatBusy, autoStart, onBack }: { tab: 
   );
 }
 
-function StartForm({ tab, crawler, disabled, autoStart }: { tab: ActiveTab; crawler: Crawler; disabled: boolean; autoStart?: number }) {
+function StartForm({ tab, crawler, disabled, autoStart, onUpload }: { tab: ActiveTab; crawler: Crawler; disabled: boolean; autoStart?: number; onUpload: (f: UploadedFile) => void }) {
+  const picker = useRef<HTMLInputElement>(null);
+  const [fileError, setFileError] = useState('');
+  const pick = (f: File | undefined) => {
+    setFileError('');
+    if (!f) return;
+    if (f.size > 2_000_000) return setFileError(`${f.name} is too big (over 2 MB) for a knowledge file.`);
+    void f
+      .text()
+      .then((text) => (text.trim() ? onUpload({ name: f.name, text }) : setFileError(`${f.name} is empty.`)))
+      .catch(() => setFileError(`Could not read ${f.name}.`));
+  };
   const config = useAppSelector((s) => s.config.config);
   const defaults = crawlerSettings(config.settings);
   const [url, setUrl] = useState('');
   const [limit, setLimit] = useState(defaults.pageLimit);
+  const [minutes, setMinutes] = useState(defaults.timeLimit);
+  const [onItsOwn, setOnItsOwn] = useState(defaults.unattended);
   const [providerId, setProviderId] = useState<string>(defaults.providerId ?? '');
   const [model, setModel] = useState(defaults.model);
   const [asking, setAsking] = useState(false);
@@ -89,7 +117,7 @@ function StartForm({ tab, crawler, disabled, autoStart }: { tab: ActiveTab; craw
 
   const run = (mode: LearnMode) => {
     setAsking(false);
-    const overrides: Partial<CrawlerSettings> = { pageLimit: limit, providerId: providerId || null, model: providerId ? model : '' };
+    const overrides: Partial<CrawlerSettings> = { pageLimit: limit, timeLimit: minutes, unattended: onItsOwn, providerId: providerId || null, model: providerId ? model : '' };
     void crawler.start(url.trim(), overrides, tab.id, mode);
   };
   // A site learned before: the user says whether to update its knowledge base or start it again.
@@ -110,7 +138,7 @@ function StartForm({ tab, crawler, disabled, autoStart }: { tab: ActiveTab; craw
         <Card
           icon={<BookOpen size={18} />}
           title={`A crawl of ${kept.siteName || kept.host} was kept`}
-          detail={`${kept.pagesDone} pages read${written ? `, ${written} written up (${kept.proposals.length} entries)` : ''}${kept.spent ? `, ${money(kept.spent)} spent` : ''} — kept ${new Date(kept.savedAt).toLocaleString()}. Open it to carry on: nothing read or written is lost. Starting again needs it discarded first.`}
+          detail={`${kept.pagesDone} pages read${written ? `, ${written} written up (${kept.proposals.length} entries)` : ''}${kept.spent ? `, ${money(kept.spent)} spent` : ''} — kept ${new Date(kept.savedAt).toLocaleString()}. Open it to carry on${kept.explore?.queue.length ? ` exploring (${kept.explore.queue.length} pages waiting)` : ''}: nothing read or written is lost. Starting again needs it discarded first${kept.base !== undefined && kept.proposals.length ? ' — what it learned stays in the knowledge base' : ''}.`}
         >
           <Button
             danger
@@ -151,7 +179,11 @@ function StartForm({ tab, crawler, disabled, autoStart }: { tab: ActiveTab; craw
           <li>
             <strong>Delete the old:</strong> when you save, the old entries, never-click list and pages are replaced by what is learned now.
           </li>
-          <li>Nothing changes until you review and save.</li>
+          {defaults.saveAsItGoes ? (
+            <li>New knowledge is saved as it is learned; old entries are only deleted when you save. Discard puts the knowledge base back as it was.</li>
+          ) : (
+            <li>Nothing changes until you review and save.</li>
+          )}
         </ul>
       </div>
     );
@@ -192,22 +224,80 @@ function StartForm({ tab, crawler, disabled, autoStart }: { tab: ActiveTab; craw
         </div>
       </div>
       {provider && <Input value={model} onChange={(e) => setModel(e.target.value)} placeholder={provider.defaultModel || 'Model name'} aria-label="Model name" />}
+      <div className="crawl-row">
+        <div>
+          <label className="crawl-label" htmlFor="crawl-minutes">
+            Time limit
+          </label>
+          <InputNumber id="crawl-minutes" min={0} max={600} value={minutes} onChange={(v) => setMinutes(Math.max(0, Number(v) || 0))} suffix="min" style={{ width: '100%' }} />
+        </div>
+        <label className="crawl-grow crawl-switch" htmlFor="crawl-own">
+          <Switch id="crawl-own" size="small" checked={onItsOwn} onChange={setOnItsOwn} />
+          <span>
+            <strong>Run on its own</strong>
+            <span className="crawl-switch-hint">Skips risky buttons instead of asking; stops at a limit.</span>
+          </span>
+        </label>
+      </div>
       <ul className="crawl-rules">
-        <li>Clicks everything — but asks you first before anything that deletes, saves, sends, pays, submits or signs out.</li>
+        {onItsOwn ? (
+          <li>Clicks everything except what deletes, saves, sends, pays, submits or signs out — those are skipped without asking. Only a sign-in waits for you.</li>
+        ) : (
+          <li>Clicks everything — but asks you first before anything that deletes, saves, sends, pays, submits or signs out.</li>
+        )}
         <li>
           Fills forms with test values (e-mail <strong>{defaults.email}</strong>) and reads every dropdown’s choices.{' '}
-          {defaults.trySaving ? 'Presses a pop-up form’s save button to learn what it requires — it asks you first each time (test sites only).' : 'Never submits them.'}
+          {defaults.trySaving
+            ? onItsOwn
+              ? 'Saving forms is skipped while it runs on its own.'
+              : 'Presses a new form’s save button — empty first, then with test values — to learn what it requires and what the server refuses; it asks you once per form (test sites only).'
+            : 'Never submits them.'}
         </li>
-        <li>Stays on this site. After {limit} pages it asks whether to explore {defaults.extendBy} more.</li>
+        <li>
+          Stays on this site.{' '}
+          {onItsOwn ? `Stops after ${limit} pages` : `After ${limit} pages it asks whether to explore ${defaults.extendBy} more`}
+          {minutes > 0 ? `, or after ${minutes} minutes of exploring — then writes what it learned.` : '.'}
+        </li>
         {!defaults.writeWhileExploring && <li>Explores the whole site first and shows you what it read; the knowledge is written when you press Write.</li>}
-        {defaults.spendLimit > 0 && <li>Writing stops and asks you when it has cost ${defaults.spendLimit.toFixed(2)}.</li>}
-        <li>Saving the knowledge also makes the site and its own agent, which works only on this site.</li>
+        {defaults.spendLimit > 0 && <li>Writing stops {onItsOwn ? '' : 'and asks you '}when it has cost ${defaults.spendLimit.toFixed(2)}.</li>}
+        {defaults.saveAsItGoes ? (
+          <li>Each page’s knowledge is saved as soon as it is written — with the site and its own agent — so nothing is lost if the panel closes.</li>
+        ) : (
+          <li>Saving the knowledge also makes the site and its own agent, which works only on this site.</li>
+        )}
         <li>Don’t use this tab while it works — press Pause first.</li>
       </ul>
       {restricted && <div className="crawl-note warn">{tab.restricted}</div>}
       <Button type="primary" block size="large" icon={<Play size={15} />} disabled={!ready} onClick={go}>
         Start learning
       </Button>
+      {/* Or: the knowledge written down — a Markdown file in the knowledge template (what the export writes), or notes. */}
+      <input
+        ref={picker}
+        type="file"
+        accept=".md,.markdown,.txt,text/markdown,text/plain"
+        hidden
+        onChange={(e) => {
+          pick(e.target.files?.[0]);
+          e.target.value = '';
+        }}
+      />
+      {existing ? (
+        // Export, edit, upload again: the same template both ways.
+        <div className="crawl-files">
+          <Button icon={<Plus size={15} />} disabled={disabled} onClick={() => picker.current?.click()}>
+            Upload .md
+          </Button>
+          <Button icon={<Download size={15} />} onClick={() => downloadText(knowledgeFileName(existing), knowledgeFileText(existing), 'text/markdown')}>
+            Download .md
+          </Button>
+        </div>
+      ) : (
+        <Button block icon={<Plus size={15} />} disabled={disabled} onClick={() => picker.current?.click()}>
+          Upload knowledge (.md)
+        </Button>
+      )}
+      {fileError && <div className="crawl-note warn">{fileError}</div>}
       {!config.providers.length && <div className="crawl-note warn">Connect an AI model first (Settings → Models).</div>}
       {disabled && <div className="crawl-note">The agent is busy with a task — wait for it to finish.</div>}
       <button type="button" className="link-btn" onClick={() => void openConfiguration('/knowledge')}>
@@ -248,7 +338,17 @@ function Progressing({ crawler }: { crawler: Crawler }) {
             <strong>{money(s.spent)}</strong> spent
           </span>
         )}
+        {s.timeLimit > 0 && (
+          <span>
+            <strong>{s.minutes}</strong>/{s.timeLimit} min
+          </span>
+        )}
       </div>
+      {crawler.savesAsItGoes && s.proposals.length > 0 && (
+        <div className="crawl-note">
+          <CheckCircle2 size={13} /> Saved to the knowledge base as it goes — the agent can use it already.
+        </div>
+      )}
       <div className="crawl-doing" role="status">
         {s.doing}
         {s.current?.url && <div className="crawl-url">{s.current.url}</div>}
@@ -480,7 +580,12 @@ function Review({ crawler }: { crawler: Crawler }) {
         </span>
       </div>
       {s.error && <div className="crawl-note warn">{s.error}</div>}
-      <p className="crawl-lede">Tick what goes into the knowledge base. Click an entry to read or edit it. Entries marked “update” replace the text of the same entry; everything else already there is kept.</p>
+      <p className="crawl-lede">
+        {crawler.savesAsItGoes
+          ? 'This is already in the knowledge base — the agent uses it. Untick what should not be there, or click an entry to read or edit it; your changes are saved as you make them.'
+          : 'Tick what goes into the knowledge base. Click an entry to read or edit it.'}{' '}
+        Entries marked “update” replace the text of the same entry; everything else already there is kept.
+      </p>
       <div className="crawl-actions">
         <Button size="small" onClick={() => all(true)}>
           Select all
@@ -530,7 +635,20 @@ function Review({ crawler }: { crawler: Crawler }) {
         </div>
       )}
       <div className="crawl-sticky">
-        <Button onClick={crawler.discard}>Discard</Button>
+        {crawler.savesAsItGoes ? (
+          <Popconfirm
+            title="Discard what was learned?"
+            description="The knowledge base goes back to how it was before this crawl."
+            okText="Discard"
+            okButtonProps={{ danger: true }}
+            cancelText="Keep"
+            onConfirm={crawler.discard}
+          >
+            <Button>Discard</Button>
+          </Popconfirm>
+        ) : (
+          <Button onClick={crawler.discard}>Discard</Button>
+        )}
         <Button type="primary" icon={<CheckCircle2 size={15} />} disabled={!chosen && !never.size} onClick={save}>
           Save {chosen} {chosen === 1 ? 'entry' : 'entries'}
         </Button>

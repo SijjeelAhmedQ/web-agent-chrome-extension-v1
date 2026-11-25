@@ -1,5 +1,5 @@
 import type { TaskRecord } from '../types/history';
-import { getItem, removeItem, setItem, watchItem } from './kv';
+import { getItem, removeItem, setItem, watchItem } from './storage';
 
 export const HISTORY_KEY = 'wa.history';
 const MAX_TASKS = 200;

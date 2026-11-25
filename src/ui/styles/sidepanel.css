@@ -1169,6 +1169,33 @@ body {
   min-width: 0;
 }
 
+/* A switch beside a field in a .crawl-row: lines up with the field (under its label's height), wraps on narrow panels. */
+.crawl-switch {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding-top: 22px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.crawl-switch .ant-switch {
+  flex: none;
+  margin-top: 1px;
+}
+
+.crawl-switch strong {
+  display: block;
+  font-weight: 600;
+}
+
+.crawl-switch-hint {
+  display: block;
+  color: var(--text-muted);
+}
+
 .crawl-note {
   display: flex;
   gap: 6px;
@@ -1425,4 +1452,15 @@ body {
   border-radius: 6px;
   padding: 6px 8px;
   color: var(--text);
+}
+
+/* Upload and download of the knowledge file, side by side — two equal buttons, even on a narrow panel. */
+.crawl-files {
+  display: flex;
+  gap: 8px;
+}
+
+.crawl-files > .ant-btn {
+  flex: 1;
+  min-width: 0;
 }

@@ -56,6 +56,17 @@ describe('what needs the user’s OK', () => {
     expect(dangerOf(el({ name: 'Delete' }), ['eliminar'])).toBeNull();
   });
 
+  it('asks before moving a record or changing its state — whatever word list the settings keep', () => {
+    // Stations: “Move Tall Table 2 down” swapped two stations' order on the real site.
+    for (const name of ['Move Tall Table 2 down', 'Move Tall Table 1 up', 'Reorder', 'Duplicate station', 'Activate', 'Assign provider', 'Set as default', 'Pin'])
+      expect(dangerOf(el({ name }), ['eliminar'])).not.toBeNull();
+    // An arrow alone in a table's row moves that row; the same arrow outside a row pages a list.
+    expect(dangerOf({ ...el({ name: '↓' }), context: 'row 1 of the table' })).not.toBeNull();
+    expect(dangerOf(el({ name: '↓' }))).toBeNull();
+    // Whole words only: “Start”, “Marketing” are not “star”, “mark”.
+    for (const name of ['Start', 'Marketing', 'Next']) expect(dangerOf(el({ name }))).toBeNull();
+  });
+
   it('fills forms with the test values', () => {
     expect(dummyFor(el({ role: 'textbox', name: 'Email', type: 'text' }), DEFAULT_CRAWLER)).toBe('test@test.com');
     expect(dummyFor(el({ role: 'textbox', name: 'Ethnicity', type: 'text', picks: true }), DEFAULT_CRAWLER)).toBeNull();
@@ -363,5 +374,136 @@ describe('the tabs of one record page', async () => {
     expect(pageOfScreen(b)).toBe(pageOfScreen(`https://x.com/patients/${id}`));
     expect(pageOfScreen(`https://x.com/patients/${id}?q=1&tab=notes`)).toBe('/patients/:id?q');
     expect(pageOfScreen(`https://x.com/patients/${id}?tab=notes&q=1`)).toBe('/patients/:id?q');
+  });
+});
+
+describe('saving as the crawl goes', () => {
+  it('saving the same proposals again keeps the same entries (no doubles, same ids)', () => {
+    const base = newKnowledgeBase('https://app.a.com');
+    const props = addProposals([], [
+      { kind: 'navigation', title: 'How to reach Stations', content: 'Sidebar › Stations', source: 'https://app.a.com' },
+      { kind: 'page', title: 'Stations page', content: 'A table of stations', source: 'https://app.a.com/stations' },
+    ]);
+    const first = mergeIntoBase(base, props, [], []).kb;
+    const again = mergeIntoBase(base, props, [], []).kb;
+    expect(first.entries.map((e) => e.id)).toEqual(again.entries.map((e) => e.id));
+    // More learned: the base it began with plus everything ticked — still one entry each.
+    const more = addProposals(props, [{ kind: 'page', title: 'Stations page', content: 'Edit opens a drawer', source: 'https://app.a.com/stations' }]);
+    const later = mergeIntoBase(base, more, [], []).kb;
+    expect(later.entries).toHaveLength(2);
+    expect(later.entries.find((e) => e.kind === 'page')!.content).toContain('Edit opens a drawer');
+    // Unticked in the review: out of the knowledge base on the next save.
+    const unticked = mergeIntoBase(base, more.map((p) => (p.kind === 'page' ? { ...p, selected: false } : p)).filter((p) => p.selected), [], []).kb;
+    expect(unticked.entries.map((e) => e.kind)).toEqual(['navigation']);
+  });
+});
+
+describe('a knowledge file the user uploads', async () => {
+  const { readKnowledgeFile, fileProposals, knowledgeFileText } = await import('./crawler/mdImport');
+  const kb = {
+    ...newKnowledgeBase('https://octanschiro-dev-app.vitonta.com', 'OctansCare'),
+    neverClick: ['Remove station'],
+    entries: [
+      { id: 'a', kind: 'workflow' as const, title: 'Add a practice member', trigger: 'add a new practice member', content: '1. Open “Practice members”.\n2. Click “Add practice member”.', enabled: true, createdAt: 0, updatedAt: 0 },
+      { id: 'b', kind: 'rule' as const, title: 'NHI format', content: 'NHI: 3 letters then 4 characters, e.g. ZZZ0016.', enabled: true, createdAt: 0, updatedAt: 0 },
+      { id: 'c', kind: 'page' as const, title: 'Stations page', content: 'A table of stations.', enabled: false, createdAt: 0, updatedAt: 0 },
+    ],
+  };
+  // What the knowledge base's export writes.
+  const exported = knowledgeFileText(kb);
+
+  it('comes back as it was exported (name, site, entries, never-click, off)', () => {
+    const f = readKnowledgeFile(exported);
+    expect(f.templated).toBe(true);
+    expect(f.name).toBe('OctansCare');
+    expect(f.sites).toEqual(['octanschiro-dev-app.vitonta.com']);
+    expect(f.neverClick).toEqual(['Remove station']);
+    expect(f.entries.map((e) => [e.kind, e.title, e.enabled])).toEqual([
+      ['rule', 'NHI format', true],
+      ['page', 'Stations page', false],
+      ['workflow', 'Add a practice member', true],
+    ]);
+    expect(f.entries.find((e) => e.kind === 'workflow')!.trigger).toBe('add a new practice member');
+    // Saved into an empty knowledge base: the same entries.
+    const props = fileProposals(f.entries, undefined).map((p) => ({ ...p, selected: true }));
+    const out = mergeIntoBase(newKnowledgeBase('https://octanschiro-dev-app.vitonta.com'), props, f.neverClick, [], 1, 'md').kb;
+    expect(out.entries.map((e) => [e.kind, e.title, e.content, e.source])).toEqual(kb.entries.map((e) => [e.kind, e.title, e.content, 'md']).sort((a, b) => ['rule', 'navigation', 'page', 'workflow'].indexOf(a[0]) - ['rule', 'navigation', 'page', 'workflow'].indexOf(b[0])));
+    expect(out.neverClick).toEqual(['Remove station']);
+  });
+
+  it('reads the site in any form, and knows a file that is not in the template', () => {
+    expect(readKnowledgeFile('Sites: https://app.x.com/patients, other.x.com\n### Rule: A\nb').sites).toEqual(['app.x.com', 'other.x.com']);
+    expect(readKnowledgeFile('# Notes\nThe save button is at the bottom.').templated).toBe(false);
+  });
+
+  it('wins over what a crawl learns later', () => {
+    const base = newKnowledgeBase('https://app.x.com');
+    const fromFile = mergeIntoBase(base, fileProposals([{ kind: 'rule', title: 'NHI format', content: 'From the file', enabled: true }], undefined), [], [], 1, 'md').kb;
+    const crawled = addProposals([], [{ kind: 'rule', title: 'NHI format', content: 'From the crawl', source: 'x' }, { kind: 'page', title: 'Home page', content: 'New', source: 'x' }]);
+    const { kb: after, kept, added } = mergeIntoBase(fromFile, crawled, [], [], 2);
+    expect(after.entries.find((e) => e.title === 'NHI format')!.content).toBe('From the file');
+    expect(kept).toBe(1);
+    expect(added).toBe(1);
+    // The file uploaded again updates it.
+    const again = mergeIntoBase(after, fileProposals([{ kind: 'rule', title: 'NHI format', content: 'Newer file', enabled: true }], after), [], [], 3, 'md').kb;
+    expect(again.entries.find((e) => e.title === 'NHI format')!.content).toBe('Newer file');
+  });
+});
+
+describe('exporting a knowledge base and uploading it again', async () => {
+  const { readKnowledgeFile, fileProposals, knowledgeFileText, knowledgeFileName } = await import('./crawler/mdImport');
+  const base = {
+    ...newKnowledgeBase('https://app.x.com', 'App X'),
+    neverClick: ['Delete account'],
+    entries: [
+      { id: 'a', kind: 'page' as const, title: 'Home page', content: 'Shows the dashboard.', enabled: true, source: 'crawl' as const, createdAt: 0, updatedAt: 0 },
+      { id: 'b', kind: 'workflow' as const, title: 'Find a member', trigger: 'find James', content: '1. Search.', enabled: true, createdAt: 0, updatedAt: 0 },
+    ],
+  };
+
+  it('unchanged: nothing marked “update”, nothing changes, nothing becomes the file’s', () => {
+    expect(knowledgeFileName(base)).toBe('App-X-knowledge.md');
+    const f = readKnowledgeFile(knowledgeFileText(base));
+    const props = fileProposals(f.entries, base);
+    expect(props.some((p) => p.update)).toBe(false);
+    const { kb, added, updated } = mergeIntoBase(base, props, f.neverClick, [], 5, 'md');
+    expect([added, updated]).toEqual([0, 0]);
+    expect(kb.entries.map((e) => [e.id, e.content, e.source])).toEqual([
+      ['a', 'Shows the dashboard.', 'crawl'],
+      ['b', '1. Search.', undefined],
+    ]);
+    expect(kb.neverClick).toEqual(['Delete account']);
+  });
+
+  it('edited: only what was changed is updated (and becomes the file’s)', () => {
+    const edited = knowledgeFileText(base).replace('1. Search.', '1. Type the name into “Search members”.');
+    const f = readKnowledgeFile(edited);
+    const props = fileProposals(f.entries, base);
+    expect(props.filter((p) => p.update).map((p) => p.title)).toEqual(['Find a member']);
+    const { kb, updated } = mergeIntoBase(base, props, f.neverClick, [], 5, 'md');
+    expect(updated).toBe(1);
+    expect(kb.entries.find((e) => e.id === 'b')).toMatchObject({ content: '1. Type the name into “Search members”.', source: 'md' });
+    expect(kb.entries.find((e) => e.id === 'a')!.source).toBe('crawl');
+  });
+});
+
+describe('entries with their own headings, exported and uploaded again', async () => {
+  const { readKnowledgeFile, fileProposals, knowledgeFileText } = await import('./crawler/mdImport');
+  it('keep every line — a page entry that starts with “## ”, and its “## ” sub-headings', () => {
+    const base = {
+      ...newKnowledgeBase('https://app.x.com', 'App X'),
+      entries: [
+        { id: 'd', kind: 'page' as const, title: 'Dashboard page', content: '## Dashboard (Overview)\nCards for today.\n## Side menu\nLinks.', enabled: true, createdAt: 0, updatedAt: 0 },
+        { id: 'm', kind: 'page' as const, title: 'Mentor home page', content: '# Mentor home\nStations.\n## Floor plan tab\nWings.\n## Global bar and side menu\nSearch.', enabled: true, createdAt: 0, updatedAt: 0 },
+      ],
+    };
+    const f = readKnowledgeFile(knowledgeFileText(base));
+    expect(f.entries.map((e) => [e.title, e.content])).toEqual(base.entries.map((e) => [e.title, e.content]));
+    expect(f.unknown).toEqual([]);
+    expect(fileProposals(f.entries, base).some((p) => p.update)).toBe(false);
+  });
+  it('still leaves out the headings of the knowledge preview copied in', () => {
+    const f = readKnowledgeFile('## What the user has taught you about app.x.com\nThis comes from the user.\n\n### Rule: A\nB\n\n## Where you are\n- Current tab: Home');
+    expect(f.entries.map((e) => [e.title, e.content])).toEqual([['A', 'B']]);
   });
 });
