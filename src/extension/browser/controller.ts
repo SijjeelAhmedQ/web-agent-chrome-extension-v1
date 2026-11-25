@@ -1,3 +1,4 @@
+import { LEAVE_GUARD } from './leaveGuard';
 import { CHANNEL, type ContentError, type ContentRequest, type ContentResponse, type Envelope, type ResponseMap, type ClickEffect } from '../messaging/protocol';
 import { sleep } from '@/shared/utils';
 
@@ -139,6 +140,7 @@ export class BrowserController {
     const quick = request.kind === 'dialogs' || request.kind === 'popupControl' || request.kind === 'fetchPdf';
     if (tab.status === 'loading') await this.waitForLoad(tab.id!, quick ? 1_500 : 10_000);
     await this.ensureInjected(tab);
+    if (request.kind === 'click' || request.kind === 'key') await this.armLeaveGuard(tab.id!);
     let res: ContentResponse<ResponseMap[K]> | undefined;
     try {
       res = await chrome.tabs.sendMessage(tab.id!, { channel: CHANNEL, request } satisfies Envelope, { frameId: 0 });
@@ -209,16 +211,80 @@ export class BrowserController {
     return { navigated: navigated || after.url !== urlBefore, url: after.url ?? '', title: after.title ?? '', alerts, effect };
   }
 
+  /**
+   * Leaving a page the agent typed into: what happens when the page has unsaved changes. A page like that asks
+   * “Leave site? Changes you made may not be saved” — a browser dialog that can't be seen or answered from the
+   * page, and holds the tab until a person clicks it. `ask` (the web agent): such a leave is held back and the
+   * agent asks the user in the chat first. `always` (the crawler, whose test values are its own): left freely.
+   */
+  leaveMode: 'ask' | 'always' = 'ask';
+
+  /** Puts the page's leave guard in place (once per page) — before anything that may leave it. */
+  private async armLeaveGuard(tabId: number): Promise<void> {
+    await this.inPage(tabId, LEAVE_GUARD, [this.leaveMode === 'always' ? 'allow' : 'arm']);
+  }
+
+  /** Would leaving the page now lose changes (its “Leave site?” question)? */
+  async unsavedChanges(): Promise<boolean> {
+    const tab = await this.currentTab().catch(() => null);
+    return tab?.id ? (await this.inPage(tab.id, LEAVE_GUARD, ['probe'])) === true : false;
+  }
+
+  /** The address a click tried to leave for, held back because the page has unsaved changes (once). */
+  async heldLeave(): Promise<string | null> {
+    const tab = await this.currentTab().catch(() => null);
+    const held = tab?.id ? await this.inPage(tab.id, LEAVE_GUARD, ['take']) : null;
+    return typeof held === 'string' ? held : null;
+  }
+
+  /** The user agreed: the page may be left, losing its unsaved changes. */
+  async allowLeave(): Promise<void> {
+    const tab = await this.currentTab().catch(() => null);
+    if (tab?.id) await this.inPage(tab.id, LEAVE_GUARD, ['allow']);
+  }
+
+  private async inPage(tabId: number, func: (op: string) => unknown, args: [string]): Promise<unknown> {
+    const [r] = await chrome.scripting.executeScript({ target: { tabId, frameIds: [0] }, world: 'MAIN', func, args }).catch(() => []);
+    return r?.result;
+  }
+
   async navigate(url: string, signal?: AbortSignal): Promise<chrome.tabs.Tab> {
     const tab = await this.currentTab();
+    await this.armLeaveGuard(tab.id!);
     await chrome.tabs.update(tab.id!, { url });
     await sleep(150);
+    if (this.leaveMode === 'always') await this.answerLeaveDialog(tab.id!, tab.url ?? '');
     await this.waitForLoad(tab.id!, 20_000, signal);
     return chrome.tabs.get(tab.id!);
   }
 
+  /**
+   * The page asked “Leave site?” all the same (the tab stays where it was, not loading): the browser's dialog is
+   * answered “Leave” through the debugger — the crawler's test values are its own, nothing real is lost.
+   */
+  private async answerLeaveDialog(tabId: number, from: string): Promise<void> {
+    for (let i = 0; i < 6; i++) {
+      const t = await chrome.tabs.get(tabId).catch(() => null);
+      if (!t || t.status === 'loading' || (t.url && t.url !== from) || (t.pendingUrl && t.pendingUrl !== from)) return;
+      await sleep(200);
+    }
+    const target = { tabId };
+    try {
+      await chrome.debugger.attach(target, '1.3');
+    } catch {
+      return; // DevTools already attached, or not allowed here
+    }
+    try {
+      await chrome.debugger.sendCommand(target, 'Page.enable').catch(() => undefined);
+      await chrome.debugger.sendCommand(target, 'Page.handleJavaScriptDialog', { accept: true }).catch(() => undefined);
+    } finally {
+      await chrome.debugger.detach(target).catch(() => undefined);
+    }
+  }
+
   async history(direction: 'back' | 'forward', signal?: AbortSignal): Promise<chrome.tabs.Tab> {
     const tab = await this.currentTab();
+    await this.armLeaveGuard(tab.id!);
     try {
       if (direction === 'back') await chrome.tabs.goBack(tab.id!);
       else await chrome.tabs.goForward(tab.id!);
@@ -271,6 +337,7 @@ export class BrowserController {
    */
   async realClick(x: number, y: number, double: boolean): Promise<chrome.tabs.Tab | null> {
     const tab = await this.currentTab();
+    await this.armLeaveGuard(tab.id!);
     const target = { tabId: tab.id! };
     let opened: chrome.tabs.Tab | null = null;
     const onCreated = (t: chrome.tabs.Tab) => {

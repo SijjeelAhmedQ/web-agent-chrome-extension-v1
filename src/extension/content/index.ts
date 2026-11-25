@@ -1,5 +1,7 @@
 import { CHANNEL, CONTENT_VERSION, type ContentRequest, type ContentResponse, type Envelope } from '../messaging/protocol';
 import { ActionError, clear, click, currentEffect, fieldText, pointAt, pressKey, resolve, scroll, select, settle, type, visibleDialogs, waitForText } from './actions';
+import { choicesOf } from './choices';
+import { formErrors } from './formErrors';
 import { formAround } from './form';
 import { hover, openMenu } from './hover';
 import { setPresence } from './overlay';
@@ -43,6 +45,10 @@ async function handle(request: ContentRequest): Promise<unknown> {
       return clear(request.id, request.highlight);
     case 'select':
       return select(request.id, request.option, request.highlight);
+    case 'choices':
+      return choicesOf(resolve(request.id));
+    case 'formErrors':
+      return formErrors(request.scope);
     case 'scroll':
       return scroll(request.direction, request.id);
     case 'key':

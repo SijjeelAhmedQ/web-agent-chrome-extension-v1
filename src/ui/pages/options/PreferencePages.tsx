@@ -315,16 +315,17 @@ export function AdvancedPage() {
   const addFromFile = async (file: File) => {
     try {
       const parsed = JSON.parse(await file.text()) as Partial<AppConfig>;
-      if (!parsed || typeof parsed !== 'object' || (!parsed.agents && !parsed.sites && !parsed.skills)) throw new Error('not a config');
+      if (!parsed || typeof parsed !== 'object' || (!parsed.agents && !parsed.sites && !parsed.skills && !parsed.knowledgeBases)) throw new Error('not a config');
       const { config: next, added } = mergeConfig(config, parsed);
       const costDays = Object.keys(ledgerIn(parsed)?.days ?? {}).length;
-      const parts = [`${added.agents} agents`, `${added.sites} sites`, `${added.skills} skills`, `${added.customTools} custom tools`, ...(costDays ? [`${costDays} days of cost`] : [])];
+      const parts = [`${added.agents} agents`, `${added.sites} sites`, `${added.skills} skills`, `${added.customTools} custom tools`, ...(parsed.knowledgeBases?.length ? [`${parsed.knowledgeBases.length} learned knowledge base${parsed.knowledgeBases.length === 1 ? '' : 's'}`] : []), ...(costDays ? [`${costDays} days of cost`] : [])];
       modal.confirm({
         title: 'Add these to your setup?',
         content: `This file has ${parts.join(', ')}. They are added to what you have (the file's version replaces one with the same id; a day of cost both have keeps the fuller one); your connections, keys and settings stay as they are.`,
         okText: 'Add',
         onOk: async () => {
           dispatch(configActions.replaceConfig(next));
+          for (const kb of Array.isArray(parsed.knowledgeBases) ? parsed.knowledgeBases : []) if (kb?.id) dispatch(configActions.adoptKnowledgeBase(kb.id));
           await restoreLedger(parsed).catch(() => 0);
           message.success('Added to your setup');
         },
@@ -347,6 +348,8 @@ export function AdvancedPage() {
   const importConfig = async (file: File) => {
     try {
       const parsed = JSON.parse(await file.text()) as Partial<AppConfig>;
+      // Only learned knowledge bases in it: added to the setup, which stays as it is.
+      if (parsed && typeof parsed === 'object' && !parsed.agents && !parsed.settings && Array.isArray(parsed.knowledgeBases)) return addFromFile(file);
       if (!parsed || typeof parsed !== 'object' || (!parsed.agents && !parsed.settings)) throw new Error('not a config');
       const next = normalizeConfig(parsed);
       // Keep existing secrets for connections/tools the file has without them.

@@ -1,7 +1,8 @@
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { CUSTOM_PREFIX } from '@/shared/constants/tools';
-import type { AgentConfig, AppConfig, SiteProfile, SkillConfig, ToolOverride } from '@/shared/types/config';
+import type { AgentConfig, AppConfig, KnowledgeBase, SiteProfile, SkillConfig, ToolOverride } from '@/shared/types/config';
 import { matchesSite } from '@/shared/utils';
+import { knowledgeBaseFor } from '../crawler/merge';
 import type { ToolSpec } from '../llm/types';
 import { BROWSER_TOOLS } from './browserTools';
 import { customTool } from './customTools';
@@ -17,10 +18,46 @@ export interface Toolset {
   sites: SiteProfile[];
 }
 
-/** Site profiles that apply on this address (enabled, with a matching host pattern). */
+/**
+ * Site profiles that apply on this address (enabled, with a matching host pattern).
+ *
+ * A site with a gathered knowledge base (the Knowledge Gather Agent's, on and not empty) reads only that one: its
+ * entries and never-click list take the place of the Site base's knowledge and never-click list — the profile's other
+ * settings (agents, model, skills, tools, ask-before) stay. With no Site base profile here, the gathered knowledge
+ * base comes as a profile of its own.
+ */
 export function sitesFor(config: AppConfig, url: string): SiteProfile[] {
   if (!url) return [];
-  return (config.sites ?? []).filter((s) => s.enabled && s.sites.length > 0 && matchesSite(url, s.sites));
+  const profiles = (config.sites ?? []).filter((s) => s.enabled && s.sites.length > 0 && matchesSite(url, s.sites));
+  const kb = knowledgeBaseFor(config, url);
+  if (!kb || !kb.entries.some((e) => e.enabled)) return profiles;
+  if (!profiles.length) return [gatheredProfile(kb)];
+  return profiles.map((p, i) => ({ ...p, knowledge: i === 0 ? kb.entries : [], neverClick: i === 0 ? kb.neverClick : [] }));
+}
+
+/** A gathered knowledge base as a site profile with nothing else set. */
+function gatheredProfile(kb: KnowledgeBase): SiteProfile {
+  return {
+    id: `gathered:${kb.id}`,
+    name: kb.name,
+    description: 'Knowledge gathered by crawling the site',
+    color: '#0ea5e9',
+    sites: kb.sites,
+    enabled: true,
+    providerId: null,
+    model: '',
+    agentIds: [],
+    skillIds: [],
+    disabledSkillIds: [],
+    customToolIds: [],
+    disabledToolIds: [],
+    neverClick: kb.neverClick,
+    askBefore: [],
+    askPopups: [],
+    knowledge: kb.entries,
+    createdAt: kb.createdAt,
+    updatedAt: kb.updatedAt,
+  };
 }
 
 /** The skills that apply on the given page: the agent's own, plus those of the site profiles here. */

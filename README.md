@@ -87,6 +87,27 @@ Each site has:
 
 The side panel's status bar shows a chip, such as **Indici**, while a site setup is in use.
 
+### Knowledge Gather Agent: learn a site by crawling it
+
+The **Learn this site** button (graduation cap, side panel header) explores a website in the agent's tab, in front of you, and writes its knowledge base.
+
+1. Open the site and sign in. Press **Learn this site**, optionally type another address, pick the model (default: the agent's own) and the page limit (default 50), and press **Start learning**.
+2. The agent visits every page it can find on that host, breadth first. It follows every link, including hidden menu items, and clicks every button, tab and menu on each kind of page. Pages that differ only by a record id (`/patients/123`, `/patients/456`) count as one kind of page and are read once. A new address or a new screen without its own address (a tab, a view) counts as one page. Pop-ups and menus don't count.
+   - **Approval is required** before anything that deletes, saves, sends, pays, submits, changes a record or signs out. You choose *Click it*, *Skip* or *Skip all like this*. This can't be switched off.
+   - **Forms** are filled with test values to see what they ask, and are never submitted. The e-mail defaults to `test@test.com`; other values (name, phone, password, number, text) can be changed under Configuration → Knowledge bases → Crawler settings.
+   - **Limit:** at the page limit it asks: *Explore 25 more* or *Finish*. It asks again at each new limit.
+   - **Other sites:** links to other hosts are not followed. A tab that a click opens on another site stays open, and after saving you can **Learn it** with its own knowledge base and page limit.
+   - **Session:** if the sign-in page shows up mid-crawl, the agent stops and asks you to sign in again, then carries on. The session length is written down as a rule.
+   - **Pause / Resume**, **Stop & write** (writes what it has seen so far) and **Cancel**.
+3. While it explores, the model writes each page's entries: *Page*, *Navigation*, and *Rule*/*Workflow* when the page clearly shows them. At the end it writes the site map, the main workflows and the site-wide rules.
+4. **Review:** tick, untick or edit each entry and the never-click names, then **Save**. An entry with the same kind and title is updated, new ones are added, and every other entry is kept.
+
+**Configuration → Knowledge bases** lists every gathered knowledge base. Each one shows its entries (add, edit, switch off), its never-click list, the pages visited and its addresses, and can be exported as Markdown or JSON.
+
+**Which knowledge the agent uses:** on a site with a gathered knowledge base (on, with entries), the agent reads **only that one**. Its entries and never-click list replace the Site base's knowledge and never-click list. The Site base's other settings (agents, model, skills, tools, ask-before) still apply. On sites without one, the Site base's knowledge is used as before.
+
+**Models:** any connection works. On Kaggle, use the 64k-context Qwen 3.8 27B notebook (`web_agent_qwen38long_kaggle.ipynb`): the 16k one is tight for a full page. A stronger commercial model writes better rules and workflows. If the model stops answering, the agent retries twice, then asks *Try again* or *Skip this page*.
+
 A task can move to another site, for example when a click opens a new tab. From then on the agent uses the rules, never-click and ask-before lists of the site it is on now, and `site_knowledge` looks that site up first.
 
 **Indici's Smart AI Inbox.** The restore file `knowledge/web-agent-restore-indici.json` has a second site, *indici smart inbox* (`inbox-app-dev.vitonta.com`), with its own agent, *indici smart inbox agent*.

@@ -206,6 +206,72 @@ export interface SiteProfile {
   updatedAt: number;
 }
 
+/** A page or screen the Knowledge Gather Agent visited. */
+export interface CrawledPage {
+  url: string;
+  title: string;
+  /** The page's kind: its address with record ids made general (`/patients/:id`). */
+  template: string;
+  at: number;
+}
+
+/**
+ * A website's gathered knowledge base — the “new diary” the Knowledge Gather Agent writes by exploring the site.
+ * Separate from the Site base. While a site has one (enabled, with entries), the agent reads only this one there:
+ * its knowledge and never-click list take the place of the Site base's.
+ */
+export interface KnowledgeBase {
+  id: string;
+  name: string;
+  /** Host patterns it is for (the crawled host, e.g. `app.example.com`). */
+  sites: string[];
+  /** Where crawling started. */
+  startUrl: string;
+  enabled: boolean;
+  entries: KnowledgeEntry[];
+  /** Buttons the agent may never click on this site — learned while crawling, or added by the user. */
+  neverClick: string[];
+  /** The pages the crawls visited. */
+  pages: CrawledPage[];
+  lastCrawlAt?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** How the Knowledge Gather Agent explores a site. */
+export interface CrawlerSettings {
+  /** Typed into every e-mail field it finds (forms are never submitted). */
+  email: string;
+  /** Other dummy values, by kind of field. */
+  name: string;
+  phone: string;
+  text: string;
+  password: string;
+  number: string;
+  /** Pages (a new address or a new screen) before it stops and asks. */
+  pageLimit: number;
+  /** Pages more each time the user says “carry on”. */
+  extendBy: number;
+  /** Connection and model that write the knowledge; null / '' → the agent's own. */
+  providerId: string | null;
+  model: string;
+  /** Most clicks tried on one page. */
+  clicksPerPage: number;
+  /** Write the knowledge while exploring (faster in all). Off: the whole site is explored and shown first; the model writes when the user says so. */
+  writeWhileExploring: boolean;
+  /** Most dollars writing the knowledge may cost before it stops and asks (0: no limit). */
+  spendLimit: number;
+  /**
+   * Press a pop-up form's save button with the test values, to learn what it requires and the errors it shows. Only
+   * for test sites: it can add records. Each press still asks first.
+   */
+  trySaving: boolean;
+  /** Words of controls that wait for the user's OK (delete, save, send…) — any language. */
+  askWords: string[];
+  /** Words of controls that only page through the same list or fold a panel (next, week, toggle sidebar…): not new screens. */
+  sameScreenWords: string[];
+}
+
 export type ToolParamType = 'string' | 'number' | 'boolean';
 
 export interface CustomToolParam {
@@ -309,6 +375,8 @@ export interface Settings {
    * measure Headroom on its own.
    */
   ownCompaction?: boolean;
+  /** The Knowledge Gather Agent's settings. */
+  crawler?: CrawlerSettings;
 }
 
 export interface AppConfig {
@@ -319,5 +387,7 @@ export interface AppConfig {
   customTools: CustomToolConfig[];
   /** Site-based configuration (knowledge, skills, tools, model per website). */
   sites: SiteProfile[];
+  /** Knowledge gathered by crawling websites — one per site, apart from the Site base. */
+  knowledgeBases: KnowledgeBase[];
   settings: Settings;
 }

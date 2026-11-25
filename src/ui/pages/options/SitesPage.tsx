@@ -7,7 +7,8 @@ import { KNOWLEDGE_KINDS, knowledgeBudget, knowledgeSection } from '@/agent/plan
 import { contextWindowOf } from '@/agent/runtime/agentRun';
 import { BUILT_IN_TOOLS, CUSTOM_PREFIX } from '@/shared/constants/tools';
 import { SITE_TEMPLATES, type SiteTemplate } from '@/shared/constants/templates';
-import type { AgentConfig, CustomToolConfig, KnowledgeEntry, KnowledgeKind, SiteProfile, SkillConfig } from '@/shared/types/config';
+import { knowledgeBaseFor } from '@/agent/crawler/merge';
+import type { AgentConfig, CustomToolConfig, KnowledgeBase, KnowledgeEntry, KnowledgeKind, SiteProfile, SkillConfig } from '@/shared/types/config';
 import { uid } from '@/shared/utils';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { configActions } from '@/store/configSlice';
@@ -18,8 +19,8 @@ import { SkillEditor } from './SkillsPage';
 import { CustomToolEditor } from './ToolsPage';
 import { FitList, SectionGroup } from './layout';
 
-const KIND_ICON: Record<KnowledgeKind, typeof Compass> = { rule: ShieldCheck, navigation: Compass, page: FileText, workflow: ListOrdered };
-const KIND_HELP: Record<KnowledgeKind, string> = {
+export const KIND_ICON: Record<KnowledgeKind, typeof Compass> = { rule: ShieldCheck, navigation: Compass, page: FileText, workflow: ListOrdered };
+export const KIND_HELP: Record<KnowledgeKind, string> = {
   rule: 'Always or never do something here — e.g. “Open a patient by clicking the name, never an icon.”',
   navigation: 'Where things are and how to get there — menus, sub-menus, direct addresses.',
   page: 'What a page, column, icon or button means.',
@@ -52,8 +53,11 @@ function SiteMark({ site, size = 34 }: { site: Pick<SiteProfile, 'color' | 'name
 
 // ---------- List of sites ----------
 
+/** The learned knowledge base the agent uses on this site in place of the site's own knowledge (when it has entries).*/
+const learnedFor = (bases: KnowledgeBase[] | undefined, site: SiteProfile) => site.sites[0] ? knowledgeBaseFor({ knowledgeBases: bases ?? [] }, `https://${site.sites[0].replace(/^\*\./, '')}/`) : undefined;
+
 export function SitesPage() {
-  const { sites, agents } = useAppSelector((s) => s.config.config);
+  const { sites, agents, knowledgeBases } = useAppSelector((s) => s.config.config);
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const [creating, setCreating] = useState<{ template?: SiteTemplate } | null>(null);
@@ -106,7 +110,7 @@ export function SitesPage() {
               <span className="list-side" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                 {site.agentIds.length > 0 && <AvatarStack agents={agents.filter((a) => site.agentIds.includes(a.id))} max={3} />}
                 <span className="pill">
-                  <BookOpen size={11} /> {site.knowledge.length}
+                  <BookOpen size={11} /> {learnedFor(knowledgeBases, site)?.entries.length ?? site.knowledge.length}
                 </span>
                 <span className="pill">
                   <Sparkles size={11} /> {site.skillIds.length}
@@ -194,6 +198,7 @@ export function SiteDetailPage() {
   const dispatch = useAppDispatch();
   const { modal } = App.useApp();
   const [tab, setTab] = useState('knowledge');
+  const knowledgeBases = useAppSelector((s) => s.config.config.knowledgeBases);
 
   if (!site) {
     return (
@@ -253,7 +258,7 @@ export function SiteDetailPage() {
         activeKey={tab}
         onChange={setTab}
         items={[
-          { key: 'knowledge', label: `Knowledge base (${site.knowledge.length})`, children: <KnowledgeTab site={site} /> },
+          { key: 'knowledge', label: `Knowledge base (${learnedFor(knowledgeBases, site)?.enabled ? learnedFor(knowledgeBases, site)!.entries.length : site.knowledge.length})`, children: <KnowledgeTab site={site} /> },
           { key: 'agents', label: `Agents (${site.agentIds.length})`, children: <AgentsTab site={site} /> },
           { key: 'skills', label: `Skills (${site.skillIds.length})`, children: <SkillsTab site={site} /> },
           { key: 'tools', label: 'Tools', children: <ToolsTab site={site} /> },
@@ -273,11 +278,38 @@ function KnowledgeTab({ site }: { site: SiteProfile }) {
   const { modal, message } = App.useApp();
   const [filter, setFilter] = useState<KnowledgeKind | 'all'>('all');
   const [editing, setEditing] = useState<{ entry: KnowledgeEntry; isNew: boolean } | null>(null);
-  const shown = site.knowledge.filter((k) => filter === 'all' || k.kind === filter);
   const kinds = Object.keys(KNOWLEDGE_KINDS) as KnowledgeKind[];
+  const navigate = useNavigate();
+  const learned = learnedFor(useAppSelector((s) => s.config.config.knowledgeBases), site);
+  // What the agent uses here: the learned knowledge base when it is on (its entries listed, added to and edited
+  // here as the site's own are), else the entries written for the site.
+  const useLearned = !!learned?.enabled;
+  const entries = useLearned ? learned!.entries : site.knowledge;
+  const shown = entries.filter((k) => filter === 'all' || k.kind === filter);
+  const saveEntry = (entry: KnowledgeEntry) => {
+    if (!useLearned) return dispatch(configActions.upsertKnowledge({ siteId: site.id, entry }));
+    const now = Date.now();
+    const there = learned!.entries.some((e) => e.id === entry.id);
+    const next = { ...entry, updatedAt: now, createdAt: entry.createdAt || now };
+    dispatch(configActions.upsertKnowledgeBase({ ...learned!, entries: there ? learned!.entries.map((e) => (e.id === entry.id ? next : e)) : [...learned!.entries, next], updatedAt: now }));
+  };
+  const deleteEntry = (entry: KnowledgeEntry) => {
+    if (!useLearned) return dispatch(configActions.deleteKnowledge({ siteId: site.id, entryId: entry.id }));
+    dispatch(configActions.upsertKnowledgeBase({ ...learned!, entries: learned!.entries.filter((e) => e.id !== entry.id), updatedAt: Date.now() }));
+  };
 
   return (
     <>
+      {learned && (
+        <div className="inline-note">
+          {learned.enabled
+            ? `These are the ${learned.entries.length} entries the Knowledge Gather Agent learned here (“${learned.name}”) — the agent uses them. What you add or change here is saved there.`
+            : `“${learned.name}” (${learned.entries.length} learned entries) is switched off — the agent uses the entries below.`}{' '}
+          <Button size="small" icon={<BookOpen size={13} />} onClick={() => navigate(`/knowledge/${learned.id}`)}>
+            Open the learned knowledge
+          </Button>
+        </div>
+      )}
       <div className="tab-toolbar">
         <Segmented<KnowledgeKind | 'all'>
           value={filter}
@@ -327,7 +359,7 @@ function KnowledgeTab({ site }: { site: SiteProfile }) {
                 </span>
                 <span className="list-side" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                   <span className="pill">{KNOWLEDGE_KINDS[k.kind].label}</span>
-                  <Switch size="small" checked={k.enabled} onChange={(v) => dispatch(configActions.upsertKnowledge({ siteId: site.id, entry: { ...k, enabled: v } }))} aria-label={`${k.title} ${k.enabled ? 'on' : 'off'}`} />
+                  <Switch size="small" checked={k.enabled} onChange={(v) => saveEntry({ ...k, enabled: v })} aria-label={`${k.title} ${k.enabled ? 'on' : 'off'}`} />
                 </span>
               </div>
             );
@@ -340,7 +372,7 @@ function KnowledgeTab({ site }: { site: SiteProfile }) {
         siteName={site.name}
         onClose={() => setEditing(null)}
         onSave={(entry) => {
-          dispatch(configActions.upsertKnowledge({ siteId: site.id, entry }));
+          saveEntry(entry);
           message.success(editing?.isNew ? 'Added to the knowledge base' : 'Changes saved');
           setEditing(null);
         }}
@@ -350,7 +382,7 @@ function KnowledgeTab({ site }: { site: SiteProfile }) {
             okText: 'Delete',
             okButtonProps: { danger: true },
             onOk: () => {
-              dispatch(configActions.deleteKnowledge({ siteId: site.id, entryId: entry.id }));
+              deleteEntry(entry);
               setEditing(null);
             },
           })
@@ -360,7 +392,7 @@ function KnowledgeTab({ site }: { site: SiteProfile }) {
   );
 }
 
-function KnowledgeEditor({
+export function KnowledgeEditor({
   value,
   siteName,
   onClose,

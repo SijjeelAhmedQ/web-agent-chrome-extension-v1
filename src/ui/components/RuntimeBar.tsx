@@ -1,5 +1,6 @@
 import { Popover } from 'antd';
 import { BookOpen, Cloud, Cpu, Laptop, Mic, RefreshCw, Server, Wallet } from 'lucide-react';
+import { knowledgeBaseFor } from '@/agent/crawler/merge';
 import { sitesFor } from '@/agent/tools/registry';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { Location } from '@/shared/constants/providers';
@@ -74,6 +75,7 @@ function Detail({ title, icon, part, action }: { title: string; icon: ReactNode;
 export function RuntimeBar({ agent, config, url = '', running = false }: { agent: AgentConfig; config: AppConfig; url?: string; running?: boolean }) {
   const { actions, voice, checkedAt, refresh } = useRuntimeStatus(agent, config, url, running);
   const sites = sitesFor(config, url);
+  const gathered = !!knowledgeBaseFor(config, url)?.entries.some((e) => e.enabled);
   const [, tick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => tick((n) => n + 1), 30_000);
@@ -109,13 +111,13 @@ export function RuntimeBar({ agent, config, url = '', running = false }: { agent
               <span className="rt-section-title">
                 <BookOpen size={13} /> Site setup
               </span>
-              <button type="button" className="link-btn small" onClick={() => void openConfiguration(`/sites/${site.id}`)}>
+              <button type="button" className="link-btn small" onClick={() => void openConfiguration(site.id.startsWith('gathered:') ? `/knowledge/${site.id.slice(9)}` : `/sites/${site.id}`)}>
                 Edit
               </button>
             </div>
             <div className="rt-model">{site.name}</div>
             <div className="rt-place-line">
-              {entries} knowledge {entries === 1 ? 'entry' : 'entries'} · {site.skillIds.length} skills · {site.customToolIds.length} tools
+              {entries} knowledge {entries === 1 ? 'entry' : 'entries'}{gathered ? ' (learned by crawling)' : ''} · {site.skillIds.length} skills · {site.customToolIds.length} tools
               {custom ? ' · its own model' : ''}
             </div>
           </div>

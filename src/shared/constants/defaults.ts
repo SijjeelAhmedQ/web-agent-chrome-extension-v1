@@ -1,5 +1,6 @@
-import type { AgentConfig, AppConfig, Settings, SkillConfig } from '../types/config';
+import type { AgentConfig, AppConfig, CrawlerSettings, Settings, SkillConfig } from '../types/config';
 import { BUILT_IN_TOOL_IDS, READ_ONLY_TOOL_IDS } from './tools';
+import { DEFAULT_ASK_WORDS, DEFAULT_SAME_SCREEN_WORDS } from './crawlerWords';
 
 export const AGENT_COLORS = ['#10b981', '#0ea5e9', '#8b5cf6', '#f59e0b', '#ec4899', '#14b8a6', '#6366f1', '#ef4444'];
 export const AGENT_ICONS = ['Sparkles', 'Bot', 'Compass', 'BookOpen', 'ClipboardList', 'ShoppingBag', 'Stethoscope', 'Briefcase', 'Mail', 'Search', 'PenLine', 'Shield'];
@@ -114,6 +115,28 @@ export const DEFAULT_SETTINGS: Settings = {
   voice: { enabled: false, serverUrl: '', key: '', engine: 'whisper', vocabulary: '', autoSend: false, mode: 'handsfree', pauseMs: 1000, livePartials: true, voiceCommands: true },
 };
 
+/** The Knowledge Gather Agent's defaults: 50 pages, then 25 more each time the user says so. */
+export const DEFAULT_CRAWLER: CrawlerSettings = {
+  email: 'test@test.com',
+  name: 'Test User',
+  phone: '1234567890',
+  text: 'Test',
+  password: 'Test@12345',
+  number: '1',
+  pageLimit: 50,
+  extendBy: 25,
+  providerId: null,
+  model: '',
+  clicksPerPage: 60,
+  writeWhileExploring: true,
+  spendLimit: 1,
+  trySaving: false,
+  askWords: DEFAULT_ASK_WORDS,
+  sameScreenWords: DEFAULT_SAME_SCREEN_WORDS,
+};
+
+export const crawlerSettings = (settings: Settings): CrawlerSettings => ({ ...DEFAULT_CRAWLER, ...(settings.crawler ?? {}) });
+
 export function defaultConfig(): AppConfig {
   return structuredClone({
     version: 1,
@@ -122,6 +145,7 @@ export function defaultConfig(): AppConfig {
     skills: DEFAULT_SKILLS,
     customTools: [],
     sites: [],
+    knowledgeBases: [],
     settings: DEFAULT_SETTINGS,
   });
 }
@@ -132,4 +156,5 @@ export const SUGGESTIONS = [
   { label: 'Fill this form', desc: 'Tell me the details, I’ll enter them', prompt: 'Fill this form with: ', icon: 'ClipboardPen', fill: true },
   { label: 'Search this site', desc: 'Using the site’s own search', prompt: 'Search this site for ', icon: 'TextSearch', fill: true },
   { label: 'Help me with a task', desc: 'Describe it — I’ll work through it', prompt: '', icon: 'Wand', fill: true },
+  { label: 'Learn this website', desc: 'Explore the site and build its knowledge base', prompt: 'Learn this website', icon: 'GraduationCap' },
 ] as const;

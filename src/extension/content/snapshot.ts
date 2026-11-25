@@ -32,6 +32,8 @@ export function describeElement(el: Element): ElementInfo {
   // A pop-up's corner × that its title calls “Close”: named “×”, or it reads as the pop-up's own Close
   // button (Indici's Special Authority form: its Close button opens the medicine form, its × does not).
   if (/^close$/i.test(info.name) && cornerX(el)) info.name = '×';
+  // A field the page marked wrong (a save it refused): aria-invalid, or the browser's own check after a submit.
+  if (el.getAttribute('aria-invalid') === 'true') info.invalid = true;
   if (isInput(el)) {
     info.type = el.type;
     if (el.type === 'checkbox' || el.type === 'radio') info.checked = el.checked;
@@ -63,6 +65,11 @@ export function describeElement(el: Element): ElementInfo {
   if (ariaSelected === 'true') info.selected = true;
   const ariaExpanded = el.getAttribute('aria-expanded');
   if (ariaExpanded) info.expanded = ariaExpanded === 'true';
+  // A field that opens a list to pick from (a searchable select: typing filters the list, and text that matches
+  // no choice is thrown away): it says so with aria-haspopup / aria-autocomplete, a combobox role, or a datalist.
+  const hasPopup = el.getAttribute('aria-haspopup');
+  const auto = el.getAttribute('aria-autocomplete');
+  if (hasPopup === 'listbox' || hasPopup === 'tree' || hasPopup === 'grid' || auto === 'list' || auto === 'both' || el.getAttribute('role') === 'combobox' || (el instanceof HTMLInputElement && !!el.list)) info.picks = true;
   if (['link', 'button', 'clickable', 'menuitem'].includes(role) && hasHiddenMenu(el)) info.hasMenu = true;
   if (isDisabled(el)) info.disabled = true;
   if (role === 'combobox' && !info.value) {
@@ -90,9 +97,37 @@ export function describeElement(el: Element): ElementInfo {
       info.name = seen;
     } else if (seen && seen.toLowerCase() !== info.name.toLowerCase().replace(/[:*]\s*$/, '')) info.label = seen;
   }
+  // A dropdown is named by its label (“Gender”), not by what it shows now (“Prefer not to say”, “Choose a provider”)
+  // or a generated id (“mantine-3qjxxcms3”): its <label for>, else the label the page shows beside it.
+  if (info.picks) {
+    const own = (el as HTMLInputElement | HTMLButtonElement).labels;
+    const label = ((own && own.length ? Array.from(own).map((l) => l.textContent ?? '').join(' ') : '') || visualLabel(el) || labelAbove(el)).replace(/\s+/g, ' ').replace(/[:*]\s*$/, '').trim();
+    // Only when its own name says nothing of what it is: none, a generated id, or (a button) the value it shows.
+    const nameless = !info.name || /^[a-z]+[-_:][a-z0-9:_-]*\d/i.test(info.name) || isButton(el) || el.getAttribute('role') === 'button';
+    if (label && nameless && label.toLowerCase() !== info.name.toLowerCase()) {
+      if (info.name && !info.value && !/^[a-z]+[-_:][a-z0-9:_-]*\d/i.test(info.name)) info.value = info.name;
+      info.name = label;
+      delete info.label;
+    }
+  }
+  // The help a form shows with a field (“Use latitude,longitude, e.g. -36.8485,174.7633”): its aria-describedby, or
+  // the description text in its own group — what to type there.
+  if (isInput(el) || isTextArea(el) || info.picks) {
+    const hint = fieldHint(el);
+    if (hint && hint !== info.name && hint !== info.placeholder) info.hint = hint;
+  }
   const popup = blockingPopupOf(el);
   if (popup) info.inBlockingPopup = popup;
+  const inDialog = outerDialogOf(el);
+  if (inDialog) info.inDialog = dialogTitle(inDialog) || 'Pop-up';
   return info;
+}
+
+/** The outermost pop-up, drawer or dialog the element is in (a pop-up inside a drawer counts as the drawer). */
+function outerDialogOf(el: Element): Element | null {
+  let dialog = el.closest(DIALOGS);
+  for (let outer = dialog?.parentElement?.closest(DIALOGS); outer; outer = outer.parentElement?.closest(DIALOGS)) dialog = outer;
+  return dialog;
 }
 
 /** For a text field inside a pop-up with no way to close it: the pop-up's title. */
@@ -766,4 +801,38 @@ export function findText(text: string, near: string | undefined, limit: number):
   const onTop = best.filter((f) => !f.covered);
   const chosen = onTop.length ? onTop : best;
   return { matches: chosen.slice(0, limit).map((f) => describeElement(f.el)), total: chosen.length };
+}
+
+/**
+ * A field's label when nothing ties it to the field (no <label for>, no aria-labelledby): the last short label-like
+ * text before it inside the nearest group that has one (a few levels up) — “Ethnicity” above a searchable select.
+ */
+function labelAbove(el: Element): string {
+  let box: Element | null = el.parentElement;
+  for (let level = 0; box && level < 8; level++, box = box.parentElement) {
+    const before = Array.from(box.querySelectorAll('label, legend, [class*="label" i]')).filter(
+      (l) => !l.contains(el) && !l.closest('button, a, [role="button"], [role="tab"]') && !!(l.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING),
+    );
+    const text = before.map((l) => (l.textContent ?? '').replace(/\s+/g, ' ').trim()).filter((t) => t && t.length <= 40).pop();
+    if (text) return text;
+  }
+  return '';
+}
+
+/** A field's help text: what aria-describedby points at, or a description in its own group (not another field's). */
+function fieldHint(el: Element): string {
+  const clean = (t: string | null | undefined) => (t ?? '').replace(/\s+/g, ' ').trim();
+  const ids = (el.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean);
+  const described = ids.map((id) => clean(document.getElementById(id)?.textContent)).filter(Boolean).join(' ');
+  if (described) return described.slice(0, 200);
+  let box: Element | null = el.parentElement;
+  for (let level = 0; box && level < 4; level++, box = box.parentElement) {
+    const d = box.querySelector('[class*="description" i], [class*="hint" i], [class*="help" i], small, [class*="extra" i]');
+    if (d && !d.contains(el) && !d.querySelector('input, textarea, select')) {
+      const t = clean(d.textContent);
+      if (t && t.length <= 200) return t;
+    }
+    if (box.querySelectorAll('input, textarea, select, [role="combobox"]').length > 1) break;
+  }
+  return '';
 }

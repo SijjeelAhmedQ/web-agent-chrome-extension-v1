@@ -13,6 +13,7 @@ import {
   Eraser,
   FileText,
   Globe,
+  GraduationCap,
   Hourglass,
   Keyboard,
   Layers,
@@ -42,7 +43,7 @@ import {
 /** Icons referenced by name from config (agent avatars, tool catalogue, suggestions). */
 const ICONS: Record<string, LucideIcon> = {
   ArrowDownUp, ArrowLeft, ArrowLeftRight, ArrowRight, BookOpen, Bot, Briefcase, ClipboardList, ClipboardPen, Compass,
-  CornerDownLeft, Eraser, FileText, Globe, Hourglass, Keyboard, Layers, ListChecks, ListTree, Mail, MousePointer2, MousePointerClick, PenLine,
+  CornerDownLeft, Eraser, FileText, Globe, GraduationCap, Hourglass, Keyboard, Layers, ListChecks, ListTree, Mail, MousePointer2, MousePointerClick, PenLine,
   Plug, ScanText, Search, Shield, ShoppingBag, Sparkles, SquarePlus, SquareX, Stethoscope, TextSearch, TextSelect, Wand, Webhook,
 };
 

@@ -11,6 +11,7 @@ import type {
 } from '../messaging/protocol';
 import { accessibleName, elementFor, hasHiddenMenu, isDisabled, isEditable, isVisible, OVERLAY_HOST_ID, roleOf, visualLabelInfo } from './elements';
 import { isHovered, openHoverMenu, releaseHoverUnlessInside } from './hover';
+import { closeList, listOf as ownLists } from './choices';
 import { highlight } from './overlay';
 import { showingDialogs } from './snapshot';
 import { isButton, isHTML, isInput, isLabel, isSelect, isTextArea } from './dom';
@@ -43,10 +44,40 @@ export function resolve(id: number): Element {
 
 const summary = (el: Element) => ({ name: accessibleName(el), role: roleOf(el) });
 
+/**
+ * The control scrolled into sight before anything is done to it, so the user sees what is typed or clicked: inside
+ * every box that scrolls around it (a drawer's body, a table), not only the window — and when something lies over it
+ * (a sticky header or footer, a white panel), its box is scrolled on until the control is clear of it.
+ */
 function reveal(el: Element) {
-  const r = el.getBoundingClientRect();
-  if (r.top < 0 || r.bottom > innerHeight || r.left < 0 || r.right > innerWidth) {
-    el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' as ScrollBehavior });
+  const clipped = () => {
+    const r = el.getBoundingClientRect();
+    if (r.top < 0 || r.bottom > innerHeight || r.left < 0 || r.right > innerWidth) return true;
+    for (let a = el.parentElement; a; a = a.parentElement) {
+      const s = getComputedStyle(a);
+      if (!/(auto|scroll|hidden)/.test(`${s.overflowY}${s.overflowX}`)) continue;
+      const b = a.getBoundingClientRect();
+      if (r.top < b.top - 1 || r.bottom > b.bottom + 1) return true;
+    }
+    return false;
+  };
+  if (clipped()) el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' as ScrollBehavior });
+  // Something on top of it: the box that scrolls is moved so the control comes out from under it.
+  for (let i = 0; i < 3; i++) {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const x = Math.min(Math.max(r.left + r.width / 2, 1), innerWidth - 1);
+    const y = Math.min(Math.max(r.top + Math.min(r.height / 2, 12), 1), innerHeight - 1);
+    const hit = typeof document.elementFromPoint === 'function' ? document.elementFromPoint(x, y) : null;
+    if (!hit || hit === el || el.contains(hit) || hit.contains(el) || hit.closest('label')?.contains(el) || (hit.closest('label') && (el as HTMLInputElement).labels && Array.from((el as HTMLInputElement).labels ?? []).includes(hit.closest('label') as HTMLLabelElement))) return;
+    let box: Element | null = el.parentElement;
+    while (box && !(box.scrollHeight > box.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+    const cover = hit.getBoundingClientRect();
+    const scroller = box ?? document.scrollingElement;
+    if (!scroller) return;
+    // Covered from above (a sticky header): scroll back so it sits lower; from below (a sticky footer): further on.
+    const fromAbove = cover.top <= r.top;
+    scroller.scrollTop += fromAbove ? -(cover.bottom - r.top + 16) : r.bottom - cover.top + 16;
   }
 }
 
@@ -532,6 +563,8 @@ export async function select(id: number, option: string, show: boolean): Promise
   if (!native) {
     const custom = await chooseInCustom(el, option, show);
     if (custom) return custom;
+    const listed = await chooseInListbox(el, option, show);
+    if (listed) return listed;
     return fail('not_native_select', `“${accessibleName(el) || 'That control'}” is a custom dropdown.`, 'Click it to open the list, then click the option you want (read_page after opening).');
   }
   if (native.disabled) fail('disabled', `“${accessibleName(native)}” is disabled.`);
@@ -553,6 +586,64 @@ export async function select(id: number, option: string, show: boolean): Promise
   native.dispatchEvent(new Event('input', { bubbles: true }));
   native.dispatchEvent(new Event('change', { bubbles: true }));
   return { element: summary(native), selected: match.text.trim() };
+}
+
+/**
+ * Any dropdown that points at its list (aria-haspopup="listbox", a combobox, aria-controls — Mantine, Headless UI,
+ * MUI, Radix…): opened, narrowed by typing the choice when it is a search box, and the option clicked — the agent's
+ * one step, not a click, a read, a type and another click. Null when the control is not one.
+ */
+export async function chooseInListbox(el: Element, option: string, show: boolean): Promise<SelectResult | null> {
+  const picks = (e: Element) => e.getAttribute('aria-haspopup') === 'listbox' || e.getAttribute('role') === 'combobox' || !!e.getAttribute('aria-controls');
+  const trigger = picks(el) ? el : el.querySelector('[aria-haspopup="listbox"], [role="combobox"]');
+  if (!trigger || !isHTML(trigger)) return null;
+  if (isDisabled(trigger)) fail('disabled', `“${accessibleName(trigger) || 'That dropdown'}” is disabled.`);
+  await prepare(trigger, 'Selecting', show);
+  const press = (target: Element) => {
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'] as const) {
+      const Ev = type.startsWith('pointer') ? PointerEvent : MouseEvent;
+      target.dispatchEvent(new Ev(type, { bubbles: true, cancelable: true, view: window }));
+    }
+  };
+  trigger.focus();
+  // Opened — unless its list is open already (a second press would close it).
+  if (!ownLists(trigger).some((l) => l.querySelector('[role="option"]'))) press(trigger);
+  // A search box: the choice typed in narrows the list (typed text alone is thrown away — the option is clicked).
+  if (isInput(trigger) && !trigger.readOnly) {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(trigger, option);
+    trigger.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  // Its own list only (named once it is open) — never another dropdown's list still showing.
+  const listOf = () => ownLists(trigger).flatMap((l) => Array.from(l.querySelectorAll<HTMLElement>('[role="option"]')));
+  const wanted = optionNorm(option);
+  const text = (o: Element) => (o.textContent ?? '').replace(/[✓✔]/g, '').trim();
+  let match: HTMLElement | undefined;
+  let seen: HTMLElement[] = [];
+  for (let i = 0; i < 15 && !match; i++) {
+    await new Promise((r) => setTimeout(r, 100));
+    // The field's own list counts even while its opening animation has not shown it (a window in the background).
+    seen = listOf().filter((o) => o.getAttribute('aria-disabled') !== 'true' && o.getAttribute('data-combobox-disabled') !== 'true');
+    match =
+      seen.find((o) => optionNorm(text(o)) === wanted) ??
+      seen.find((o) => optionNorm(text(o)).startsWith(wanted)) ??
+      seen.find((o) => optionNorm(text(o)).includes(wanted)) ??
+      seen.find((o) => optionLoose(text(o)) === optionLoose(option));
+  }
+  if (!match) {
+    // Nothing chosen: the typed text is taken out again, and the list closed.
+    if (isInput(trigger) && !trigger.readOnly) {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(trigger, '');
+      trigger.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    const all = listOf().map(text).filter(Boolean);
+    await closeList(trigger);
+    return fail('option_not_found', `There's no option “${option}” in “${accessibleName(trigger) || 'that dropdown'}”.`, all.length ? `Available: ${[...new Set(all)].slice(0, 40).join(' | ')}` : 'Its list did not open.');
+  }
+  match.scrollIntoView({ block: 'nearest' });
+  press(match);
+  await new Promise((r) => setTimeout(r, 250));
+  return { element: summary(trigger), selected: text(match) };
 }
 
 /**

@@ -1138,7 +1138,7 @@ Don't press any other of the form's buttons. Read the page and tell the user wha
       // Doing something on the page (other than closing a pop-up) ends the time of its opening pop-ups —
       // unless that very action opens a new page, which starts it again.
       if (isAction && !closesPopup(tool.name, args, ctx)) ctx.arrivalOpen = false;
-      const outcome = await this.inFront(ctx, () => tool.execute(args, ctx));
+      const outcome = await this.inFront(ctx, () => this.leavingAsked(tool, ctx, step, () => tool.execute(args, ctx)));
       if (before) {
         const record: ClickRecord = { label: step.label, before, after: await this.inFront(ctx, () => pageState(ctx)) };
         if (changedSomething(record)) this.lastClick = record;
@@ -1348,6 +1348,44 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
     const assessed = tool.assess ? await tool.assess(args, ctx).catch(() => null) : null;
     if (policy === 'smart' || tool.risk === 'read') return assessed;
     return assessed ?? { title: `${label}?`, detail: 'This agent asks before every action.', confirmLabel: 'Allow' };
+  }
+
+  /**
+   * Leaving a page that has unsaved changes (its “Leave site?” question): the user is asked in the chat first,
+   * and the page is left only on their yes — opening an address or going back is asked before, a link clicked
+   * is held back by the page and asked after.
+   */
+  private async leavingAsked(tool: AgentTool<any>, ctx: ToolContext, step: StepRecord, run: () => Promise<ToolOutcome>): Promise<ToolOutcome> {
+    const leaves = tool.name === 'navigate' || tool.name === 'go_back' || tool.name === 'go_forward';
+    const ask = async (): Promise<boolean> => {
+      const site = siteOf((await ctx.browser.currentTab().catch(() => null))?.url) || 'this site';
+      this.upsertStep({ ...step, status: 'waiting' });
+      const answer = await this.askApproval(
+        { id: uid('ap_'), stepId: step.id, site, title: 'Leave this page?', detail: 'This page has changes that are not saved. If it is left now, they are removed.', confirmLabel: 'Leave the page' },
+        ctx,
+      );
+      this.throwIfCancelled();
+      this.upsertStep({ ...step, status: 'running' });
+      return answer === true;
+    };
+    const stayed: ToolOutcome = {
+      output: 'Not left: this page has unsaved changes and the user chose to stay on it. Finish or save what is on this page first (or ask the user what to do with it); do not try to leave it another way.',
+      note: 'You chose to stay — unsaved changes kept',
+    };
+    if (leaves && (await ctx.browser.unsavedChanges())) {
+      if (!(await ask())) return stayed;
+      await ctx.browser.allowLeave();
+      return run();
+    }
+    const outcome = await run();
+    if (leaves) return outcome;
+    const held = await ctx.browser.heldLeave().catch(() => null);
+    if (!held) return outcome;
+    if (!(await ask())) return { ...stayed, output: `${outcome.output}\n${stayed.output}` };
+    await ctx.browser.allowLeave();
+    const tab = await ctx.browser.navigate(held, ctx.signal);
+    ctx.elements.clear();
+    return { output: `The page had unsaved changes; the user agreed to leave it, and they were removed. Opened “${tab.title}” (${tab.url ?? held}). Call read_page to see it.`, note: 'Left the page — you agreed' };
   }
 
   private askApproval(prompt: ApprovalPrompt, ctx: ToolContext): Promise<ApprovalAnswer | 'gone'> {

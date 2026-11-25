@@ -1,7 +1,7 @@
 import { BUILT_IN_AGENTS, BUILT_IN_SITES, BUILT_IN_SKILLS, BUILT_IN_STAMP } from '../constants/builtIn';
 import { defaultConfig, DEFAULT_SETTINGS } from '../constants/defaults';
 import { BUILT_IN_TOOL_IDS, BUILT_IN_TOOLS, LEGACY_TOOL_IDS } from '../constants/tools';
-import type { AppConfig, SiteProfile } from '../types/config';
+import type { AppConfig, KnowledgeBase, SiteProfile } from '../types/config';
 import { getItem, setItem, watchItem } from './kv';
 
 export const CONFIG_KEY = 'wa.config';
@@ -58,6 +58,7 @@ export function mergeConfig(current: AppConfig, raw: Partial<AppConfig>): { conf
     skills: byId(current.skills, Array.isArray(raw.skills) ? incoming.skills : []),
     customTools: byId(current.customTools, Array.isArray(raw.customTools) ? incoming.customTools : []),
     sites: byId(current.sites, incoming.sites.map((s) => ({ ...s, providerId: provider(s.providerId) }))),
+    knowledgeBases: byId(current.knowledgeBases ?? [], incoming.knowledgeBases),
     providers: [...current.providers.map((p) => (keys.has(p.id) ? { ...p, apiKey: keys.get(p.id)! } : p)), ...newProviders],
   };
   return { config: normalizeConfig(config, false), added: { agents: fromFile(raw.agents), skills: fromFile(raw.skills), customTools: fromFile(raw.customTools), sites: fromFile(raw.sites) } };
@@ -98,6 +99,7 @@ export function normalizeConfig(raw: Partial<AppConfig> | undefined, builtIns = 
     skills: Array.isArray(raw.skills) ? raw.skills : base.skills,
     customTools: Array.isArray(raw.customTools) ? raw.customTools : base.customTools,
     sites: Array.isArray(raw.sites) ? raw.sites.map(normalizeSite) : [],
+    knowledgeBases: Array.isArray(raw.knowledgeBases) ? raw.knowledgeBases.map(normalizeKnowledgeBase) : [],
     settings: { ...DEFAULT_SETTINGS, ...(raw.settings ?? {}), voice: { ...DEFAULT_SETTINGS.voice, ...(raw.settings?.voice ?? {}) } },
   };
   // Tools added since this config was saved: agents that read pages get the new read tools.
@@ -142,6 +144,24 @@ export function normalizeSite(raw: Partial<SiteProfile>): SiteProfile {
     askPopups: Array.isArray(raw.askPopups) ? raw.askPopups : [],
     ...(raw.patientPage ? { patientPage: raw.patientPage } : {}),
     knowledge: Array.isArray(raw.knowledge) ? raw.knowledge.map((k) => ({ ...k, enabled: k.enabled ?? true })) : [],
+    createdAt: raw.createdAt ?? now,
+    updatedAt: raw.updatedAt ?? now,
+  };
+}
+
+/** A gathered knowledge base with every field present. */
+export function normalizeKnowledgeBase(raw: Partial<KnowledgeBase>): KnowledgeBase {
+  const now = Date.now();
+  return {
+    id: raw.id ?? `kbase_${now.toString(36)}`,
+    name: raw.name ?? 'Website',
+    sites: Array.isArray(raw.sites) ? raw.sites : [],
+    startUrl: raw.startUrl ?? '',
+    enabled: raw.enabled ?? true,
+    entries: Array.isArray(raw.entries) ? raw.entries.map((k) => ({ ...k, enabled: k.enabled ?? true })) : [],
+    neverClick: Array.isArray(raw.neverClick) ? raw.neverClick : [],
+    pages: Array.isArray(raw.pages) ? raw.pages : [],
+    ...(raw.lastCrawlAt ? { lastCrawlAt: raw.lastCrawlAt } : {}),
     createdAt: raw.createdAt ?? now,
     updatedAt: raw.updatedAt ?? now,
   };

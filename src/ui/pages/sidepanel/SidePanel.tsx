@@ -1,4 +1,4 @@
-import { History, ListOrdered, Settings2, SquarePen, X } from 'lucide-react';
+import { GraduationCap, History, ListOrdered, Settings2, SquarePen, X } from 'lucide-react';
 import { parseVoiceCommand } from '@/shared/voice/commands';
 import { voiceReady } from '@/shared/voice/speech';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -12,8 +12,11 @@ import { TodayCost } from '../../components/TodayCost';
 import { useActiveTab } from '../../hooks/useActiveTab';
 import { usePatientHere } from '../../hooks/usePatientHere';
 import { useAgentRunner } from '../../hooks/useAgentRunner';
+import { useCrawler } from '../../hooks/useCrawler';
 import { openConfiguration } from '../../utils/navigation';
 import { AgentSwitcher } from './AgentSwitcher';
+import { CrawlView } from './CrawlView';
+import { isLearnRequest, KNOWLEDGE_AGENT } from './knowledgeAgent';
 import { Composer, type ComposerHandle } from './Composer';
 import { EmptyState } from './EmptyState';
 import { HistoryView } from './HistoryView';
@@ -27,7 +30,8 @@ export function SidePanel() {
   const activeAgentId = useAppSelector((s) => s.chat.activeAgentId);
   const tab = useActiveTab();
   const { send, resume, stop, respond, running } = useAgentRunner(tab);
-  const [view, setView] = useState<'chat' | 'history'>('chat');
+  const [view, setView] = useState<'chat' | 'history' | 'learn'>('chat');
+  const crawler = useCrawler(tab);
   const composer = useRef<ComposerHandle>(null);
   const scroller = useRef<HTMLDivElement>(null);
 
@@ -74,12 +78,23 @@ export function SidePanel() {
     return () => window.removeEventListener('keydown', onKey);
   }, [running, stop]);
 
+  // “Learn this website” (typed, said or picked): the Knowledge Gather Agent takes over and starts.
+  const [learnToken, setLearnToken] = useState(0);
+  const learn = useCallback(() => {
+    setView('learn');
+    setLearnToken((n) => n + 1);
+  }, []);
+
   const onSend = useCallback(
     (text: string) => {
+      if (isLearnRequest(text)) {
+        learn();
+        return;
+      }
       setView('chat');
       void send(text);
     },
-    [send],
+    [send, learn],
   );
 
   // ---- Hands-free voice: replies steer the agent, anything else is a new request.
@@ -132,15 +147,22 @@ export function SidePanel() {
     <div className="panel">
       <header className="panel-head">
         <AgentSwitcher
-          agents={offered}
+          agents={[...offered, KNOWLEDGE_AGENT]}
           title={siteAgents.length ? `Agents for ${siteHere!.name}` : 'Agents'}
-          active={agent}
-          disabled={running}
-          onChange={(id) => dispatch(chatActions.setActiveAgent(id))}
+          active={view === 'learn' || crawler.active ? KNOWLEDGE_AGENT : agent}
+          disabled={running || crawler.active}
+          onChange={(id) => {
+            if (id === KNOWLEDGE_AGENT.id) return setView('learn');
+            dispatch(chatActions.setActiveAgent(id));
+            if (view === 'learn') setView('chat');
+          }}
         />
         <span className="spacer" />
         <IconButton label="New chat" onClick={newChat} disabled={running || !turns.length}>
           <SquarePen size={16} />
+        </IconButton>
+        <IconButton label={crawler.active ? 'Learning this site…' : 'Learn this site'} onClick={() => setView((v) => (v === 'learn' ? 'chat' : 'learn'))} aria-pressed={view === 'learn'} className={crawler.active ? 'is-live' : undefined}>
+          <GraduationCap size={16} />
         </IconButton>
         <IconButton label="Activity" onClick={() => setView((v) => (v === 'history' ? 'chat' : 'history'))} aria-pressed={view === 'history'}>
           <History size={16} />
@@ -158,7 +180,9 @@ export function SidePanel() {
         </div>
       )}
 
-      {view === 'history' ? (
+      {view === 'learn' ? (
+        <CrawlView tab={tab} crawler={crawler} chatBusy={running} autoStart={learnToken} onBack={() => setView('chat')} />
+      ) : view === 'history' ? (
         <HistoryView onBack={() => setView('chat')} onRunAgain={onSend} onResume={(task) => { setView('chat'); void resume(task); }} busy={running} />
       ) : (
         <main className="chat" ref={scroller}>
@@ -212,7 +236,7 @@ export function SidePanel() {
             </button>
           </div>
         )}
-        <Composer ref={composer} tab={tab} running={running} disabled={false} siteMode={siteMode} voice={settings.voice} onSend={onSend} onStop={stop} onVoiceCommand={onVoiceCommand} approvalPending={pendingApprovals.length > 0} />
+        <Composer ref={composer} tab={tab} running={running} disabled={crawler.active} siteMode={siteMode} voice={settings.voice} onSend={onSend} onStop={stop} onVoiceCommand={onVoiceCommand} approvalPending={pendingApprovals.length > 0} />
       </footer>
     </div>
   );

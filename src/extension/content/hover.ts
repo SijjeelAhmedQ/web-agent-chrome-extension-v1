@@ -226,5 +226,18 @@ export async function openHoverMenu(el: Element): Promise<ElementInfo[]> {
   const before = new Set(collectInteractive().elements);
   hoverOn(el);
   await settleBriefly();
-  return describeAll(newlyVisible(before));
+  return describeAll(menuItemsOf(el, newlyVisible(before)));
+}
+
+/**
+ * Of what showed after a hover, the items of the trigger's own menu: those in the list it points at (aria-controls),
+ * else those in a menu or list box; never a table row's buttons that happened to come into view at the same time.
+ */
+function menuItemsOf(trigger: Element, shown: Element[]): Element[] {
+  const ids = [trigger.getAttribute('aria-controls'), trigger.getAttribute('aria-owns')].flatMap((v) => (v ? v.split(/\s+/) : []));
+  const own = ids.map((id) => document.getElementById(id)).filter((x): x is HTMLElement => !!x);
+  if (own.length) return shown.filter((e) => own.some((o) => o.contains(e)));
+  const inMenu = shown.filter((e) => e.closest('[role="menu"], [role="listbox"], [role="menubar"], nav, [role="navigation"]'));
+  if (inMenu.length) return inMenu;
+  return shown.filter((e) => !e.closest('tr, [role="row"], [role="gridcell"], [role="cell"], tbody'));
 }

@@ -1,5 +1,5 @@
 import { Drawer, Segmented, Tooltip } from 'antd';
-import { Globe,
+import { BookOpen, Globe,
   Activity,
   Blocks,
   Bot,
@@ -31,6 +31,7 @@ import { AgentsPage } from './AgentsPage';
 import { CostPage } from './CostPage';
 import { ModelsPage } from './ModelsPage';
 import { AdvancedPage, AppearancePage, BehaviorPage, GeneralPage, PermissionsPage, PrivacyPage } from './PreferencePages';
+import { KnowledgeBaseDetailPage, KnowledgeBasesPage } from './KnowledgeBasesPage';
 import { SiteDetailPage, SitesPage } from './SitesPage';
 import { SkillsPage } from './SkillsPage';
 import { ToolsPage } from './ToolsPage';
@@ -48,6 +49,7 @@ const NAV = [
     ],
   },
   { group: 'Site base', items: [{ to: '/sites', label: 'Sites', icon: Globe }] },
+  { group: 'Knowledge Gather Agent', items: [{ to: '/knowledge', label: 'Knowledge bases', icon: BookOpen }] },
   {
     group: 'Preferences',
     items: [
@@ -189,6 +191,8 @@ function Shell() {
               <Route path="/voice" element={<VoicePage />} />
               <Route path="/sites" element={<SitesPage />} />
               <Route path="/sites/:siteId" element={<SiteDetailPage />} />
+              <Route path="/knowledge" element={<KnowledgeBasesPage />} />
+              <Route path="/knowledge/:baseId" element={<KnowledgeBaseDetailPage />} />
               <Route path="/general" element={<GeneralPage />} />
               <Route path="/appearance" element={<AppearancePage />} />
               <Route path="/behavior" element={<BehaviorPage />} />

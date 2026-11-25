@@ -51,7 +51,9 @@ export function useActiveTab(): ActiveTab {
       if (tab.windowId === windowId && tab.active && (change.url || change.title || change.status || change.favIconUrl)) setState(toState(tab, windowId));
     };
 
-    void chrome.windows.getCurrent().then((w) => {
+    // A panel opened on its own (sidepanel.html?window=<id>, for testing and debugging) works next to that window.
+    const detached = Number(new URLSearchParams(location.search).get('window'));
+    void (detached ? Promise.resolve({ id: detached }) : chrome.windows.getCurrent()).then((w) => {
       windowId = w.id ?? -1;
       void refresh();
     });

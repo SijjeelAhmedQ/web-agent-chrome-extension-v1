@@ -1,7 +1,8 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import { defaultConfig } from '@/shared/constants/defaults';
 import { CUSTOM_PREFIX } from '@/shared/constants/tools';
-import type { AgentConfig, AppConfig, CustomToolConfig, KnowledgeEntry, ProviderConfig, Settings, SiteProfile, SkillConfig } from '@/shared/types/config';
+import { matchesSite, uid } from '@/shared/utils';
+import type { AgentConfig, AppConfig, CustomToolConfig, KnowledgeBase, KnowledgeEntry, ProviderConfig, Settings, SiteProfile, SkillConfig } from '@/shared/types/config';
 
 interface ConfigState {
   config: AppConfig;
@@ -119,6 +120,65 @@ export const configSlice = createSlice({
       const site = state.config.sites.find((s) => s.id === action.payload.siteId);
       if (!site) return;
       site.knowledge = site.knowledge.filter((k) => k.id !== action.payload.entryId);
+      touch(state);
+    },
+    // ---- Gathered knowledge bases (Knowledge Gather Agent)
+    /**
+     * A learned knowledge base gets its site and its own agent: a Site for its address (when there is none) whose
+     * agent is one made for it — a copy of the default agent, named after the site — so on that site only that
+     * agent is offered. A site that already has agents of its own keeps them.
+     */
+    adoptKnowledgeBase(state, action: PayloadAction<string>) {
+      const kb = state.config.knowledgeBases?.find((k) => k.id === action.payload);
+      const host = kb?.sites[0];
+      if (!kb || !host) return;
+      const now = Date.now();
+      let site = state.config.sites.find((s) => s.sites.some((p) => p.toLowerCase() === host.toLowerCase())) ?? state.config.sites.find((s) => matchesSite(`https://${host}/`, s.sites));
+      if (!site) {
+        site = { id: uid('site_'), name: kb.name, description: `Learned by the Knowledge Gather Agent (${kb.entries.length} entries).`, color: '#0EA5E9', sites: [...kb.sites], enabled: true, providerId: null, model: '', agentIds: [], skillIds: [], disabledSkillIds: [], customToolIds: [], disabledToolIds: [], neverClick: [], askBefore: [], askPopups: [], knowledge: [], createdAt: now, updatedAt: now };
+        state.config.sites.push(site);
+      }
+      if (!site.agentIds.some((id) => state.config.agents.some((a) => a.id === id))) {
+        const base = state.config.agents.find((a) => a.id === state.config.settings.defaultAgentId && !a.team) ?? state.config.agents.find((a) => !a.team) ?? state.config.agents[0];
+        if (base) {
+          const agent: AgentConfig = {
+            ...JSON.parse(JSON.stringify(base)),
+            id: uid('agent_'),
+            name: `${kb.name} Agent`,
+            description: `Works on ${host}, with what was learned there.`,
+            instructions: `${base.instructions ? `${base.instructions}\n\n` : ''}You work on ${host}. Use its site knowledge (rules, navigation, pages and workflows) to find your way and to do every task there — searching, filtering, paging through lists, filling and saving forms, and summarising pages.`,
+            team: undefined,
+            createdAt: now,
+            updatedAt: now,
+          };
+          state.config.agents.push(agent);
+          site.agentIds = [agent.id];
+        }
+      }
+      site.updatedAt = now;
+      touch(state);
+    },
+    upsertKnowledgeBase(state, action: PayloadAction<KnowledgeBase>) {
+      state.config.knowledgeBases ??= [];
+      upsert(state.config.knowledgeBases, { ...action.payload, updatedAt: Date.now() });
+      touch(state);
+    },
+    deleteKnowledgeBase(state, action: PayloadAction<string>) {
+      state.config.knowledgeBases = (state.config.knowledgeBases ?? []).filter((kb) => kb.id !== action.payload);
+      touch(state);
+    },
+    upsertBaseEntry(state, action: PayloadAction<{ baseId: string; entry: KnowledgeEntry }>) {
+      const kb = (state.config.knowledgeBases ?? []).find((k) => k.id === action.payload.baseId);
+      if (!kb) return;
+      upsert(kb.entries, { ...action.payload.entry, updatedAt: Date.now() });
+      kb.updatedAt = Date.now();
+      touch(state);
+    },
+    deleteBaseEntry(state, action: PayloadAction<{ baseId: string; entryId: string }>) {
+      const kb = (state.config.knowledgeBases ?? []).find((k) => k.id === action.payload.baseId);
+      if (!kb) return;
+      kb.entries = kb.entries.filter((e) => e.id !== action.payload.entryId);
+      kb.updatedAt = Date.now();
       touch(state);
     },
     /** Creates or edits a skill that belongs to a site. */

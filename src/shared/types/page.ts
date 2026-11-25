@@ -16,12 +16,20 @@ export interface ElementInfo {
   hasMenu?: boolean;
   disabled?: boolean;
   required?: boolean;
+  /** The help the form shows with the field (“Use latitude,longitude, e.g. -36.8485,174.7633”). */
+  hint?: string;
+  /** Opens a list to pick from (a searchable select): text typed only filters it; a value is picked from the list. */
+  picks?: boolean;
+  /** The page marks it wrong (aria-invalid) — e.g. after a save it refused. */
+  invalid?: boolean;
   /** A field that shows a value but can’t be typed into. */
   readonly?: boolean;
   /** A form field's visible label, when its name came from elsewhere (its placeholder): “Patient Name”. */
   label?: string;
   /** A text field inside a pop-up that has no ×, Close or Cancel: that pop-up's title. */
   inBlockingPopup?: string;
+  /** Inside a pop-up, drawer or dialog (any kind): that pop-up's title ('Pop-up' when it has none). */
+  inDialog?: string;
   href?: string;
   options?: string[];
   /** Dialog, form or table-row the element belongs to. */

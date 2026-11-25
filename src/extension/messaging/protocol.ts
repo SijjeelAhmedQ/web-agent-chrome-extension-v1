@@ -5,7 +5,7 @@ import type { DialogInfo, ElementInfo, ElementRisk, FormAround, PageSnapshot, Re
  * Every request carries `channel` so unrelated extension messages are ignored.
  */
 export const CHANNEL = 'web-agent/v1';
-export const CONTENT_VERSION = 1;
+export const CONTENT_VERSION = 2;
 
 export type ScrollDirection = 'up' | 'down' | 'top' | 'bottom';
 
@@ -23,6 +23,8 @@ export type ContentRequest =
   | { kind: 'fieldText'; id: number }
   | { kind: 'clear'; id: number; highlight: boolean }
   | { kind: 'select'; id: number; option: string; highlight: boolean }
+  | { kind: 'choices'; id: number }
+  | { kind: 'formErrors'; scope?: string }
   | { kind: 'scroll'; direction?: ScrollDirection; id?: number }
   | { kind: 'key'; key: string; id?: number }
   | { kind: 'settle'; quietMs: number; timeoutMs: number }
@@ -153,6 +155,10 @@ export interface ResponseMap {
   fieldText: { value: string };
   clear: TypeResult;
   select: SelectResult;
+  /** A dropdown's choices (the list it controls). */
+  choices: { options: string[] };
+  /** After a refused save: the fields that show an error, and the form's messages. */
+  formErrors: { fields: { id: number; label: string; value: string; error: string }[]; messages: string[] };
   scroll: ScrollResult;
   key: KeyResult;
   settle: { mutations: number; url: string; title: string; alerts: string[]; effect?: ClickEffect };
