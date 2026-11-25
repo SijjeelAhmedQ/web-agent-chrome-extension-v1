@@ -56,7 +56,7 @@ export function usageOf(data: Pick<OpenAIResponse, 'usage' | 'model'>): Usage {
  * `cacheSystem`: the system prompt is marked for the server's prompt cache (Claude through OpenRouter caches only
  * what is marked). It stays the same through a task, so every call after the first reads it at a tenth of the price.
  */
-function toWire(messages: ChatMessage[], cacheSystem = false): OpenAIMessage[] {
+function toWire(messages: ChatMessage[], cacheSystem = false, cacheMarked = false): OpenAIMessage[] {
   return messages.map((m) => {
     switch (m.role) {
       case 'assistant':
@@ -74,6 +74,9 @@ function toWire(messages: ChatMessage[], cacheSystem = false): OpenAIMessage[] {
       case 'system':
         return cacheSystem ? { role: 'system', content: [{ type: 'text', text: m.content, cache_control: { type: 'ephemeral' } }] } : { role: 'system', content: m.content };
       default:
+        // A message that stays the same through the task (its knowledge): marked too. With only the system prompt and
+        // the end marked, an earlier page put in short (it went) left nothing after the system prompt to read cached.
+        if (cacheMarked && m.role === 'user' && m.cache) return { role: 'user', content: [{ type: 'text', text: m.content, cache_control: { type: 'ephemeral' } }] };
         return { role: m.role, content: m.content };
     }
   });
@@ -123,7 +126,7 @@ export class OpenAICompatibleClient implements LlmClient {
     if (!this.provider.baseUrl) throw new AgentError('no_model', 'This connection has no address. Add one in Models.');
     const body: Record<string, unknown> = {
       model: req.model,
-      messages: toWire(req.messages, isOpenRouter(this.provider.baseUrl) && marksCache(req.model)),
+      messages: toWire(req.messages, isOpenRouter(this.provider.baseUrl) && marksCache(req.model), isOpenRouter(this.provider.baseUrl) && cachesConversation(req.model)),
       temperature: req.temperature,
       stream: false,
       ...(req.tools.length

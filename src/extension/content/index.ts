@@ -1,5 +1,5 @@
 import { CHANNEL, CONTENT_VERSION, type ContentRequest, type ContentResponse, type Envelope } from '../messaging/protocol';
-import { ActionError, clear, click, currentEffect, fieldText, pointAt, pressKey, resolve, scroll, select, settle, type, visibleDialogs, waitForText } from './actions';
+import { ActionError, resolveToAct, clear, click, currentEffect, fieldText, pointAt, pressKey, resolve, scroll, select, settle, type, visibleDialogs, waitForText } from './actions';
 import { choicesOf } from './choices';
 import { formErrors } from './formErrors';
 import { formAround } from './form';
@@ -70,7 +70,7 @@ async function handle(request: ContentRequest): Promise<unknown> {
     case 'formAround':
       return formAround(resolve(request.id));
     case 'hover':
-      return hover(resolve(request.id), request.highlight);
+      return hover(resolveToAct(request.id), request.highlight);
     case 'menuPath':
       return openMenu(request.path, request.highlight);
     case 'presence':

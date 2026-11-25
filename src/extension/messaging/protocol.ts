@@ -41,6 +41,7 @@ export type ContentRequest =
 
 export type ContentErrorCode =
   | 'stale_element'
+  | 'behind_popup'
   | 'not_visible'
   | 'disabled'
   | 'not_editable'
@@ -115,6 +116,10 @@ export interface TypeResult {
 export interface SelectResult {
   element: Pick<ElementInfo, 'name' | 'role'>;
   selected: string;
+  /** A field that holds several: the option was chosen already — not clicked (a click would take it off). */
+  already?: boolean;
+  /** A field that holds several: what it holds now. */
+  chosen?: string[];
 }
 
 export interface ScrollResult {

@@ -335,7 +335,7 @@ describe('prompt and context', () => {
     expect(quotesIn('The list shows "No new messages." and the button “Click here to load the data from archive.”')).toEqual(['No new messages.', 'Click here to load the data from archive.']);
     expect(quotesIn('Click "Lab" or "OK".')).toEqual([]);
   });
-  it('names a table row once: the other elements of the row say “(same row)”', () => {
+  it('names a table row once: its controls in one line', () => {
     const row = 'row 2 “Arya STARK · 03-12-2015”';
     const els = [
       { id: 1, role: 'link', name: 'Arya STARK', tag: 'a', inViewport: true, context: row },
@@ -344,9 +344,7 @@ describe('prompt and context', () => {
       { id: 4, role: 'link', name: 'Kook JUNG', tag: 'a', inViewport: true, context: 'row 3 “Kook JUNG · 01-09-2000”' },
     ];
     const out = formatSnapshot({ title: 'Patient Search', url: 'https://x.test/', scroll: { atTop: true, atBottom: true, percent: 0, screens: 1 }, elements: els, omitted: 0, frames: [], headings: [], text: '', textTruncated: false, dialogOpen: false } as never, 'overview');
-    expect(out).toContain('[1] link "Arya STARK" in row 2 “Arya STARK · 03-12-2015”');
-    expect(out).toContain('[2] image "Edit" (same row)');
-    expect(out).toContain('[3] image "Task" (same row)');
+    expect(out).toContain('\nin row 2 “Arya STARK · 03-12-2015”: [1] link "Arya STARK" · [2] image "Edit" · [3] image "Task"\n');
     expect(out).toContain('[4] link "Kook JUNG" in row 3');
     expect(formatElement(els[1] as never)).toBe('[2] image "Edit" in row 2 “Arya STARK · 03-12-2015”');
   });

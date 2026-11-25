@@ -14,7 +14,7 @@ const clean = (s: string) => s.replace(/\s+/g, ' ').trim();
 const list = (items: string[], max = 12) => (items.length > max ? `${items.slice(0, max).join(' / ')} / … (${items.length} in all)` : items.join(' / '));
 
 // Known pickers (select2, chosen, token/tag inputs, chips) — not any class with “tag” in it (“stage”).
-const PICKER = '[class*=select2],[class*=chosen-],[class*=token-],[class*=tokenfield],[class*=tagsinput],[class*=tagit],[class*=chip],[class*=multiselect],.ant-select';
+const PICKER = '[class*=select2],[class*=chosen-],[class*=token-],[class*=tokenfield],[class*=tagsinput],[class*=tagit],[class*=chip],[class*=multiselect],.ant-select,[class*=PillsInput-root],[class*=TagsInput-root]';
 
 /** The outermost box of a picker (a styled dropdown) around its small search field. */
 export function pickerOf(field: Element): Element | null {
@@ -48,6 +48,12 @@ export function pickerState(field: Element): PickerState | null {
       .map((c) => clean(c.getAttribute('title') || (c as HTMLElement).innerText || '').replace(/\s*[×✕]\s*$/, ''))
       .filter(Boolean);
     return { several: box.matches('.ant-select-multiple'), chosen: items, options };
+  }
+  // Mantine (MultiSelect, TagsInput): its pills, each a label and a ×. Without it the field was named after its last
+  // pill — OctansCare's Preferred contact read as a text box “Email”, empty, with SMS and Email chosen in it.
+  if (box.matches('[class*=PillsInput-root],[class*=TagsInput-root]')) {
+    const pills = Array.from(box.querySelectorAll('[class*=Pill-label]')).filter((c) => isVisible(c)).map((c) => clean((c as HTMLElement).innerText ?? c.textContent ?? '')).filter(Boolean);
+    return { several: true, chosen: pills, options };
   }
   const CHIP = '[class*=choice],[class*=token],[class*=tag],[class*=chip]';
   const chips = Array.from(box.querySelectorAll(CHIP))
@@ -85,7 +91,9 @@ function readForm(d: Element): { lines: string[]; values: { label: string; value
     const host = f.closest(POPUPS);
     return !host || host === d || !d.contains(host);
   };
-  const fields = Array.from(d.querySelectorAll('input,select,textarea')).filter(
+  // A dropdown drawn as a button (Mantine's Select: Gender, Provider) is a field too — left out, a required Provider
+  // was missing from the form's list, and its empty value from what stops the save.
+  const fields = Array.from(d.querySelectorAll('input,select,textarea,button[aria-haspopup=listbox]')).filter(
     (f) => own(f) && !(isInput(f) && ['hidden', 'button', 'submit', 'reset', 'image', 'file'].includes(f.type)) && isVisible(f),
   );
   const lines: string[] = [];
@@ -113,6 +121,17 @@ function readForm(d: Element): { lines: string[]; values: { label: string; value
       const name = accessibleName(f) || seen.text;
       if (name) lines.push(`- ${name} — tick box: ${f.checked ? 'ticked' : 'not ticked'}${fixed}`);
       if (name && f.checked) values.push({ label: name, value: 'Yes', fixed: !!fixed });
+      continue;
+    }
+    if (f.tagName === 'BUTTON') {
+      const name = seen.text || accessibleName(f).replace(/[:*]\s*$/, '');
+      if (!name) continue;
+      const shown = clean((f as HTMLElement).innerText ?? f.textContent ?? '');
+      // What it shows before a choice is its placeholder (“Choose a provider”), not a value.
+      const empty = !shown || f.querySelector('[data-placeholder],[class*=placeholder i]') !== null || /^(choose|select|pick|any)\b/i.test(shown);
+      const req = required || f.getAttribute('aria-required') === 'true';
+      lines.push(`- ${name}${req ? '*' : ''} — dropdown: ${empty ? 'empty' : `“${shown}”`} (choose with select_option)${fixed}`);
+      if (!empty) values.push({ label: name, value: shown, fixed: !!fixed });
       continue;
     }
     // A mask (“__/__/____”) is not a name: the label the page shows is.

@@ -100,7 +100,9 @@ export function KnowledgeBasesPage() {
       {bases.length === 0 ? (
         <EmptyBlock icon={<BookOpen size={22} />} title="Nothing learned yet" text="Open a website, sign in, and press “Learn this site” in the side panel. The agent explores it and writes its knowledge base; you review it before it is saved." />
       ) : (
-        <FitList className="list-card" label="Knowledge bases">
+        // A plain list, not one fitted to the room left: the crawler settings below take that room, and a fitted list
+        // shrank to nothing — the knowledge base was there (its text could be copied) but not to be seen.
+        <div className="list-card" role="list" aria-label="Knowledge bases">
           {bases.map((kb) => (
             <div key={kb.id} className={`list-row ${kb.enabled ? '' : 'is-off'}`} role="button" tabIndex={0} onClick={() => navigate(`/knowledge/${kb.id}`)} onKeyDown={(e) => e.key === 'Enter' && navigate(`/knowledge/${kb.id}`)}>
               <span className="list-icon">
@@ -119,7 +121,7 @@ export function KnowledgeBasesPage() {
               </span>
             </div>
           ))}
-        </FitList>
+        </div>
       )}
 
       <CrawlerSettingsSection />

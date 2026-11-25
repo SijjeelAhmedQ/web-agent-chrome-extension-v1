@@ -13,7 +13,8 @@ import { accessibleName, elementFor, hasHiddenMenu, isDisabled, isEditable, isVi
 import { isHovered, openHoverMenu, releaseHoverUnlessInside } from './hover';
 import { closeList, listOf as ownLists } from './choices';
 import { highlight } from './overlay';
-import { showingDialogs } from './snapshot';
+import { behindModal, modalInFront, showingDialogs } from './snapshot';
+import { pickerState } from './form';
 import { isButton, isHTML, isInput, isLabel, isSelect, isTextArea } from './dom';
 
 /**
@@ -33,6 +34,20 @@ const fail = (code: ContentError['code'], message: string, detail?: string): nev
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * An element to act on: not one of the page behind a modal pop-up — the user can't reach it while the pop-up is open,
+ * and acting there (a list's filter taken for the form's field) works on the wrong thing.
+ */
+export function resolveToAct(id: number): Element {
+  const el = resolve(id);
+  const modal = modalInFront();
+  if (behindModal(el, modal)) {
+    const title = (((modal as HTMLElement).innerText ?? modal?.textContent ?? '').split('\n').map((l) => l.trim()).find(Boolean) ?? 'the pop-up').slice(0, 60);
+    fail('behind_popup', `“${accessibleName(el) || 'That control'}” is on the page behind the open pop-up “${title}” — it can't be used while the pop-up is open, and it is not part of the pop-up's form.`, "Use the pop-up's own control (read_page lists only those). Don't press Escape or close the pop-up to reach the page — what was filled in would be lost; ask the user if the pop-up has no such control.");
+  }
+  return el;
+}
 
 export function resolve(id: number): Element {
   const el = elementFor(id);
@@ -212,7 +227,7 @@ export function pointAt(id: number): { x: number; y: number } {
 }
 
 export async function click(id: number, show: boolean, double = false): Promise<ClickResult> {
-  const el = resolve(id);
+  const el = resolveToAct(id);
   if (!isVisible(el) && !(isInput(el))) fail('not_visible', 'That element is hidden right now.', 'It may be inside a closed menu or collapsed section. Open the menu first or scroll.');
   if (isDisabled(el)) fail('disabled', `“${accessibleName(el) || 'That control'}” is disabled.`, 'A required field may be empty, or a previous step is incomplete.');
   await prepare(el, 'Clicking', show);
@@ -441,7 +456,7 @@ async function suggestionsUnder(field: HTMLElement): Promise<string[]> {
 }
 
 export async function type(id: number, text: string, clearFirst: boolean, show: boolean, trusted = false): Promise<TypeResult> {
-  const el = resolve(id);
+  const el = resolveToAct(id);
   if (isDisabled(el)) fail('disabled', `“${accessibleName(el) || 'That field'}” is disabled.`);
   const field = editableTarget(el);
   await prepare(field, 'Typing', show);
@@ -535,7 +550,7 @@ export function fieldText(id: number): { value: string } {
 }
 
 export async function clear(id: number, show: boolean): Promise<TypeResult> {
-  const el = resolve(id);
+  const el = resolveToAct(id);
   const field = editableTarget(el);
   await prepare(field, 'Clearing', show);
   field.focus({ preventScroll: true });
@@ -558,12 +573,20 @@ const optionNorm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
 const optionLoose = (s: string) => optionNorm(s).replace(/\(s\)/g, '').replace(/([a-z])s\b/g, '$1');
 
 export async function select(id: number, option: string, show: boolean): Promise<SelectResult> {
-  const el = resolve(id);
+  const el = resolveToAct(id);
   const native = isSelect(el) ? el : el.querySelector('select');
   if (!native) {
+    // A field that holds several (pills, tags): one chosen already is left — clicking it in the list takes it off
+    // again (OctansCare's Preferred contact: Email clicked off, then on, six calls).
+    const field = isInput(el) ? el : el.querySelector('input');
+    const held = field ? pickerState(field) : null;
+    if (held?.several) {
+      const hit = held.chosen.find((c) => optionNorm(c) === optionNorm(option) || optionLoose(c) === optionLoose(option));
+      if (hit) return { element: summary(el), selected: hit, already: true, chosen: held.chosen };
+    }
     const custom = await chooseInCustom(el, option, show);
-    if (custom) return custom;
-    const listed = await chooseInListbox(el, option, show);
+    const listed = custom ?? (await chooseInListbox(el, option, show));
+    if (listed && held?.several && field) return { ...listed, chosen: pickerState(field)?.chosen ?? [] };
     if (listed) return listed;
     return fail('not_native_select', `“${accessibleName(el) || 'That control'}” is a custom dropdown.`, 'Click it to open the list, then click the option you want (read_page after opening).');
   }
@@ -829,7 +852,7 @@ function focusables(): HTMLElement[] {
 
 export async function pressKey(rawKey: string, id?: number): Promise<KeyResult> {
   const key = normalizeKey(rawKey);
-  const target = (id !== undefined ? resolve(id) : (document.activeElement as Element | null)) ?? document.body;
+  const target = (id !== undefined ? resolveToAct(id) : (document.activeElement as Element | null)) ?? document.body;
   if (id !== undefined && isHTML(target)) target.focus({ preventScroll: true });
   const meta = KEY_CODES[key] ?? { code: key.length === 1 ? `Key${key.toUpperCase()}` : key, keyCode: key.length === 1 ? key.toUpperCase().charCodeAt(0) : 0 };
   const eventKey = key === 'Space' ? ' ' : key;

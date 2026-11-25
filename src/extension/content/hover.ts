@@ -2,7 +2,7 @@ import type { ElementInfo } from '@/shared/types/page';
 import type { HoverResult, MenuResult } from '../messaging/protocol';
 import { accessibleName, collectInteractive, roleOf } from './elements';
 import { highlight } from './overlay';
-import { describeElement } from './snapshot';
+import { behindModal, describeElement, modalInFront } from './snapshot';
 import { isAnchor, isHTML } from './dom';
 
 /**
@@ -183,12 +183,17 @@ export async function openMenu(path: string[], show: boolean): Promise<MenuResul
   let scope: Element[] | null = null;
   for (const [level, label] of path.entries()) {
     const last = level === path.length - 1;
-    let all = collectInteractive().elements;
+    // Not a menu of the page behind a modal pop-up: the pop-up's own controls only.
+    const usable = (els: Element[]) => {
+      const modal = modalInFront();
+      return modal ? els.filter((e) => !behindModal(e, modal)) : els;
+    };
+    let all = usable(collectInteractive().elements);
     let target = (scope?.length ? bestMatch(scope, label) : null) ?? bestMatch(all, label);
     // A menu can show a moment after its trigger is hovered (a patient just opened): not there yet isn't not there.
     if (!target && level > 0) {
       target = await foundSoon(() => {
-        all = collectInteractive().elements;
+        all = usable(collectInteractive().elements);
         return bestMatch(all, label);
       });
     }

@@ -102,6 +102,57 @@ export function formatEntry(e: KnowledgeEntry): string {
   return `${head}\n${example}${e.content.trim()}`;
 }
 
+/**
+ * The page an entry is about, as a path (“/patients”), from its “Address: …” line — what a crawl writes into every
+ * page entry. Null for an entry with no address (most written by hand): it isn't tied to one page.
+ */
+export function entryPath(e: KnowledgeEntry, all: KnowledgeEntry[] = []): string | null {
+  if (e.kind !== 'page') return null;
+  const own = pathIn(e.content);
+  if (own) return own;
+  // None in its text (“# Mentor home” — the model left the address out): the way to it says where it is.
+  const name = norm(e.title.replace(/\bpage\b/i, ''));
+  const way = name ? all.find((n) => n.kind === 'navigation' && norm(n.title).includes(name)) : undefined;
+  return way ? pathIn(way.content) : null;
+}
+
+/** The first address an entry gives: “Address: /tags”, “Path: /mentor-dashboard”, a heading's “(/messages)”. */
+function pathIn(text: string): string | null {
+  const said = [...text.matchAll(/\b(?:address(?: path)?|path|url)\s*:\s*`?([^\s`]+)/gi)].map((m) => m[1]);
+  const heading = text.match(/^#+ [^\n]*\((\/[^)\s]*)\)/m)?.[1];
+  for (const raw of [...said, ...(heading ? [heading] : [])]) {
+    const v = raw.replace(/[.,;)]+$/, '');
+    if (v.startsWith('/')) return pathKey(v);
+    if (/^https?:\/\//i.test(v)) {
+      try {
+        return pathKey(new URL(v).pathname);
+      } catch {
+        /* not an address */
+      }
+    }
+  }
+  return null;
+}
+/** A path as entries and tabs are compared: no query, no trailing slash, lower case. */
+const pathKey = (path: string) => (path.split(/[?#]/)[0].replace(/\/+$/, '') || '/').toLowerCase();
+export function pathOfUrl(url: string): string | null {
+  try {
+    return pathKey(new URL(url).pathname);
+  } catch {
+    return null;
+  }
+}
+
+/** The page entries of the page at `url` (its address is theirs). */
+export function pageEntriesAt(profiles: SiteProfile[], url: string): KnowledgeEntry[] {
+  const here = pathOfUrl(url);
+  const all = activeKnowledge(profiles);
+  return here ? all.filter((e) => entryPath(e, all) === here) : [];
+}
+
+/** The head of a page's knowledge, added to the step that opened that page. */
+export const PAGE_KNOWLEDGE = '(What the user taught you about this page — follow it:)';
+
 export const activeKnowledge = (profiles: SiteProfile[]) => profiles.flatMap((p) => p.knowledge.filter((k) => k.enabled && (k.title.trim() || k.content.trim())));
 
 /**
@@ -120,7 +171,7 @@ export function knowledgeBudget(contextTokens: number | undefined): number {
 const MAX_KNOWLEDGE = 16_000;
 
 /** The prompt section for the sites the agent is on, within about `budget` characters. */
-export function knowledgeSection(profiles: SiteProfile[], request: string, budget = 12_000, small = false): { text: string; left: number } {
+export function knowledgeSection(profiles: SiteProfile[], request: string, budget = 12_000, small = false, here?: string): { text: string; left: number } {
   const entries = activeKnowledge(profiles);
   if (!entries.length && !profiles.some((p) => p.neverClick?.length)) return { text: '', left: 0 };
   // What the request is about goes in first: entries whose title (or example) shares a word with it — its rules
@@ -168,6 +219,8 @@ export function knowledgeSection(profiles: SiteProfile[], request: string, budge
   const lines = [
     `## What the user has taught you about ${names}`,
     "This comes from the user and is correct for this website. Follow it over your own guesses. When a workflow matches the request, follow its steps in order. What is below is complete: don't call site_knowledge for anything shown here.",
+    // Learned knowledge says “ask the user before saving”: the model asked in the chat, then the approval asked again.
+    'Where it says to ask, confirm or get the user’s OK before saving, sending or deleting: the approval your call shows does that — don’t ask it in the chat.',
   ];
   const never = [...new Set(profiles.flatMap((p) => p.neverClick ?? []).map((n) => n.trim()).filter(Boolean))];
   if (never.length) {
@@ -182,8 +235,21 @@ export function knowledgeSection(profiles: SiteProfile[], request: string, budge
   const best = bestMatch?.e;
   let held = best ? formatEntry(best).length + 2 : 0;
   if (used + held > budget) held = 0;
+  // A page entry of another page (its address isn't the tab's) waits: it comes with the step that opens that page.
+  // A learned site's seven page entries were 13,000 characters — more than half its knowledge, with every call.
+  // (An entry with no address, or with no tab to compare — as before.)
+  const herePath = here ? pathOfUrl(here) : null;
+  const elsewhere = (e: KnowledgeEntry) => {
+    const p = herePath ? entryPath(e, entries) : null;
+    return !!p && p !== herePath;
+  };
+  const later: KnowledgeEntry[] = [];
   for (const { e, match, named: isNamed } of ranked) {
     const block = formatEntry(e);
+    if (elsewhere(e) && !match) {
+      later.push(e);
+      continue;
+    }
     const always = small ? e.kind === 'navigation' : e.kind !== 'workflow';
     if (e === best) held = 0;
     if ((always || match || isNamed || !matchable) && used + block.length + 2 + held <= budget) {
@@ -191,13 +257,16 @@ export function knowledgeSection(profiles: SiteProfile[], request: string, budge
       used += block.length + 2;
     } else skipped.push(e);
   }
+  if (later.length) {
+    lines.push('', `The pages ${later.map((e) => `“${e.title}”`).join(', ')}: what you know about each comes with the step that opens it.`);
+  }
   if (skipped.length) {
     lines.push(
       '',
       `More knowledge for this site (call site_knowledge with a topic to read one): ${skipped.map((e) => `“${e.title}”`).join(', ')}. Before doing one of these here, read it — it is how this site does it.`,
     );
   }
-  return { text: lines.join('\n'), left: skipped.length };
+  return { text: lines.join('\n'), left: skipped.length + later.length };
 }
 
 /** The best entries for a topic — for the site_knowledge tool. */

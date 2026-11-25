@@ -128,3 +128,15 @@ describe('a flag column under its heading (Smart Inbox: TEST | CURRENT | PREVIOU
     expect(summary).toContain('Totals: 1 record — 1 abnormal, 0 normal.');
   });
 });
+
+describe('a list read with read_table', () => {
+  it('comes with its rows counted by each column of a few values — the model counting 38 rows itself got it wrong', () => {
+    const codes = 'SWTT2 SWTT1 SWMT1 SWMT2 SWMT3 SWLT1 SWMT4 SWNP3 SWLT2 SWNP2 SWNP1 SWNP4 SWNP6 SWNP5 SWLV1 SWKR1 DWTT1 SWLV2 SWLV3 SWLV4 DWTT2 DWTT3 DWTT4 DWMT1 DWTT5 DWMT2 DWMT3 DWMT4 DWLT1 DWLT2 DWLT3 DWLT4 DWLT5 DWLV1 DWLV2 DWLV3 DWLV5 DWLV4'.split(' ');
+    const rows = codes.map((code, i) => ({ cells: ['', String(i + 1), code, `Station ${code}`, code.startsWith('SW') ? 'Steiner Wing' : 'Dobson Wing', 'Free'], colour: '' }));
+    const out = tableOutput({ found: true, headers: ['', 'Order', 'Code', 'Name', 'Wing', 'Status'], rows, total: rows.length });
+    expect(out).toContain('Counted for you, of all 38 rows');
+    expect(out).toContain('- Wing: Steiner Wing 19, Dobson Wing 19');
+    expect(out).toContain('- Status: Free 38');
+    expect(out).not.toMatch(/- (Order|Code|Name):/); // each its own: nothing to count
+  });
+});

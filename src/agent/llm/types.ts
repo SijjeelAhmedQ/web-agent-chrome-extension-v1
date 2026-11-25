@@ -15,7 +15,8 @@ export interface ToolCall {
 
 export type ChatMessage =
   | { role: 'system'; content: string }
-  | { role: 'user'; content: string }
+  /** `cache`: a mark for the server's prompt cache here (Claude) — a message that stays the same through the task. */
+  | { role: 'user'; content: string; cache?: boolean }
   | { role: 'assistant'; content: string; toolCalls?: ToolCall[]; reasoning?: unknown; reasoningBy?: string }
   | { role: 'tool'; content: string; toolCallId: string; toolName: string };
 

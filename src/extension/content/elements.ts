@@ -1,4 +1,5 @@
 import { isHTML, isInput, isSelect, isTextArea } from './dom';
+import { cellsOf, gridRowOf } from './grid';
 /**
  * Element discovery for the page-understanding layer: which elements a person could
  * interact with, what they are called (a pragmatic subset of the accessible-name
@@ -409,6 +410,12 @@ export function contextOf(el: Element): string | undefined {
     if (name && !cells.includes(name)) cells.push(name);
     const lead = clean(cells.join(' · '), 160);
     if (index >= 0 && row !== header) return `row ${position}${lead ? ` “${lead}”` : ''}`;
+  }
+  // A list drawn without a table (rows of divs): its row too — or “Edit station” of row 9 and of row 10 are one.
+  const inGrid = gridRowOf(el);
+  if (inGrid) {
+    const lead = clean(cellsOf(inGrid.row).filter(Boolean).slice(0, 4).join(' · '), 160);
+    return `row ${inGrid.index}${lead ? ` “${lead}”` : ''}`;
   }
   const form = el.closest('form');
   if (form) {

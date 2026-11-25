@@ -7,3 +7,6 @@ __pycache__
 
 # Live test output: browser address, captures, model calls (patient data)
 tests/indici-live/
+
+# Token benchmark results: task answers can name patients
+token-bench-results.jsonl

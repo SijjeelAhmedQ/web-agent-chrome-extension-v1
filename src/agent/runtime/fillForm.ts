@@ -40,6 +40,36 @@ export const fieldCall = (f: FillFormArgs['fields'][number], n: number, parent: 
     ? { id: `${parent}_${n}`, name: 'select_option', arguments: { id: f.id, option: f.option } }
     : { id: `${parent}_${n}`, name: 'type', arguments: { id: f.id, text: f.text ?? '' } };
 
+/** A call that only fills a field: type (not pressing Enter or a button after) or select_option. */
+const fillsField = (c: ToolCall) => {
+  const a = (c.arguments ?? {}) as { id?: unknown; submit?: unknown; then_click?: unknown };
+  if (!Number.isFinite(Number(a.id))) return false;
+  if (c.name === 'select_option') return true;
+  return c.name === 'type' && a.submit !== true && a.submit !== 'true' && a.then_click === undefined;
+};
+
+/**
+ * Fields filled one after another in one reply — two or more calls in a row that only fill a field: they are done
+ * as fill_form does them. The longest such run, by position; null for none.
+ */
+export function fieldGroup(calls: ToolCall[]): { from: number; to: number; firstId: number; given: string[] } | null {
+  let best: [number, number] | null = null;
+  for (let i = 0; i < calls.length; ) {
+    if (!fillsField(calls[i])) {
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j + 1 < calls.length && fillsField(calls[j + 1])) j++;
+    if (j > i && (!best || j - i > best[1] - best[0])) best = [i, j];
+    i = j + 1;
+  }
+  if (!best) return null;
+  const [from, to] = best;
+  const args = calls.slice(from, to + 1).map((c) => (c.arguments ?? {}) as { id?: unknown; text?: unknown; option?: unknown });
+  return { from, to, firstId: Number(args[0].id), given: args.map((a) => String(a.text ?? a.option ?? '')) };
+}
+
 /** A field's result that ends the filling: it was refused, failed, needs the user, or waits for a suggestion to be chosen. */
 const GO_ON = /^(search|save|submit|apply|find|go|ok|create|done|confirm|continue|next)\b/i;
 

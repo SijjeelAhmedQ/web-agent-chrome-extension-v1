@@ -9,7 +9,9 @@ const PLACEHOLDER = '[Earlier page snapshot removed — its element ids are no l
  * A runtime message, not the user's request; a page read like any other, dropped once a newer one is in.
  */
 export const FIRST_PAGE = '(The page as the task starts — read for you, as read_page would; its ids are valid:)';
-const RUNTIME_PROMPT = /^(Before you finish|Not finished yet:|Your last reply was cut off|You have not finished the task yet|Decision \(from|\(The page as the task starts|\(Patient open in the consult|\(For this task — what the user taught you|\(You have repeated steps that were refused)/;
+/** The head of the checklist as it is now — a message of the runtime's, added when it changes. */
+export const CHECKLIST_HEAD = '(Where you are)';
+const RUNTIME_PROMPT = /^(\(Where you are\)|Before you finish|Not finished yet:|Your last reply was cut off|You have not finished the task yet|Decision \(from|\(The page as the task starts|\(Patient open in the consult|\(For this task — what the user taught you|\(What the user taught you about this page|\(You have repeated steps that were refused)/;
 /** The message with the task's site knowledge and tab (see buildTaskContext): the instructions, never cut. */
 const isTaskContext = (m: ChatMessage) => m.role === 'user' && m.content.startsWith('(For this task — what the user taught you');
 
@@ -246,7 +248,7 @@ export function compactMessages(messages: ChatMessage[], budgetTokens: number): 
 export function shrinkSnapshot(text: string, tokens: number): string {
   if (estimateTokens(text) <= tokens) return text;
   let out = text.replace(/\n\n(Visible text \(start\)|Page text|Headings):[\s\S]*$/, '');
-  if (estimateTokens(out) + 40 > tokens) out = out.split('\n').filter((l) => !(/^\[\d+\] /.test(l) && l.endsWith(' ↓'))).join('\n');
+  if (estimateTokens(out) + 40 > tokens) out = out.split('\n').filter((l) => !(/^(\[\d+\] |in .{1,200}?: \[\d+\] )/.test(l) && l.endsWith(' ↓'))).join('\n');
   if (estimateTokens(out) + 40 > tokens) {
     const lines = out.split('\n');
     let used = 0;

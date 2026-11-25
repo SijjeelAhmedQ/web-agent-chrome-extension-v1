@@ -1,9 +1,10 @@
 import { App, Button, Input, Segmented } from 'antd';
-import { History, Search, Trash2 } from 'lucide-react';
+import { Download, History, Search, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { deleteTask } from '@/shared/storage/historyStore';
 import type { TaskRecord } from '@/shared/types/history';
 import { formatDuration } from '@/shared/utils';
+import { tokenReportCsv } from '@/shared/utils/tokenReport';
 import { useAppSelector } from '@/store';
 import { ActivityCard } from '../../components/Activity';
 import { Markdown } from '../../components/Markdown';
@@ -12,6 +13,16 @@ import { EmptyBlock, PageHeader } from './parts';
 import { FitList } from './layout';
 
 type Filter = 'all' | 'running' | 'done' | 'failed' | 'cancelled';
+
+/** The tasks' token report as a CSV file in Downloads. */
+function exportTokens(tasks: TaskRecord[]) {
+  const url = URL.createObjectURL(new Blob([tokenReportCsv(tasks)], { type: 'text/csv' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `web-agent-tokens-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 export function ActivityPage() {
   const tasks = useAppSelector((s) => s.history.tasks);
@@ -35,7 +46,18 @@ export function ActivityPage() {
 
   return (
     <>
-      <PageHeader title="Activity" description={saveHistory ? 'Everything your agents have done, newest first.' : 'Saving activity is off — turn it on in Privacy to keep a record of tasks.'} />
+      <PageHeader
+        title="Activity"
+        description={saveHistory ? 'Everything your agents have done, newest first.' : 'Saving activity is off — turn it on in Privacy to keep a record of tasks.'}
+        actions={
+          tasks.length > 0 && (
+            // What each task cost in tokens (the tasks shown — search or filter first), to compare before and after a change.
+            <Button icon={<Download size={15} />} onClick={() => exportTokens(visible)} disabled={!visible.length}>
+              Export token report
+            </Button>
+          )
+        }
+      />
       {tasks.length === 0 ? (
         <EmptyBlock icon={<History size={22} />} title="No activity yet" text="Tasks you run from the side panel will appear here." />
       ) : (

@@ -10,22 +10,23 @@ import { formatCost, summarizeCalls } from '@/shared/utils/cost';
 import { AgentError, isAbort, toAgentError } from '@/shared/utils/errors';
 import { createClient, type LlmClient } from '../llm';
 import { KAGGLE_CONTEXT_WINDOW, knownModel } from '@/shared/constants/providers';
-import { BROWSER_TOOLS } from '../tools/browserTools';
+import { BROWSER_TOOLS, formBefore, formFilled } from '../tools/browserTools';
 import { formatDialogs } from '../tools/format';
 import { DEFAULT_CONTEXT_WINDOW } from '../llm/ollama';
 import type { ChatMessage, ToolCall } from '../llm/types';
 import { buildSystemPrompt, buildTaskContext, TASK_CONTEXT } from '../planner/systemPrompt';
-import { knowledgeBudget, knowledgeSection, partForHere } from '../planner/siteKnowledge';
+import { activeKnowledge, formatEntry, knowledgeBudget, knowledgeSection, PAGE_KNOWLEDGE, pageEntriesAt, partForHere } from '../planner/siteKnowledge';
 import { buildToolset, sitesFor, toolSpecs } from '../tools/registry';
 import { ElementMemory, type AgentTool, type ApprovalRequest, type ToolContext, type ToolOutcome } from '../tools/types';
-import { APPROVED_DONE, budgetFor, clipToolOutput, compactMessages, dropEarlierPages, estimateTokens, FIRST_PAGE, isFullRead, isPageRead, PAGE_AFTER, pageIn, retireEarlierPages } from './context';
+import { APPROVED_DONE, budgetFor, CHECKLIST_HEAD, clipToolOutput, compactMessages, dropEarlierPages, estimateTokens, FIRST_PAGE, isFullRead, isPageRead, PAGE_AFTER, pageIn, retireEarlierPages } from './context';
 import type { ApprovalAnswer, ApprovalPrompt, RunEvent } from './events';
 import { asksUser, followUpOf, historyForModel, withoutStoppedList } from './followUp';
 import { Checklist, checklistTool } from './checklist';
 import { meteredClient } from './costLog';
 import { pageFilledIn, patientFrom, stepFinishes } from './directTask';
 import { choosePrompt, fallbackTier, kindOfTask, parseTier, tierOfModel, tiersFor } from './modelRoute';
-import { FILL_FORM, fieldCall, fillFormSchema, fillFormTool, goOnButtons, stopsFilling } from './fillForm';
+import { FILL_FORM, fieldCall, fieldGroup, fillFormSchema, fillFormTool, goOnButtons, stopsFilling } from './fillForm';
+import { addsRecord, afterSave, asksForOne, asksToDo, saveVerdict, userAskedToDo } from './saveOutcome';
 import { changedSomething, namedIn, nearlyNamed, pageState, undoTool, wrongRowClick, type ClickRecord } from './clickGuard';
 
 export { namedIn } from './clickGuard';
@@ -82,6 +83,10 @@ export class AgentRun {
   private readonly declined = new Set<string>();
   /** Forms saved in this task, by the values they held — the same values saved again would be a duplicate. */
   private readonly savedForms = new Set<string>();
+  /** Records this task added, by saves that were accepted. */
+  private added = 0;
+  /** Every save the user approved in this task, the server answered that it went through. */
+  private serverConfirmed = false;
   /** How often each exact page action changed nothing in this task — to break loops. */
   private readonly repeats = new Map<string, number>();
   /** How often each exact action ran in this task. */
@@ -122,6 +127,10 @@ export class AgentRun {
   private knowledgeText = '';
   /** The knowledge section in the system prompt now — the log counts its tokens apart. */
   private knowledgeNow = '';
+  /** The page entries given with the steps that opened their pages (and those in the knowledge already), by id. */
+  private pagesGiven = new Set<string>();
+  /** Their text, as given — site_knowledge doesn't give it again. */
+  private pageKnowledge = '';
   /** Something the user approved (a save, a delete…) was done in this task: an answer saying so is double-checked. */
   private changedData = false;
   /** The sites of the tab the agent last worked on — its knowledge goes in the prompt when the task moved there. */
@@ -219,9 +228,19 @@ export class AgentRun {
    * The messages of a call with the checklist at the end: shown before every step (early steps may have been
    * dropped to fit), and kept out of the system prompt so that stays the same — and cached — all task long.
    */
-  private withChecklist(messages: ChatMessage[]): ChatMessage[] {
-    return this.checklist.size ? [...messages, { role: 'user', content: `(Where you are)\n${this.checklist.section()}` }] : messages;
+  /**
+   * The checklist as it is now, added to the conversation when it changed — and kept there. It went at the end of
+   * each call and was gone from the next: the server's prompt cache is marked at the end, so no call found the one
+   * before it — a four-part task read 6,000 of its 23,000 tokens a call from the cache (the system prompt), not 20,000.
+   */
+  private noteChecklist(messages: ChatMessage[]): void {
+    if (!this.checklist.size) return;
+    const now = `${CHECKLIST_HEAD}\n${this.checklist.section()}`;
+    if (now === this.checklistShown) return;
+    this.checklistShown = now;
+    messages.push({ role: 'user', content: now });
   }
+  private checklistShown = '';
 
   /** Stops the task before a call once it has spent its limit (Settings → Agent behavior); Resume carries it on. */
   private withinSpendingLimit() {
@@ -301,7 +320,7 @@ export class AgentRun {
       askBefore: toolset.sites.flatMap((s) => s.askBefore ?? []),
       askEveryAction: agent.confirmation === 'always',
       askPopups: toolset.sites.flatMap((s) => s.askPopups ?? []),
-      knowledgeInPrompt: () => this.knowledgeNow,
+      knowledgeInPrompt: () => `${this.knowledgeNow}\n${this.pageKnowledge}`,
       userSaid: request,
       // A small context is also a slow model's: every token of a page read is time.
       ...((contextWindowOf(provider) ?? Infinity) <= 32_768 ? { overviewTextChars: 3_000 } : {}),
@@ -357,10 +376,13 @@ export class AgentRun {
       const asked = followUp ? `${followUp.task}\n${request}` : request;
       // Only passing through this site on the way to another: what the way needs (what matches, the navigation), not the rest.
       const part = partForHere(asked, sites, config.sites);
-      const knowledge = knowledgeSection(sites, part, knowledgeBudget(contextWindowOf(provider)), small || part !== asked).text;
+      const at = here ?? tab;
+      // Only the page the tab is on, of the site's page entries (and those the request is about): another page's
+      // comes with the step that opens it (`pageKnowledgeFor`).
+      const knowledge = knowledgeSection(sites, part, knowledgeBudget(contextWindowOf(provider)), small || part !== asked, at?.url ?? url).text;
       this.knowledgeText += `\n${knowledge}`;
       this.knowledgeNow = knowledge;
-      const at = here ?? tab;
+      for (const e of activeKnowledge(sites)) if (e.kind === 'page' && knowledge.includes(formatEntry(e))) this.pagesGiven.add(e.id);
       return buildTaskContext({
         siteKnowledge: knowledge,
         page: { title: at?.title ?? '', url: at?.url ?? url, note: pageNote ? `${pageNote} Navigate to a website if the task needs one.` : undefined },
@@ -379,8 +401,9 @@ export class AgentRun {
     const messages: ChatMessage[] = [
       { role: 'system', content: system },
       ...history,
+      // The task's knowledge, and the request after it: the same through the task — marked for the server's cache.
       { role: 'user', content: contextFor(toolset.sites) },
-      { role: 'user', content: `${REQUEST_HEAD}\n${asked}` },
+      { role: 'user', content: `${REQUEST_HEAD}\n${asked}`, cache: true },
     ];
     /** The task's knowledge again, newer (another site, a bigger model): the one before becomes a line, the new one goes at the end. */
     const renewContext = async (sites: SiteProfile[], note = '') => {
@@ -419,6 +442,7 @@ export class AgentRun {
     }
 
     let listNudges = 0;
+    let askedToActAgain = false;
     let pageNudged = false;
     let popupsChecked = false;
     let quotesChecked = false;
@@ -452,7 +476,7 @@ export class AgentRun {
       }
       // The system prompt stays the same through the task, so the server's prompt cache serves it (and the
       // tools) at a fraction of the price on every call after the first. What changes — the checklist — goes
-      // at the end of each call instead (`withChecklist`).
+      // at the end, when it changes (`noteChecklist`).
       // The small model stuck: once, Jev picks a bigger one and decides from here.
       if (auto && jev && route && !decider && !tookOver && this.isStuck(recent, step, stepLimit)) {
         tookOver = true;
@@ -516,10 +540,11 @@ export class AgentRun {
           }
           const purpose = wrapUp ? 'Telling the user where it stands' : (nextPurpose ?? (step === 0 ? 'First step' : phase === 'answer' ? 'Double-check' : 'Doing a step'));
           nextPurpose = null;
+          this.noteChecklist(messages);
           response = await client.chat({
             model,
             purpose,
-            messages: this.withChecklist(reasoningFor(compactMessages(messages, budget), model)),
+            messages: reasoningFor(compactMessages(messages, budget), model),
             tools: wrapUp ? [] : specs,
             temperature: agent.temperature,
             signal: this.abort.signal,
@@ -563,6 +588,17 @@ export class AgentRun {
           messages.push({ role: 'assistant', content: looped ? `${clip(answer, 300)} …` : answer });
           messages.push({ role: 'user', content: looped ? LOOPED_PROMPT : cutOff ? CUT_OFF_PROMPT : CONTINUE_PROMPT });
           nextPurpose = cutOff ? 'Again: the reply was cut off' : 'Again: the reply only said what comes next';
+          if (decider) phase = 'decide';
+          continue;
+        }
+        // Asking in words whether to save, when the user asked for the save: the approval asks them, once. Told twice,
+        // the user said “yes” in the chat and then approved the same save again (the site's knowledge said to confirm
+        // first, and the model took that for a question in the chat). Not shown: the model makes the call.
+        if (!askedToActAgain && asksToDo(answer) && userAskedToDo(request) && byName.has('click')) {
+          askedToActAgain = true;
+          messages.push({ role: 'assistant', content: answer });
+          messages.push({ role: 'user', content: `${NOT_FINISHED_PROMPT} don't ask in the chat — the user already asked for this in the request. Your call to press it shows them an approval, which is their confirmation. Make the call now.` });
+          nextPurpose = 'Again: asked in the chat what the user had asked for';
           if (decider) phase = 'decide';
           continue;
         }
@@ -625,7 +661,9 @@ export class AgentRun {
         const changed = this.changedData || agent.confirmation === 'never';
         // After a save, even when the page was read last: an answer read off the page still misquoted a detail (a
         // recall's due date from an older row).
-        if (!verified && changed && agent.verify !== false && byName.has('read_page') && claimsDone(answer) && !asksUser(answer) && (!this.justRead || this.changedData)) {
+        // Not when the server itself said the save went through (it answered “200 ok”): the page can only agree, or not
+        // show it — Hana's Floor / Building isn't in the list, and the check's doubts went into the answer.
+        if (!verified && changed && !this.serverConfirmed && agent.verify !== false && byName.has('read_page') && claimsDone(answer) && !asksUser(answer) && (!this.justRead || this.changedData)) {
           verified = true;
           const page = await this.checkPage(ctx);
           if (page) {
@@ -642,11 +680,26 @@ export class AgentRun {
       }
       messages.push({ role: 'assistant', content: response.content, toolCalls: response.toolCalls, ...(response.reasoning ? { reasoning: response.reasoning, reasoningBy: lastModel } : {}) });
 
+      // Several fields typed or chosen in one reply (as fill_form would): filled the same quick way, the form read
+      // once before the first and once after the last.
+      const group = fieldGroup(response.toolCalls);
+      const groupBefore = group ? await formBefore(ctx, group.firstId) : null;
       for (const [n, call] of response.toolCalls.entries()) {
         this.throwIfCancelled();
         const signature = `${call.name}:${JSON.stringify(call.arguments)}`;
         recent.push(signature);
-        let output = call.name === FILL_FORM ? await this.fillForm(call, byName, ctx) : await this.runTool(call, byName, ctx);
+        const inGroup = !!group && n >= group.from && n <= group.to;
+        ctx.fillingForm = inGroup;
+        let output: string;
+        try {
+          output = call.name === FILL_FORM ? await this.fillForm(call, byName, ctx) : await this.runTool(call, byName, ctx);
+        } finally {
+          ctx.fillingForm = false;
+        }
+        if (group && n === group.to && !this.endWith) {
+          const also = await formFilled(ctx, group.firstId, groupBefore, group.given);
+          if (also) output += ` ${also}`;
+        }
         if (this.endWith) return this.endWith;
         // That one step was all the request asked: no call only to say so.
         if (small && !decider && response.toolCalls.length === 1 && !this.changedData && stepFinishes(request, call.name, call.arguments ?? {}, output)) {
@@ -666,12 +719,34 @@ export class AgentRun {
         else output = await this.textAfter(call, output, byName, ctx);
         messages.push({ role: 'tool', toolCallId: call.id, toolName: call.name, content: clipToolOutput(output) });
       }
+      // The steps brought the tab to a page the site's knowledge has an entry for, not given yet: it comes now, at
+      // the end of the conversation — what is before stays as it was, and the server's cache with it. A message of
+      // its own: in a step's result it would go when that page read is retired.
+      if (response.toolCalls.some((c) => byName.get(c.name)?.touchesPage)) {
+        const known = await this.pageKnowledgeFor(ctx, toolset.sites);
+        if (known) messages.push({ role: 'user', content: known });
+      }
       // Keep presence on whichever tab the agent is in now.
       void browser.setPresence(true);
       // The agent's model has read the request and the page: from here the decision model decides.
       if (decider && phase === 'act' && !messages.some((m) => m.role === 'user' && m.content.startsWith(DECISION_HEAD))) phase = 'decide';
     }
     throw new AgentError('step_limit', `I couldn't finish within ${agent.maxSteps} steps. Try a more specific request, or raise the step limit for this agent.`);
+  }
+
+  /**
+   * The site's knowledge of the page the tab is on now, when the task hasn't had it yet: added to the result of the
+   * step that brought it there. Empty when there is none, or it was given (in the knowledge, or earlier).
+   */
+  private async pageKnowledgeFor(ctx: ToolContext, taskSites: SiteProfile[]): Promise<string> {
+    const url = (await ctx.browser.currentTab().catch(() => null))?.url ?? '';
+    const fresh = pageEntriesAt(this.hereSites.length ? this.hereSites : taskSites, url).filter((e) => !this.pagesGiven.has(e.id));
+    if (!fresh.length) return '';
+    for (const e of fresh) this.pagesGiven.add(e.id);
+    const text = fresh.map(formatEntry).join('\n\n');
+    this.pageKnowledge += `\n${text}`;
+    this.knowledgeText += `\n${text}`;
+    return `${PAGE_KNOWLEDGE}\n${text}`;
   }
 
   /**
@@ -729,17 +804,30 @@ export class AgentRun {
     const lines: string[] = [];
     const { fields } = parsed.data;
     let stopped = false;
-    for (const [n, f] of fields.entries()) {
-      this.throwIfCancelled();
-      const out = await this.runTool(fieldCall(f, n, call.id), byName, ctx);
-      lines.push(`- field [${f.id}]: ${out}`);
-      if (this.endWith) break;
-      if (stopsFilling(out)) {
-        stopped = true;
-        const left = fields.slice(n + 1).map((x) => `[${x.id}]`);
-        if (left.length) lines.push(`Stopped here — not filled: ${left.join(', ')}. Deal with this field first, then fill the rest.`);
-        break;
+    // One field after another without the page's quiet waited for each (it was 1.4 s a field): the form is read
+    // once before and once after. Every field is still its own step, with its checks and approvals.
+    const many = fields.length > 1;
+    const before = many ? await formBefore(ctx, fields[0].id) : null;
+    ctx.fillingForm = many;
+    try {
+      for (const [n, f] of fields.entries()) {
+        this.throwIfCancelled();
+        const out = await this.runTool(fieldCall(f, n, call.id), byName, ctx);
+        lines.push(`- field [${f.id}]: ${out}`);
+        if (this.endWith) break;
+        if (stopsFilling(out)) {
+          stopped = true;
+          const left = fields.slice(n + 1).map((x) => `[${x.id}]`);
+          if (left.length) lines.push(`Stopped here — not filled: ${left.join(', ')}. Deal with this field first, then fill the rest.`);
+          break;
+        }
       }
+    } finally {
+      ctx.fillingForm = false;
+    }
+    if (many && !this.endWith) {
+      const also = await formFilled(ctx, fields[0].id, before, fields.map((f) => f.text ?? f.option ?? ''));
+      if (also) lines.push(also);
     }
     // The button that goes on, by its id: Claude looked it up with find_element after filling (a call) although
     // it was in the page read. Not one that saves over something (“Update & Search”) — only the plain go-on words.
@@ -1086,6 +1174,12 @@ export class AgentRun {
         finish({ status: 'skipped', note: 'Already saved — not again' });
         return `Not pressed: earlier in this task you already saved a form with these same values (${approvalNeeded!.fields!.slice(0, 3).map((f) => `${f.label}: ${f.value}`).join('; ')}). Saving it again would add a duplicate. Close this form without saving. To check the first one, look where the site shows what was added (your site knowledge says where); if it isn't there, tell the user it was saved but you can't see it, and ask where to look.`;
       }
+      // One record asked for, and one added already in this task: another add is a second record, whatever its
+      // values — the loop that added the patient again and again, each time a little differently. Not asked.
+      if (approvalNeeded && this.added > 0 && addsRecord(approvalNeeded.title) && !this.checklist.size && asksForOne(this.options.request)) {
+        finish({ status: 'skipped', note: 'Already added — the request asks for one' });
+        return `Not pressed: this task has already added one record, and the request asks for one — another save here would add a second. Don't add again. Tell the user it was added (what you saw when it was saved); if you are unsure it was, say so and ask them to check.`;
+      }
       if (approvalNeeded && this.declined.has(approvalNeeded.title)) {
         // The model ignored “don't try again”: no second prompt — the task stops here.
         finish({ status: 'skipped', note: 'You declined this — stopping' });
@@ -1169,8 +1263,14 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
       // What the user let it do stays in the model's memory when older steps are cut to fit — or, a delete
       // done and forgotten, it looks for the record again and deletes another.
       if (!approvalNeeded) return outcome.output;
+      // What the save came to: saved (the server accepted it, the pop-up closed), refused, or not clear yet.
+      const verdict = saveVerdict(outcome.output);
+      if (verdict === 'saved' && addsRecord(approvalNeeded.title)) this.added++;
+      // The server's own yes (not only a message on the page): no double-check of the answer needed after it.
+      this.serverConfirmed = verdict === 'saved' && /The server accepted it/.test(outcome.output) && (this.serverConfirmed || !this.changedData);
       if (!/^Not saved/.test(outcome.note ?? '')) this.changedData = true;
-      if (form && !/^Not saved/.test(outcome.note ?? '')) this.savedForms.add(form);
+      // (A refused save added nothing: the same form may be saved again once it is put right.)
+      if (form && verdict !== 'refused' && !/^Not saved/.test(outcome.note ?? '')) this.savedForms.add(form);
       // The checklist's item in hand now has a change of its own to show for it.
       if (!/^Not saved/.test(outcome.note ?? '') && this.checklist.size) {
         this.checklist.markSaved([approvalNeeded.title, ...(approvalNeeded.fields ?? []).map((f) => `${f.label} ${f.value}`)].join(' '));
@@ -1180,7 +1280,10 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
       const what = approvalNeeded.choices
         ? `${step.label}${approvalNeeded.fields?.length ? ` — ${approvalNeeded.fields.slice(0, 4).map((f) => `${f.label}: ${f.value}`).join('; ')}` : ''}`
         : approvalNeeded.title.replace(/\?$/, '');
-      return `${APPROVED_DONE} ${what}\n${outcome.output}`;
+      // The verdict, and what it means for the next step — in place of a task_complete tool: its definition would go
+      // with every call of every task; this is said only after a save.
+      const workLeft = this.checklist.size > 0 && this.checklist.pending().length > 0;
+      return `${APPROVED_DONE} ${what}\n${outcome.output}${afterSave(verdict, workLeft)}`;
     } catch (err) {
       if (this.abort.signal.aborted || isAbort(err)) throw err;
       if (err instanceof PageError) {

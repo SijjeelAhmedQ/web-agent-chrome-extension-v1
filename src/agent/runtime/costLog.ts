@@ -1,5 +1,6 @@
 import type { ModelCallRecord } from '@/shared/types/history';
 import type { ChatMessage, ChatRequest, ChatResponse, LlmClient } from '../llm/types';
+import { PAGE_KNOWLEDGE } from '../planner/siteKnowledge';
 import { estimateTokens, isPageRead } from './context';
 
 /**
@@ -14,6 +15,9 @@ export function promptParts(messages: ChatMessage[], tools: ChatRequest['tools']
       const k = knowledge && m.content.includes(knowledge) ? estimateTokens(knowledge) : 0;
       parts.knowledge += k;
       parts.system += n - k;
+    } else if (m.role === 'user' && m.content.startsWith(PAGE_KNOWLEDGE)) {
+      // A page's knowledge, given with the step that opened it.
+      parts.knowledge += n;
     } else if (m.role === 'user' && knowledge && m.content.includes(knowledge)) {
       // The task's knowledge, in its own message before the request (the system prompt is the rules only).
       parts.knowledge += estimateTokens(knowledge);

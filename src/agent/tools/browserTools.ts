@@ -202,7 +202,9 @@ const readPage: AgentTool<{ mode: 'overview' | 'content'; full: boolean }> = {
     ctx.elements.remember([...snap.elements, ...(snap.dialogs ?? []).flatMap((d) => (d.close ? [d.close] : []))], true);
     const n = snap.elements.length + snap.omitted;
     // The same page read again: only what changed — when that is clearly shorter than the whole page.
-    const whole = formatSnapshot(snap, a.mode);
+    // Another page of the same app (the document is the one read last): its side menu, as it was, said in short.
+    const sameApp = ctx.lastPage && snap.docId && ctx.lastPage.doc === snap.docId && ctx.lastPage.url !== snap.url ? ctx.lastPage.lines : undefined;
+    const whole = formatSnapshot(snap, a.mode, a.full ? undefined : sameApp);
     const changes = a.mode === 'overview' && !a.full && ctx.lastPage ? pageDiff(ctx.lastPage, snap) : null;
     // Each “only the changes” read stands on the ones before it, so none of them can be dropped to fit. On a
     // small context, once they add up, a whole read starts a new chain and the old one can go.
@@ -581,6 +583,26 @@ async function otherChanges(ctx: ToolContext, id: number, before: FormAround | n
   return ` The page also changed ${changed.map((v) => `“${v.label}” from ${quote(was.get(v.label)!)} to ${quote(v.value)}`).join(', ')}. If the user gave a value for it, set it again now.`;
 }
 
+/** The form around the first of several fields, before they are filled — for `formFilled` after. */
+export const formBefore = (ctx: ToolContext, id: number): Promise<FormAround | null> => formAroundOf(ctx, id);
+
+/**
+ * After several fields were filled in one go: what the page itself rewrote meanwhile — a field none of them was
+ * for, or one of them that no longer holds what was put in (Indici writes the Directions anew when the Frequency is
+ * chosen). Read once, after the page has gone quiet, not after each field.
+ */
+export async function formFilled(ctx: ToolContext, id: number, before: FormAround | null, given: string[]): Promise<string> {
+  await ctx.browser.send({ kind: 'settle', quietMs: 300, timeoutMs: 1500 }).catch(() => null);
+  if (!before) return '';
+  const after = await formAroundOf(ctx, id);
+  if (!after) return '';
+  const was = new Map(before.values.map((v) => [v.label, v.value]));
+  const put = new Set(given.map((g) => g.trim()));
+  const changed = after.values.filter((v) => was.has(v.label) && was.get(v.label) !== v.value && !put.has(v.value.trim()));
+  if (!changed.length) return '';
+  return `The page also changed ${changed.map((v) => `“${v.label}” from ${quote(was.get(v.label)!)} to ${quote(v.value)}`).join(', ')}. If the user gave a value for it, set it again now.`;
+}
+
 const type: AgentTool<{ id: number; text: string; clear: boolean; submit: boolean; then_click?: number }> = {
   name: 'type',
   description:
@@ -619,9 +641,11 @@ const type: AgentTool<{ id: number; text: string; clear: boolean; submit: boolea
       };
     }
     const before = await pageUrl(ctx);
-    const form = a.submit || isSecretField(ctx, a.id) ? null : await formAroundOf(ctx, a.id);
+    // One field of several: the form is read once around them all (`formFilled`), not around each.
+    const quick = !!ctx.fillingForm && !a.submit && !a.then_click;
+    const form = quick || a.submit || isSecretField(ctx, a.id) ? null : await formAroundOf(ctx, a.id);
     const trusted = ctx.settings.realClicks !== false;
-    let res = await ctx.browser.send({ kind: 'type', id: a.id, text: a.text, clear: a.clear, highlight: ctx.settings.highlightActions, trusted });
+    let res = await ctx.browser.send({ kind: 'type', id: a.id, text: a.text, clear: a.clear, highlight: ctx.settings.highlightActions && !quick, trusted });
     // A rich editor with its caret placed: the text goes in as real keyboard input (or, failing that, by script).
     if (res.awaitsInput) {
       const typed = await ctx.browser.realType(a.text).then(() => true, () => false);
@@ -713,10 +737,22 @@ const selectOption: AgentTool<{ id: number; option: string }> = {
   touchesPage: true,
   label: (a, ctx) => `Choosing ${quote(a.option)}${ctx.elements.get(a.id)?.name ? ` in ${nameOf(ctx, a.id)}` : ''}`,
   async execute(a, ctx) {
-    const form = await formAroundOf(ctx, a.id);
-    const res = await ctx.browser.send({ kind: 'select', id: a.id, option: a.option, highlight: ctx.settings.highlightActions });
+    const quick = !!ctx.fillingForm;
+    const form = quick ? null : await formAroundOf(ctx, a.id);
+    const res = await ctx.browser.send({ kind: 'select', id: a.id, option: a.option, highlight: ctx.settings.highlightActions && !quick });
+    const field = res.element.name ? quote(res.element.name) : 'the field';
+    // A field that holds several: what it holds — and one asked for that it held already is not taken off.
+    const others = (res.chosen ?? []).filter((c) => c !== res.selected);
+    const rest = others.length ? ` It also holds ${others.map((c) => quote(c)).join(', ')}: if the user asked for ${quote(res.selected)} only, take ${others.length === 1 ? 'that one' : 'those'} off with its “Unselect” ×.` : '';
+    if (res.already) {
+      return { output: `${quote(res.selected)} was already chosen in ${field} (it can hold several) — left as it is: choosing it again would take it off.${rest}`, note: 'Already chosen' };
+    }
+    if (res.chosen) {
+      return { output: `Chose ${quote(res.selected)} in ${field} — it can hold several; it holds ${res.chosen.map((c) => quote(c)).join(', ') || 'nothing'} now.${rest}` };
+    }
     const also = form ? await otherChanges(ctx, a.id, form) : '';
-    if (!form) await ctx.browser.send({ kind: 'settle', quietMs: 300, timeoutMs: 1500 }).catch(() => null);
+    // (One of several fields: a short wait — a dropdown that closes, a field it shows — the form is read after them all.)
+    if (!form) await ctx.browser.send({ kind: 'settle', quietMs: quick ? 150 : 300, timeoutMs: quick ? 800 : 1500 }).catch(() => null);
     return { output: `Selected ${quote(res.selected)} in ${res.element.name ? quote(res.element.name) : 'the dropdown'}.${also}` };
   },
 };
@@ -1206,7 +1242,32 @@ export function tableOutput(t: TableResult): string {
     ...(t.headers.some(Boolean) ? [`Columns: ${t.headers.map((h) => h || '—').join(' | ')}`] : []),
     ...lines,
     differ ? `By colour: ${tally}. (What a colour means is in the site's knowledge.)` : 'All rows are in the same colour.',
+    ...columnCounts(t),
   ].join('\n');
+}
+
+/**
+ * Rows counted by each column of a few repeated values (a wing, a status, a team) — the model counting 38 rows
+ * itself said 20, then 21 stations in Steiner Wing; there are 19.
+ */
+function columnCounts(t: TableResult): string[] {
+  const width = Math.max(0, ...t.rows.map((r) => r.cells.length));
+  const out: string[] = [];
+  for (let i = 0; i < width; i++) {
+    const counts = new Map<string, number>();
+    for (const r of t.rows) {
+      const v = (r.cells[i] ?? '').trim();
+      if (v) counts.set(v, (counts.get(v) ?? 0) + 1);
+    }
+    const filled = [...counts.values()].reduce((a, b) => a + b, 0);
+    // A column of names or codes (each its own) says nothing counted; one of a few values does.
+    if (filled < 3 || counts.size > 8 || counts.size > filled / 2) continue;
+    const name = t.headers[i]?.trim() || `column ${i + 1}`;
+    out.push(`- ${name}: ${[...counts].sort((a, b) => b[1] - a[1]).map(([v, n]) => `${clip(v, 40)} ${n}`).join(', ')}`);
+  }
+  if (!out.length) return [];
+  const of = t.rows.length < t.total ? `of the ${t.rows.length} rows listed (${t.total} in all)` : `of all ${t.total} rows`;
+  return [`Counted for you, ${of} — use these numbers, don't count again:`, ...out];
 }
 
 const readTable: AgentTool<{ near: string; max: number }> = {

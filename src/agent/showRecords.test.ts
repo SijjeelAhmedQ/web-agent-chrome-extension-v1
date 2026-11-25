@@ -12,7 +12,8 @@ import { buildToolset, toolSpecs } from './tools/registry';
 import { fillFormTool } from './runtime/fillForm';
 import { buildSystemPrompt } from './planner/systemPrompt';
 import { patientFrom } from './runtime/directTask';
-import { formatSnapshot } from './tools/format';
+import { formatElement, formatSnapshot } from './tools/format';
+import { shrinkSnapshot } from './runtime/context';
 import { sitesFor } from './tools/registry';
 
 const restore = JSON.parse(readFileSync(join(process.cwd(), 'knowledge', 'web-agent-restore-indici.json'), 'utf8')) as { sites: SiteProfile[] };
@@ -136,10 +137,31 @@ describe('a page read says things once', () => {
 
   it('a pop-up’s controls name their place once', () => {
     const out = formatSnapshot(snap({ elements: [el(1, 'A', 'dialog “P”'), el(2, 'B', 'dialog “P”'), el(3, 'C', 'row 1 “x”'), el(4, 'D', 'row 1 “x”')] }), 'overview');
-    expect(out).toContain('[1] button "A" in dialog “P”');
-    expect(out).toContain('[2] button "B" (same place)');
-    expect(out).toContain('[3] button "C" in row 1 “x”');
-    expect(out).toContain('[4] button "D" (same row)');
+    expect(out).toContain('in dialog “P”: [1] button "A" · [2] button "B"');
+    expect(out).toContain('in row 1 “x”: [3] button "C" · [4] button "D"');
+  });
+
+  it('a form’s fields keep a line each, and the next control says its place is the same', () => {
+    const field = { id: 1, name: 'First name', role: 'textbox', tag: 'input', inViewport: true, value: '', context: 'dialog “P”' };
+    const out = formatSnapshot(snap({ elements: [field, el(2, 'Save', 'dialog “P”'), el(3, 'Cancel', 'dialog “P”')] }), 'overview');
+    expect(out).toContain('[1] textbox "First name" (empty) in dialog “P”\n');
+    expect(out).toContain('in dialog “P”: [2] button "Save" · [3] button "Cancel"');
+  });
+
+  it('on screen and below it are not one line: those below go whole when a page is cut to fit', () => {
+    const below = { ...el(3, 'C', 'bar “Menu”'), inViewport: false };
+    const out = formatSnapshot(snap({ elements: [el(1, 'A', 'bar “Menu”'), el(2, 'B', 'bar “Menu”'), below, { ...below, id: 4, name: 'D' }] }), 'overview');
+    expect(out).toContain('in bar “Menu”: [1] button "A" · [2] button "B"\n');
+    expect(out).toContain('in bar “Menu”: [3] button "C" · [4] button "D" ↓');
+    expect(shrinkSnapshot(out, 40)).not.toContain('[3]');
+  });
+
+  it('another page of the same app: its side menu, as it was, in short — ids and names', () => {
+    const menu = [el(1, 'Dashboard', 'bar “Overview”'), el(2, 'Stations', 'bar “Overview”')];
+    const before = new Map(menu.map((e) => [e.id, formatElement(e as never)]));
+    const out = formatSnapshot(snap({ elements: [...menu, el(3, 'Add station', 'bar “Stations”'), el(4, 'Export', 'bar “Stations”')] }), 'overview', before);
+    expect(out).toContain('in bar “Overview” (as on the page before): [1] "Dashboard" · [2] "Stations"');
+    expect(out).toContain('in bar “Stations”: [3] button "Add station" · [4] button "Export"');
   });
 
   it('text that only repeats a control’s name goes from an overview', () => {

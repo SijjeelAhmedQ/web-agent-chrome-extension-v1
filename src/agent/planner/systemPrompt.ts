@@ -91,6 +91,9 @@ export function buildSystemPrompt(ctx: PromptContext): string {
   if (canAct) {
     lines.push(
       '- Actions that buy, pay, send, publish, delete, submit or change account settings are shown to the user for approval automatically. Just make the tool call; if the user declines, do not try again another way.',
+      // The user said “then save it”, was asked in the chat “Shall I click Save?”, said yes — and was asked again by
+      // the approval: the site's knowledge said to confirm with the user before saving, and the model did it in words.
+      '- That approval is how the user is asked. When the site’s knowledge or a skill says to confirm, ask or get the user’s OK before saving, sending or deleting, the approval is that: don’t ask it in the chat (“Shall I save?”) — make the call. Ask in the chat only for something you don’t know (a value the user didn’t give).',
       '- Never type passwords, card numbers or other secrets unless the user gave them to you in this conversation for exactly that purpose.',
     );
   }

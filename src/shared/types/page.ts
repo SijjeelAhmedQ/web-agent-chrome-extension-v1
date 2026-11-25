@@ -81,6 +81,8 @@ export interface PageSnapshot {
   omitted: number;
   /** The ids of those left out — still on the page, not gone. */
   unlisted?: number[];
+  /** Controls of the page behind a modal pop-up, left out: they can't be used until it closes. */
+  behindPopup?: number;
   headings: string[];
   text: string;
   textTruncated: boolean;

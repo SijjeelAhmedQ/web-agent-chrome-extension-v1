@@ -1,5 +1,6 @@
 import type { TableResult, VisualRow } from '@/shared/types/page';
 import { accessibleName, idFor, isVisible } from './elements';
+import { cellsOf, gridsIn, type Grid } from './grid';
 
 /**
  * Rows as the user sees them — what sits side by side on one line, left to right — whatever the
@@ -171,15 +172,30 @@ function chosenItem(area: Element): { text: string; red: boolean } | null {
   };
 }
 
+/** A list of div rows as a table: the header row's cells, then each row's. */
+function gridTable(grid: Grid, max: number): TableResult {
+  const rows = grid.rows
+    .filter((r) => isVisible(r))
+    .map((r) => {
+      const first = Array.from(r.querySelectorAll('*')).find((e) => Array.from(e.childNodes).some((n) => n.nodeType === Node.TEXT_NODE && n.textContent?.trim()));
+      return { cells: cellsOf(r), colour: first ? colourName(getComputedStyle(first).color) : '' };
+    })
+    .filter((r) => r.cells.some(Boolean));
+  return { found: true, headers: grid.header ? cellsOf(grid.header) : [], rows: rows.slice(0, max), total: rows.length };
+}
+
 /** A list on the page (or in the pop-up in front): its rows, and each row's text colour when they differ. */
 export function readTable(near: string, max: number, scope: Element | Document = document): TableResult {
   const want = near.trim().toLowerCase();
   const rowsOf = (t: Element) => Array.from(t.querySelectorAll('tr,[role=row]')).filter((r) => isVisible(r));
   const tables = Array.from(scope.querySelectorAll('table,[role=grid],[role=table]')).filter((t) => isVisible(t) && !t.querySelector('table,[role=grid],[role=table]'));
-  const table =
-    (want && tables.find((t) => (t as HTMLElement).innerText?.toLowerCase().includes(want))) ||
-    (want && tableUnder(want, tables, scope)) ||
-    [...tables].sort((a, b) => rowsOf(b).length - rowsOf(a).length)[0];
+  const tableHas = (t: Element) => ((t as HTMLElement).innerText ?? t.textContent ?? '').toLowerCase().includes(want);
+  const byText = want ? tables.find(tableHas) : undefined;
+  // A list drawn with divs (no table): when no table has what was asked, or there is no table at all.
+  const grids = gridsIn(scope).filter((g) => isVisible(g.container));
+  const grid = !byText ? ((want && grids.find((g) => tableHas(g.container))) || (!tables.length ? [...grids].sort((a, b) => b.rows.length - a.rows.length)[0] : undefined)) : undefined;
+  if (grid) return gridTable(grid, max);
+  const table = byText || (want && tableUnder(want, tables, scope)) || [...tables].sort((a, b) => rowsOf(b).length - rowsOf(a).length)[0];
   if (!table) return { found: false, headers: [], rows: [], total: 0 };
   const plainText = (c: Element) => ((c as HTMLElement).innerText ?? '').replace(/\s+/g, ' ').trim();
   // A cell that is only a sign (“!”, “✓”, “●”): its colour or title is what it says (a priority, a status).

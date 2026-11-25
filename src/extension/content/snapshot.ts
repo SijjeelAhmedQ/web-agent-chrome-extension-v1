@@ -15,6 +15,7 @@ import {
   roleOf,
 } from './elements';
 import { visualRows } from './rows';
+import { gridsIn, rowLine } from './grid';
 import { formFields, formValues, pickerOf, pickerState } from './form';
 import { isAnchor, isButton, isHTML, isInput, isSelect, isTextArea } from './dom';
 
@@ -205,12 +206,40 @@ function pageText(maxChars: number): { text: string; truncated: boolean } {
   const main = document.querySelector<HTMLElement>('main,[role=main]');
   const root = dialog ?? (main && (main.innerText?.length ?? 0) > 200 ? main : document.body);
   const bars = root === main && main ? labelBars(main) : [];
-  const raw = [...bars, root?.innerText ?? '']
-    .join('\n')
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n\s*\n\s*\n+/g, '\n\n')
-    .trim();
+  const raw = gridLines(
+    root,
+    [...bars, root?.innerText ?? '']
+      .join('\n')
+      // A table row's cells: “1 | SWTT2 | Tall Table 2”, not run together (“1 SWTT2 Tall Table 2”).
+      .replace(/[ ]*\t[ \t]*/g, ' | ')
+      .replace(/(?: \| )+$/gm, '')
+      .replace(/^(?: \| )+/gm, ''),
+  );
   return raw.length > maxChars ? { text: raw.slice(0, maxChars), truncated: true } : { text: raw, truncated: false };
+}
+
+const tidy = (s: string) => s.replace(/[ \t]+/g, ' ').replace(/\n\s*\n\s*\n+/g, '\n\n').trim();
+
+/**
+ * The page's text with each row of a list drawn in divs on one line, its cells apart — as it came, one cell a line
+ * (eight lines a row: 300 lines for the Stations list), a count or a column was hard to read off it.
+ */
+function gridLines(root: HTMLElement | null, text: string): string {
+  let out = tidy(text);
+  if (!root) return out;
+  let from = 0;
+  for (const grid of gridsIn(root)) {
+    for (const row of [...(grid.header ? [grid.header] : []), ...grid.rows].slice(0, 400)) {
+      const lines = tidy((row as HTMLElement).innerText ?? '');
+      if (!lines.includes('\n')) continue;
+      const at = out.indexOf(lines, from);
+      if (at < 0) continue;
+      const one = rowLine(row);
+      out = `${out.slice(0, at)}${one}${out.slice(at + lines.length)}`;
+      from = at + one.length;
+    }
+  }
+  return out.replace(/\n\n+(?=[^\n]* \| )/g, '\n');
 }
 
 /** Pop-ups that cover the page: native dialogs, ARIA dialogs, Bootstrap and jQuery UI modals. */
@@ -259,6 +288,27 @@ function frontDialog(): Element | null {
     return !outer || dialogTitle(outer) !== dialogTitle(d);
   });
   return shown.find((d) => inFront(d)) ?? shown[0] ?? null;
+}
+
+/** Lists and menus that float above a pop-up (rendered at the end of the page, outside it): a pop-up's own choices. */
+const FLOATING = '[role=listbox],[role=menu],[role=option],[role=tooltip],[data-portal],[data-floating-ui-portal],[class*=Popover-dropdown],[class*=Combobox-dropdown],[class*=Menu-dropdown],.ant-select-dropdown,.ant-picker-dropdown,.ant-dropdown,.ant-popover';
+
+/** The modal pop-up in front (a drawer or dialog that blocks the page behind it — aria-modal, or a modal <dialog>), whole. */
+export function modalInFront(): Element | null {
+  let front = frontDialog();
+  for (let outer = front?.parentElement?.closest(DIALOGS); outer; outer = outer.parentElement?.closest(DIALOGS)) front = outer;
+  if (!front) return null;
+  const modal = (d: Element) => d.getAttribute('aria-modal') === 'true' || (d.tagName === 'DIALOG' && (() => { try { return d.matches(':modal'); } catch { return false; } })());
+  return modal(front) || front.querySelector('[aria-modal=true]') ? front : null;
+}
+
+/**
+ * A control of the page behind a modal pop-up: the user can't reach it while the pop-up is open (OctansCare's
+ * “New practice member” drawer: the agent opened the list page's Provider filter for the form's Provider — and then
+ * pressed Escape, which could have closed the form it had filled).
+ */
+export function behindModal(el: Element, modal: Element | null = modalInFront()): boolean {
+  return !!modal && !modal.contains(el) && !el.closest(FLOATING) && !el.closest(`#${OVERLAY_HOST_ID}`);
 }
 
 /** A button of the pop-up in front, by its name (“Next”, “Cancel”) — not one of the page behind it. */
@@ -434,7 +484,13 @@ export function barMembers(elements: Element[], isField: (el: Element, i: number
 }
 
 export function snapshot(mode: ReadMode, maxElements: number, maxTextChars: number): PageSnapshot {
-  const { elements, frames } = collectInteractive();
+  const collected = collectInteractive();
+  const { frames } = collected;
+  // A modal pop-up in front: the page behind it can't be used — not listed (a count says it is there). Listed, the
+  // list page's Provider filter was taken for the form's Provider; and it was most of every read of the form.
+  const modal = modalInFront();
+  const behind = modal ? collected.elements.filter((el) => behindModal(el, modal)) : [];
+  const elements = behind.length ? collected.elements.filter((el) => !behind.includes(el)) : collected.elements;
   const described = elements.map(describeElement);
   // On a page of more controls than are listed: first what appeared since the last read and what was
   // listed before (the model knows those) — the newest first, so a tab or panel just opened isn't cut —
@@ -483,7 +539,9 @@ export function snapshot(mode: ReadMode, maxElements: number, maxTextChars: numb
     scroll: scrollState(),
     elements: chosen,
     omitted: described.length - chosen.length,
-    unlisted: described.filter((e) => !listed.has(e.id)).map((e) => e.id),
+    // (Those behind a modal pop-up are not gone: their ids work again once it closes.)
+    unlisted: [...described.filter((e) => !listed.has(e.id)).map((e) => e.id), ...behind.map((el) => idFor(el))],
+    ...(behind.length ? { behindPopup: behind.length } : {}),
     headings: headings(),
     text,
     textTruncated: truncated,

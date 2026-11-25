@@ -181,7 +181,7 @@ describe('Headroom: Claude caches the whole conversation', () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }] }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     const provider = { id: 'p', name: 'OpenRouter', kind: 'openai', preset: 'openrouter', baseUrl, apiKey: 'k', defaultModel: model, createdAt: 1 } as never;
-    await createClient(provider).chat({ model, messages: [{ role: 'system', content: 'sys' }, { role: 'user', content: 'hi' }], tools: [], temperature: 0 });
+    await createClient(provider).chat({ model, messages: [{ role: 'system', content: 'sys' }, { role: 'user', content: 'knowledge, then the request', cache: true }, { role: 'user', content: 'hi' }], tools: [], temperature: 0 });
     return JSON.parse((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as string);
   };
 
@@ -189,6 +189,14 @@ describe('Headroom: Claude caches the whole conversation', () => {
     const body = await bodyFor('anthropic/claude-haiku-5.5');
     expect(body.cache_control).toEqual({ type: 'ephemeral' });
     expect(body.messages[0].content[0].cache_control).toEqual({ type: 'ephemeral' }); // the system prompt's, as before
+    // The task's knowledge and request: a mark of their own — what comes after them may be put in short.
+    expect(body.messages[1].content).toEqual([{ type: 'text', text: 'knowledge, then the request', cache_control: { type: 'ephemeral' } }]);
+    expect(body.messages[2].content).toBe('hi');
+  });
+
+  it('the task’s own mark is Claude’s only: Gemini takes only its last mark, DeepSeek none', async () => {
+    expect((await bodyFor('google/gemini-flash')).messages[1].content).toBe('knowledge, then the request');
+    expect((await bodyFor('deepseek/deepseek-v4-flash')).messages[1].content).toBe('knowledge, then the request');
   });
 
   it('others not: DeepSeek caches by itself, Gemini takes only its last mark', async () => {

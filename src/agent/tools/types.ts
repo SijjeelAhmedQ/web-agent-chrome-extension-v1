@@ -62,6 +62,11 @@ export interface ToolContext {
   diffChars?: number;
   /** Most page text in a read_page overview, for models with a small context (Kaggle's 16K). */
   overviewTextChars?: number;
+  /**
+   * Fields of one form filled one after another (fill_form, or several type calls in one reply): each without its
+   * own highlight and wait for the page to go quiet — the form is read once before them and once after (`formFilled`).
+   */
+  fillingForm?: boolean;
   /** Titles of the pop-ups that came up with the page or tab that opened last. */
   arrivalPopups?: Set<string>;
   /**
