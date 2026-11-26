@@ -11,7 +11,36 @@ import { AgentError } from '../utils/errors';
 export const SPEECH_ENGINES: { id: SpeechEngine; label: string; short: string; note: string }[] = [
   { id: 'whisper', label: 'Whisper large-v3 turbo', short: 'Whisper turbo v3', note: 'Best with non-US accents, and uses your vocabulary to spell names right.' },
   { id: 'omi', label: 'Omi Med STT v1', short: 'Omi Med STT', note: 'A speech model trained for medical dictation.' },
+  { id: 'browser', label: 'Chrome speech', short: 'Chrome speech', note: 'Built into Chrome — no server to run. Chrome sends the audio to Google to recognise it.' },
 ];
+
+/** The languages the microphone listens for. */
+export const SPEECH_LANGUAGES: { id: string; label: string }[] = [
+  { id: 'en-US', label: 'English' },
+  { id: 'ur-PK', label: 'Urdu (اردو)' },
+  { id: 'hi-IN', label: 'Hindi (हिन्दी)' },
+];
+
+/** Chrome's speech recognition, where it has one (side panel, options page). */
+export const browserSpeech = (): (new () => SpeechRecognitionLike) | null => {
+  const w = globalThis as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike; webkitSpeechRecognition?: new () => SpeechRecognitionLike };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+};
+
+/** What of the Web Speech API this uses (its types are not in every TypeScript lib). */
+export interface SpeechRecognitionLike {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onresult: ((e: { resultIndex: number; results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }> }) => void) | null;
+  onerror: ((e: { error: string }) => void) | null;
+  onend: (() => void) | null;
+  onspeechstart?: (() => void) | null;
+  onsoundstart?: (() => void) | null;
+}
 
 export const SAMPLE_RATE = 16000;
 
@@ -64,7 +93,7 @@ async function call(url: string, init: RequestInit, signal?: AbortSignal): Promi
 }
 
 export async function transcribe(voice: VoiceSettings, pcm: Int16Array, signal?: AbortSignal, options: { partial?: boolean } = {}): Promise<Transcript> {
-  const params = new URLSearchParams({ engine: voice.engine });
+  const params = new URLSearchParams({ engine: voice.engine, language: (voice.lang || 'en-US').split('-')[0] });
   // Live text while still speaking; servers that don't know the flag simply ignore it.
   if (options.partial) params.set('partial', '1');
   if (voice.engine === 'whisper' && voice.vocabulary.trim()) params.set('prompt', voice.vocabulary.trim().slice(0, 1500));
@@ -95,4 +124,5 @@ export async function speechHealth(voice: Pick<VoiceSettings, 'serverUrl' | 'key
   };
 }
 
-export const voiceReady = (voice: VoiceSettings): boolean => voice.enabled && !!voice.serverUrl.trim() && !!voice.key.trim();
+export const voiceReady = (voice: VoiceSettings): boolean =>
+  voice.enabled && (voice.engine === 'browser' ? !!browserSpeech() : !!voice.serverUrl.trim() && !!voice.key.trim());

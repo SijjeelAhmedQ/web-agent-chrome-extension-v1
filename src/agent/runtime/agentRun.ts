@@ -27,6 +27,7 @@ import { pageFilledIn, patientFrom, stepFinishes } from './directTask';
 import { choosePrompt, fallbackTier, kindOfTask, parseTier, tierOfModel, tiersFor } from './modelRoute';
 import { FILL_FORM, fieldCall, fieldGroup, fillFormSchema, fillFormTool, goOnButtons, stopsFilling } from './fillForm';
 import { addsRecord, afterSave, asksForOne, asksToDo, saveVerdict, userAskedToDo } from './saveOutcome';
+import { cleanAnswer } from './cleanAnswer';
 import { changedSomething, namedIn, nearlyNamed, pageState, undoTool, wrongRowClick, type ClickRecord } from './clickGuard';
 
 export { namedIn } from './clickGuard';
@@ -205,7 +206,8 @@ export class AgentRun {
     this.persist(true);
 
     try {
-      const answer = this.withCorrections(await this.loop(browser, tab));
+      // Without the model talking to itself (“No further tool call is needed.”) — the user reads what was done.
+      const answer = this.withCorrections(cleanAnswer(await this.loop(browser, tab)));
       this.updateTask({ status: 'done', endedAt: Date.now(), result: answer }, true);
     } catch (err) {
       const e = toAgentError(isAbort(err) || this.abort.signal.aborted ? new AgentError('cancelled', 'Stopped.') : err);

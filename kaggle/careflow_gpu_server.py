@@ -46,6 +46,7 @@ key in CareFlow's Configuration → Where the AI runs → Kaggle GPU.
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import os
 import subprocess
@@ -143,9 +144,9 @@ def load_whisper():
         print(f"Whisper on cuda failed: {exc}", flush=True)
         model, device = WhisperModel(size, device="cpu", compute_type="int8"), "cpu"
 
-    def recognize(pcm: np.ndarray, prompt: str | None = None) -> tuple[str, float | None]:
+    def recognize(pcm: np.ndarray, prompt: str | None = None, language: str = "en") -> tuple[str, float | None]:
         """The text and how sure Whisper is of it (mean log-probability per token, 0 = certain)."""
-        segments = list(model.transcribe(pcm, language="en", beam_size=5, initial_prompt=prompt or None, condition_on_previous_text=False, vad_filter=False, without_timestamps=True)[0])
+        segments = list(model.transcribe(pcm, language=language, beam_size=5, initial_prompt=prompt or None, condition_on_previous_text=False, vad_filter=False, without_timestamps=True)[0])
         text = " ".join(s.text.strip() for s in segments).strip()
         # On near-silence Whisper can read its prompt back ("Patients: ..."): that is not speech.
         if not segments or (prompt and len(text) > 20 and text.rstrip(".") in prompt):
@@ -545,7 +546,7 @@ def _recognize_one_at_a_time(recognize, pcm, prompt):
 
 
 @app.post("/transcribe")
-async def transcribe(request: Request, engine: str = "", prompt: str = "", x_careflow_key: str = Header(default="")) -> dict:
+async def transcribe(request: Request, engine: str = "", prompt: str = "", language: str = "en", x_careflow_key: str = Header(default="")) -> dict:
     """16-bit PCM in; `engine` picks the speech model (default: the first loaded), `prompt` is the app's vocabulary."""
     check_key(x_careflow_key)
     if not ENGINES:
@@ -553,6 +554,9 @@ async def transcribe(request: Request, engine: str = "", prompt: str = "", x_car
     if engine and engine not in ENGINES:
         raise HTTPException(status_code=400, detail=f"No {engine} speech model here (loaded: {', '.join(ENGINES)})")
     recognize = ENGINES[engine or DEFAULT][2]
+    # What is spoken: Whisper also knows Urdu and Hindi; the other engines are English only.
+    if (engine or DEFAULT) == "whisper" and language in ("ur", "hi"):
+        recognize = functools.partial(recognize, language=language)
     body = await request.body()
     if len(body) % 2:
         raise HTTPException(status_code=400, detail="Expected 16-bit PCM")

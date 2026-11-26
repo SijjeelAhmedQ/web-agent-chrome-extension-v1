@@ -312,7 +312,8 @@ export interface CustomToolConfig {
   updatedAt: number;
 }
 
-export type SpeechEngine = 'whisper' | 'omi';
+/** whisper and omi: the speech server (the Kaggle notebook); browser: Chrome's own speech recognition (Web Speech API). */
+export type SpeechEngine = 'whisper' | 'omi' | 'browser';
 
 /** Voice input: speech is recorded in the side panel and transcribed by a speech server (the Kaggle notebook). */
 export interface VoiceSettings {
@@ -321,12 +322,14 @@ export interface VoiceSettings {
   serverUrl: string;
   key: string;
   engine: SpeechEngine;
+  /** The language spoken: en-US, ur-PK, hi-IN… (Chrome's speech takes it as it is; the server, its first part). */
+  lang: string;
   /** Names and terms to expect (Whisper only) — patients, drugs, products… */
   vocabulary: string;
   /** Send the request as soon as the speech is transcribed (push-to-talk). */
   autoSend: boolean;
   /**
-   * push      – click to start, click to stop
+   * push      – tap the microphone: a listening dialog opens, and a pause sends what you said (YouTube-style)
    * handsfree – the microphone stays on; each pause ends a command, which runs by itself
    */
   mode: 'push' | 'handsfree';
@@ -336,6 +339,8 @@ export interface VoiceSettings {
   livePartials: boolean;
   /** Hands-free: say “confirm” / “cancel” to answer approvals, “stop” to stop the agent. */
   voiceCommands: boolean;
+  /** Spoken replies (Chrome's voices): a request made by voice gets its approval question, and what was done, said aloud. */
+  speak: boolean;
 }
 
 /** The user's edits to a built-in tool (Configuration → Tools). Empty fields keep the default. */

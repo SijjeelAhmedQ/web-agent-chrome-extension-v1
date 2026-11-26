@@ -1,9 +1,12 @@
 import { GraduationCap, History, ListOrdered, Settings2, SquarePen, X } from 'lucide-react';
 import { parseVoiceCommand } from '@/shared/voice/commands';
+import { matchNavigation, navTargets } from '@/shared/voice/navigate';
+import { approvalQuestion, say } from '@/shared/voice/say';
 import { voiceReady } from '@/shared/voice/speech';
+import { knowledgeBaseFor } from '@/agent/crawler/merge';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { sitesFor } from '@/agent/tools/registry';
-import { matchesSite } from '@/shared/utils';
+import { matchesSite, siteOf } from '@/shared/utils';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { chatActions } from '@/store/chatSlice';
 import { IconButton } from '../../components/IconButton';
@@ -105,27 +108,85 @@ export function SidePanel() {
     return [t.approval, ...(t.members ?? []).map((m) => m.approval)].filter((a): a is NonNullable<typeof a> => !!a);
   })();
 
+  const voice = settings.voice;
+  const speak = (text: string) => {
+    if (voice.speak) void say(text, voice.lang);
+  };
+  /** The last request came by voice: its approval questions are asked aloud too. */
+  const byVoice = useRef(false);
+
+  /** “Open stations”: straight to the page the site's map knows, with no model — shown in the chat like any request. */
+  const goByVoice = (text: string): boolean => {
+    const kb = knowledgeBaseFor(config, tab.url);
+    if (!kb || tab.id == null || tab.restricted || siteMode === 'blocked') return false;
+    const target = matchNavigation(text, navTargets(kb));
+    if (!target) return false;
+    let url: string;
+    try {
+      url = new URL(target.path, tab.url).href;
+    } catch {
+      return false;
+    }
+    const now = Date.now();
+    const id = `nav-${now}`;
+    const result = `Opened **${target.label}**.`;
+    void chrome.tabs.update(tab.id, { url });
+    dispatch(
+      chatActions.localTurn({
+        id,
+        request: text,
+        agentId: agent.id,
+        task: { id, request: text, agentId: agent.id, agentName: agent.name, url, site: siteOf(url), title: target.label, status: 'done', startedAt: now, endedAt: now, result, steps: [] },
+      }),
+    );
+    setView('chat');
+    speak(`Opening ${target.label}.`);
+    return true;
+  };
+
   const onVoiceCommand = (text: string) => {
-    const intent = settings.voice.voiceCommands ? parseVoiceCommand(text, { approvalPending: pendingApprovals.length > 0, running }) : { kind: 'request' as const, text };
+    const intent = voice.voiceCommands ? parseVoiceCommand(text, { approvalPending: pendingApprovals.length > 0, running }) : { kind: 'request' as const, text };
     switch (intent.kind) {
       case 'approve':
         respond(pendingApprovals[0].id, true);
+        speak('Okay.');
         return;
       case 'approve-all':
         pendingApprovals.forEach((a) => respond(a.id, true));
+        speak('Okay.');
         return;
       case 'decline':
         respond(pendingApprovals[0].id, false);
+        speak('Cancelled.');
         return;
       case 'stop':
         setQueued([]);
         stop();
+        speak('Stopped.');
         return;
       default:
+        byVoice.current = true;
         if (running) setQueued((q) => [...q, intent.text]);
-        else onSend(intent.text);
+        else if (!goByVoice(intent.text)) onSend(intent.text);
     }
   };
+
+  // A request made by voice that needs an OK: the question is said aloud, and the dialog listens for yes or no.
+  const asking = pendingApprovals[0];
+  useEffect(() => {
+    if (!asking || !byVoice.current || !voiceReady(voice)) return;
+    const question = approvalQuestion(asking);
+    const handsFree = voice.mode === 'handsfree' && voice.engine !== 'browser';
+    let gone = false;
+    void (voice.speak ? say(question, voice.lang) : Promise.resolve()).then(() => {
+      // Hands-free is listening already; tap to talk opens the dialog for the answer.
+      if (!gone && !handsFree && voice.voiceCommands) composer.current?.listen(question);
+    });
+    return () => {
+      gone = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asking?.id]);
 
   // Commands spoken while the agent was busy run, in order, as soon as it's free.
   useEffect(() => {
@@ -194,7 +255,7 @@ export function SidePanel() {
               canAct={canAct}
               voiceHint={
                 voiceReady(settings.voice)
-                  ? settings.voice.mode === 'handsfree'
+                  ? settings.voice.mode === 'handsfree' && settings.voice.engine !== 'browser'
                     ? 'Or just talk: click the mic once, then pause after each request.'
                     : 'Or click the mic and say what you need.'
                   : undefined
@@ -236,7 +297,7 @@ export function SidePanel() {
             </button>
           </div>
         )}
-        <Composer ref={composer} tab={tab} running={running} disabled={crawler.active} siteMode={siteMode} voice={settings.voice} onSend={onSend} onStop={stop} onVoiceCommand={onVoiceCommand} approvalPending={pendingApprovals.length > 0} />
+        <Composer ref={composer} tab={tab} running={running} disabled={crawler.active} siteMode={siteMode} voice={settings.voice} onSend={(t) => { byVoice.current = false; onSend(t); }} onStop={stop} onVoiceCommand={onVoiceCommand} approvalPending={pendingApprovals.length > 0} />
       </footer>
     </div>
   );

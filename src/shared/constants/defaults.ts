@@ -112,7 +112,7 @@ export const DEFAULT_SETTINGS: Settings = {
   maxTextChars: 12000,
   realClicks: true,
   maxTaskCost: 0.05,
-  voice: { enabled: false, serverUrl: '', key: '', engine: 'whisper', vocabulary: '', autoSend: false, mode: 'handsfree', pauseMs: 1000, livePartials: true, voiceCommands: true },
+  voice: { enabled: false, serverUrl: '', key: '', engine: 'whisper', lang: 'en-US', vocabulary: '', autoSend: false, mode: 'handsfree', pauseMs: 1000, livePartials: true, voiceCommands: true, speak: true },
 };
 
 /** The Knowledge Gather Agent's defaults: 50 pages, then 25 more each time the user says so. */

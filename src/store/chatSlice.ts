@@ -81,6 +81,10 @@ export const chatSlice = createSlice({
       state.turns.push({ ...action.payload, task: null, thinking: true, approval: null });
       state.running = true;
     },
+    /** A turn done in the panel itself, with no model (a spoken “open stations”): already finished. */
+    localTurn(state, action: PayloadAction<{ id: string; request: string; agentId: string; task: TaskRecord }>) {
+      state.turns.push({ ...action.payload, thinking: false, approval: null });
+    },
     taskUpdated(state, action: PayloadAction<{ turnId: string; task: TaskRecord }>) {
       const turn = state.turns.find((t) => t.id === action.payload.turnId);
       if (turn) turn.task = action.payload.task;

@@ -86,7 +86,9 @@ export function useRuntimeStatus(agent: AgentConfig, config: AppConfig, url = ''
     if (provider) setActionsHealth(CHECKING);
     if (voiceOn) setVoiceHealth(CHECKING);
     const actions = provider ? checkActions(provider, model, ctrl.signal) : Promise.resolve(null);
-    const speech = voiceOn
+    const speech = voiceOn && voice.engine === 'browser'
+      ? Promise.resolve<Health>({ state: 'ok', message: 'Built into Chrome — no server needed' })
+      : voiceOn
       ? speechHealth(voice, ctrl.signal)
           .then((h): Health => {
             const engine = SPEECH_ENGINES.find((e) => e.id === voice.engine)!;
@@ -130,7 +132,7 @@ export function useRuntimeStatus(agent: AgentConfig, config: AppConfig, url = ''
     : null;
   const engine = SPEECH_ENGINES.find((e) => e.id === voice.engine)!;
   const speech: RuntimePart | null = voiceOn
-    ? { name: engine.short, id: engine.label, location: locationOf(speechBase(voice.serverUrl), config.providers.some((p) => p.preset === 'kaggle' && speechBase(p.baseUrl) === speechBase(voice.serverUrl)) ? 'kaggle' : undefined), connection: 'Voice', health: voiceHealth }
+    ? { name: engine.short, id: engine.label, location: voice.engine === 'browser' ? { kind: 'cloud', label: 'Google, through Chrome', host: '' } : locationOf(speechBase(voice.serverUrl), config.providers.some((p) => p.preset === 'kaggle' && speechBase(p.baseUrl) === speechBase(voice.serverUrl)) ? 'kaggle' : undefined), connection: 'Voice', health: voiceHealth }
     : null;
 
   return { actions, voice: speech, checkedAt, refresh };

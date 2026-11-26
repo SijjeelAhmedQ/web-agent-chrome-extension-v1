@@ -4,15 +4,16 @@
  */
 export type VoiceIntent = { kind: 'approve' } | { kind: 'approve-all' } | { kind: 'decline' } | { kind: 'stop' } | { kind: 'request'; text: string };
 
-const APPROVE = /^(yes|yeah|yep|yup|sure|ok|okay|confirm|confirmed|approve|approved|allow|go ahead|do it|save|save it|proceed)( it)?( please)?$/;
+// Also Roman Urdu / Hindi (“haan kar do”, “nahi”) and what Chrome writes for them in Urdu and Hindi script.
+const APPROVE = /^(yes|yeah|yep|yup|sure|ok|okay|confirm|confirmed|approve|approved|allow|go ahead|do it|save|save it|proceed|haan|han|haa|ji|ji haan|jee|theek hai|thik hai|kar do|kardo|ہاں|جی|جی ہاں|ٹھیک ہے|हाँ|हां|जी|जी हाँ|ठीक है)( it| kar do| ji)?( please)?$/;
 const APPROVE_ALL = /^(yes to all|approve all|confirm all|allow all|approve everything|confirm everything)( please)?$/;
-const DECLINE = /^(no|nope|cancel|decline|deny|reject|don'?t|do not|skip|skip it)( it)?( please)?$/;
+const DECLINE = /^(no|nope|cancel|decline|deny|reject|don'?t|do not|skip|skip it|nahi|nahin|nai|na|mat karo|rehne do|نہیں|نہ|नहीं|ना)( it| ji)?( please)?$/;
 const STOP = /^(stop|stop it|stop now|stop the agent|stop the task|cancel the task|cancel task|abort|halt)( please)?$/;
 
 export const normalizeSpeech = (text: string) =>
   text
     .toLowerCase()
-    .replace(/[“”".,!?;:]/g, '')
+    .replace(/[“”".,!?;:۔।؟]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 

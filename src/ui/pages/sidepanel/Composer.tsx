@@ -1,17 +1,20 @@
 import { Tooltip } from 'antd';
-import { ArrowUp, Ban, Globe, Loader2, Lock, Mic, MicOff, Square, X } from 'lucide-react';
+import { ArrowUp, Ban, Globe, Lock, Mic, MicOff, Square, X } from 'lucide-react';
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import type { VoiceSettings } from '@/shared/types/config';
 import { siteOf } from '@/shared/utils';
 import { SPEECH_ENGINES, voiceReady } from '@/shared/voice/speech';
 import type { ActiveTab } from '../../hooks/useActiveTab';
 import { useHandsFree } from '../../hooks/useHandsFree';
-import { useVoiceInput } from '../../hooks/useVoiceInput';
+import { useVoiceDialog } from '../../hooks/useVoiceDialog';
 import { openConfiguration } from '../../utils/navigation';
+import { VoiceDialog } from './VoiceDialog';
 
 export interface ComposerHandle {
   fill: (text: string) => void;
   focus: () => void;
+  /** Open the tap-to-talk dialog (e.g. to hear the answer to a question just spoken), with that question in it. */
+  listen: (question?: string) => void;
 }
 
 interface Props {
@@ -29,7 +32,6 @@ interface Props {
 }
 
 const MAX_HEIGHT = 180;
-const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ tab, running, disabled, siteMode, voice, onSend, onStop, onVoiceCommand, approvalPending }, ref) {
   const [value, setValue] = useState('');
@@ -44,19 +46,17 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ ta
       el.setSelectionRange(text.length, text.length);
     });
 
-  const mic = useVoiceInput(voice, (t) => {
-    const spoken = t.text || t.heard || '';
-    setNotice(t.unclear ? 'Not sure I heard that right — check the text before sending.' : null);
-    if (voice.autoSend && !t.unclear && !running && !value.trim()) {
-      onSend(spoken);
-      return;
-    }
-    const next = value.trim() ? `${value.trimEnd()} ${spoken}` : spoken;
-    setValue(next);
-    focusEnd(next);
+  // Tap to talk: a pause ends what you say, and it runs as you said it — shown in the chat like a typed request.
+  const [question, setQuestion] = useState<string | null>(null);
+  const dialog = useVoiceDialog(voice, (text) => {
+    setQuestion(null);
+    setNotice(null);
+    onVoiceCommand(text);
   });
+  const talking = dialog.state !== 'closed';
 
-  const handsFreeMode = voice.mode === 'handsfree';
+  // Chrome's own speech has no hands-free listening here: its microphone button opens the dialog.
+  const handsFreeMode = voice.mode === 'handsfree' && voice.engine !== 'browser';
   const live = useHandsFree(voice, onVoiceCommand);
   const listening = live.state !== 'off';
 
@@ -67,6 +67,11 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ ta
     },
     focus() {
       area.current?.focus();
+    },
+    listen(q) {
+      if (!voiceReady(voice) || listening) return;
+      setQuestion(q ?? null);
+      void dialog.open();
     },
   }));
 
@@ -93,15 +98,18 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ ta
   };
 
   const ready = voiceReady(voice);
-  const recording = mic.state === 'recording';
-  const transcribing = mic.state === 'transcribing';
-  const engine = SPEECH_ENGINES.find((e) => e.id === voice.engine)?.label ?? 'speech';
+  const engine = SPEECH_ENGINES.find((e) => e.id === voice.engine)?.short ?? 'speech';
 
   const onMic = () => {
     if (!ready) return void openConfiguration('/voice');
     if (handsFreeMode) return void (listening ? live.stop() : live.start());
-    if (recording) return void mic.stop();
-    if (!transcribing) void mic.start();
+    setQuestion(null);
+    void dialog.open();
+  };
+
+  const closeDialog = () => {
+    setQuestion(null);
+    dialog.cancel();
   };
 
   // Turning voice off or switching to push-to-talk ends hands-free listening.
@@ -133,7 +141,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ ta
     </span>
   ) : null;
 
-  const voiceMessage = mic.needsPermission || live.needsPermission ? (
+  const voiceMessage = dialog.needsPermission || live.needsPermission ? (
     <>
       Chrome needs your OK to use the microphone.{' '}
       <button type="button" className="link-btn" onClick={() => void openConfiguration('/voice')}>
@@ -141,12 +149,23 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ ta
       </button>
     </>
   ) : (
-    mic.error ?? live.notice ?? notice
+    live.notice ?? notice
   );
 
   return (
-    <div className={`composer ${running ? 'is-running' : ''} ${recording ? 'is-recording' : ''}`}>
-      {context && !recording && <div className="composer-top">{context}</div>}
+    <div className={`composer ${running ? 'is-running' : ''}`}>
+      <VoiceDialog
+        state={dialog.state}
+        final={dialog.final}
+        interim={dialog.interim}
+        level={dialog.level}
+        error={dialog.error}
+        question={question}
+        engine={engine}
+        onRetry={() => void dialog.open()}
+        onCancel={closeDialog}
+      />
+      {context && <div className="composer-top">{context}</div>}
 
       {listening && (
         <div className={`live-bar ${live.state}`} role="status" aria-live="polite">
@@ -174,52 +193,22 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ ta
         </div>
       )}
 
-      {recording || transcribing ? (
-        <div className="voice-bar" role="status" aria-live="polite">
-          {recording ? (
-            <>
-              <span className="rec-dot" aria-hidden />
-              <span className="voice-label">Listening</span>
-              <span className="voice-meter" aria-hidden>
-                {[0.55, 0.85, 1, 0.75, 0.5].map((w, i) => (
-                  <span key={i} style={{ transform: `scaleY(${Math.max(0.15, Math.min(1, mic.level * w * 1.6))})` }} />
-                ))}
-              </span>
-              <span className="voice-time">{clock(mic.seconds)}</span>
-              <button type="button" className="icon-btn small" aria-label="Cancel recording" onClick={mic.cancel}>
-                <X size={15} />
-              </button>
-            </>
-          ) : (
-            <>
-              <Loader2 size={15} className="spin" aria-hidden />
-              <span className="voice-label">Transcribing with {engine}…</span>
-              <button type="button" className="icon-btn small" aria-label="Cancel transcription" onClick={mic.cancel}>
-                <X size={15} />
-              </button>
-            </>
-          )}
-        </div>
-      ) : (
-        <>
-          <label htmlFor="composer-input" className="sr-only">
-            Message
-          </label>
-          <textarea
-            id="composer-input"
-            ref={area}
-            rows={1}
-            value={value}
-            placeholder={running ? 'Working… you can type your next request' : 'Ask anything, or describe a task…'}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={onKeyDown}
-            disabled={disabled}
-            spellCheck
-          />
-        </>
-      )}
+      <label htmlFor="composer-input" className="sr-only">
+        Message
+      </label>
+      <textarea
+        id="composer-input"
+        ref={area}
+        rows={1}
+        value={value}
+        placeholder={running ? 'Working… you can type your next request' : 'Ask anything, or describe a task…'}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={onKeyDown}
+        disabled={disabled}
+        spellCheck
+      />
 
-      {voiceMessage && !recording && !transcribing && (
+      {voiceMessage && (
         <div className="voice-note" role="alert">
           <span>{voiceMessage}</span>
           <button
@@ -227,7 +216,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ ta
             className="icon-btn small"
             aria-label="Dismiss"
             onClick={() => {
-              mic.clearError();
+              dialog.clearPermission();
               live.clearNotice();
               setNotice(null);
             }}
@@ -246,28 +235,21 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ ta
                 ? listening
                   ? 'Stop listening'
                   : `Talk hands-free (${engine}) — each pause sends a command`
-                : recording
-                  ? 'Stop and transcribe'
-                  : `Speak (${engine})`
+                : `Speak (${engine})`
           }
         >
           <button
             type="button"
-            className={`icon-btn mic-btn ${recording ? 'on' : ''} ${listening ? 'live' : ''}`}
-            aria-label={!ready ? 'Set up voice input' : handsFreeMode ? (listening ? 'Stop listening' : 'Start hands-free voice') : recording ? 'Stop recording and transcribe' : 'Start voice input'}
-            aria-pressed={recording || listening}
+            className={`icon-btn mic-btn ${talking ? 'on' : ''} ${listening ? 'live' : ''}`}
+            aria-label={!ready ? 'Set up voice input' : handsFreeMode ? (listening ? 'Stop listening' : 'Start hands-free voice') : 'Start voice input'}
+            aria-pressed={talking || listening}
             onClick={onMic}
-            disabled={transcribing}
           >
-            {listening ? <MicOff size={16} /> : recording ? <Square size={13} fill="currentColor" strokeWidth={0} /> : <Mic size={17} />}
+            {listening ? <MicOff size={16} /> : <Mic size={17} />}
           </button>
         </Tooltip>
         <span className="composer-hint" aria-hidden>
-          {recording ? (
-            <>
-              Click <span className="kbd">■</span> when you’re done
-            </>
-          ) : running ? (
+          {running ? (
             <>
               <span className="kbd">Esc</span> to stop
             </>
@@ -283,7 +265,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ ta
             Stop
           </button>
         ) : (
-          <button type="button" className="send-btn" onClick={submit} disabled={!value.trim() || disabled || recording || transcribing} aria-label="Send">
+          <button type="button" className="send-btn" onClick={submit} disabled={!value.trim() || disabled} aria-label="Send">
             <ArrowUp size={17} strokeWidth={2.4} />
           </button>
         )}

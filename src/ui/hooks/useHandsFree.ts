@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { VoiceSettings } from '@/shared/types/config';
 import { toAgentError } from '@/shared/utils/errors';
+import { onSpeaking } from '@/shared/voice/say';
 import { transcribe } from '@/shared/voice/speech';
 import { ContinuousListener } from '../voice/listener';
 
@@ -113,6 +114,9 @@ export function useHandsFree(voice: VoiceSettings, onCommand: (text: string) => 
     listener.current = l;
     setState('listening');
   }, []);
+
+  // While the extension speaks (an approval question, “Okay.”), the microphone doesn't take it down as a command.
+  useEffect(() => onSpeaking((on) => listener.current?.setPaused(on)), []);
 
   // Restart with the new pause length when it changes.
   useEffect(() => {

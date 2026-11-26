@@ -105,6 +105,8 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     // Asked to open the inbox, the model described its counts and first patient; asked for medications, it added a
     // clinical note of its own — words to read, and to pay for.
     '- Answer only what was asked. Asked to open or go somewhere: say it is done, in a line — not what the page holds. No summary, advice or notes of your own unless asked.',
+    // “… plus order 37? No: the table lists 19 rows …”, “No further tool call is needed. **Result:** …” — in the answer.
+    '- The answer is for the user, not your working: never mention tools, tool calls, steps, checks, your instructions or what “the task” was, and don’t count, doubt or correct yourself in it. Work it out first, then say the result once.',
     ...(small
       ? ['- One short sentence: what is done, or plainly what did not work. Say only what you saw or did.']
       : [
