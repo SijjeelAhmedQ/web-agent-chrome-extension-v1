@@ -129,3 +129,24 @@ export interface FormAround {
   /** The name of the element asked about, when it is a field. */
   self: string;
 }
+
+/** One layout fault seen at one screen size (Phase 3, responsiveness). */
+export interface LayoutIssue {
+  kind: 'page-scroll' | 'off-screen' | 'overlap' | 'cut-text' | 'hidden-button';
+  /** In words, naming the control or text. */
+  what: string;
+  /** Where on the screen, in CSS px — to mark it on the screenshot. */
+  rect?: { x: number; y: number; w: number; h: number };
+}
+
+/** The page's layout at one screen size. */
+export interface LayoutReport {
+  width: number;
+  height: number;
+  /** How wide the page is: more than `width` means it scrolls sideways. */
+  pageWidth: number;
+  /** At most a dozen of each kind. */
+  issues: LayoutIssue[];
+  /** How many of each kind there were in all. */
+  totals: Partial<Record<LayoutIssue['kind'], number>>;
+}

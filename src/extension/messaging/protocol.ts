@@ -1,4 +1,4 @@
-import type { DialogInfo, ElementInfo, ElementRisk, FormAround, PageSnapshot, ReadMode, TableResult, VisualRow } from '@/shared/types/page';
+import type { DialogInfo, ElementInfo, ElementRisk, FormAround, LayoutReport, PageSnapshot, ReadMode, TableResult, VisualRow } from '@/shared/types/page';
 
 /**
  * Typed request/response protocol between the agent (side panel) and the content script.
@@ -11,6 +11,7 @@ export type ScrollDirection = 'up' | 'down' | 'top' | 'bottom';
 
 export type ContentRequest =
   | { kind: 'ping' }
+  | { kind: 'layoutCheck' }
   | { kind: 'snapshot'; mode: ReadMode; maxElements: number; maxTextChars: number }
   | { kind: 'find'; query: string; limit: number }
   | { kind: 'findText'; text: string; near?: string; limit: number }
@@ -147,6 +148,7 @@ export interface TextResult {
 
 export interface ResponseMap {
   ping: { version: number; url: string };
+  layoutCheck: LayoutReport;
   snapshot: PageSnapshot;
   find: FindResult;
   findText: TextResult;

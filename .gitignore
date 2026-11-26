@@ -10,3 +10,4 @@ tests/indici-live/
 
 # Token benchmark results: task answers can name patients
 token-bench-results.jsonl
+screen-bench-results.jsonl

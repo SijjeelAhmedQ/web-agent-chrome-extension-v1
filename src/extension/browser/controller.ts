@@ -2,6 +2,7 @@ import { LEAVE_GUARD } from './leaveGuard';
 import { describeCall, NET_WATCH, type NetCall } from './netWatch';
 import { CHANNEL, type ContentError, type ContentRequest, type ContentResponse, type Envelope, type ResponseMap, type ClickEffect } from '../messaging/protocol';
 import { sleep } from '@/shared/utils';
+import type { LayoutReport } from '@/shared/types/page';
 
 /**
  * The agent's handle on the browser. Runs in the side panel (an extension page with full
@@ -398,6 +399,40 @@ export class BrowserController {
       chrome.tabs.onCreated.removeListener(onCreated);
     }
     return opened;
+  }
+
+  /**
+   * The tab shown at each screen size in turn (Chrome's device emulation, as DevTools' device toolbar does): the
+   * page's layout faults there and a screenshot. The tab is put back to its own size after, whatever happens.
+   */
+  async checkViewports(sizes: { width: number; height: number }[], signal?: AbortSignal): Promise<{ report: LayoutReport; shot: string }[]> {
+    const target = { tabId: (await this.currentTab()).id! };
+    try {
+      await chrome.debugger.attach(target, '1.3');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new PageError('unsupported', 'The screen sizes can’t be tried on this tab right now (are DevTools open on it?).', msg);
+    }
+    const out: { report: LayoutReport; shot: string }[] = [];
+    try {
+      for (const { width, height } of sizes) {
+        if (signal?.aborted) break;
+        const mobile = width < 800;
+        await chrome.debugger.sendCommand(target, 'Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile, screenWidth: width, screenHeight: height });
+        await chrome.debugger.sendCommand(target, 'Emulation.setTouchEmulationEnabled', { enabled: mobile }).catch(() => undefined);
+        // The page lays itself out again (media queries, a resize handler that swaps a menu for a burger).
+        await sleep(700);
+        await this.send({ kind: 'settle', quietMs: 400, timeoutMs: 3000 }).catch(() => null);
+        const report = await this.send({ kind: 'layoutCheck' });
+        const shot = (await chrome.debugger.sendCommand(target, 'Page.captureScreenshot', { format: 'jpeg', quality: 60 }).catch(() => null)) as { data?: string } | null;
+        out.push({ report, shot: shot?.data ?? '' });
+      }
+    } finally {
+      await chrome.debugger.sendCommand(target, 'Emulation.clearDeviceMetricsOverride').catch(() => undefined);
+      await chrome.debugger.sendCommand(target, 'Emulation.setTouchEmulationEnabled', { enabled: false }).catch(() => undefined);
+      await chrome.debugger.detach(target).catch(() => undefined);
+    }
+    return out;
   }
 
   /**

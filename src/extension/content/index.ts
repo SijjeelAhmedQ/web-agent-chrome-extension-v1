@@ -5,6 +5,7 @@ import { formErrors } from './formErrors';
 import { formAround } from './form';
 import { hover, openMenu } from './hover';
 import { setPresence } from './overlay';
+import { layoutCheck } from './layoutCheck';
 import { areaText, readTable } from './rows';
 import { fetchPdf, popupControl, describeRisk, find, findText, snapshot } from './snapshot';
 
@@ -21,6 +22,8 @@ declare global {
 
 async function handle(request: ContentRequest): Promise<unknown> {
   switch (request.kind) {
+    case 'layoutCheck':
+      return layoutCheck();
     case 'ping':
       return { version: CONTENT_VERSION, url: location.href };
     case 'snapshot':

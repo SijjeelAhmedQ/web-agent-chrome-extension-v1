@@ -7,6 +7,7 @@ import { REFUSED_NOTE } from '../runtime/followUp';
 import { formatDialogs, formatElement, formatSnapshot } from './format';
 import { memoOf, pageDiff } from './pageDiff';
 import { statusSummary } from './recordStatus';
+import { reportHtml, reportMarkdown, SCREEN_SIZES, summary } from '../responsive/report';
 import type { TextResult } from '@/extension/messaging/protocol';
 import type { FormAround, TableResult, VisualRow } from '@/shared/types/page';
 import type { AgentTool, ApprovalRequest, ToolContext, ToolOutcome } from './types';
@@ -1287,8 +1288,57 @@ const readTable: AgentTool<{ near: string; max: number }> = {
   },
 };
 
+/** A file saved to Downloads/WebAgent: its name there, or null when it couldn't be saved. */
+async function saveDownload(name: string, text: string, type: string): Promise<string | null> {
+  try {
+    const url = `data:${type};charset=utf-8,${encodeURIComponent(text)}`;
+    await chrome.downloads.download({ url, filename: `WebAgent/${name}`, conflictAction: 'uniquify', saveAs: false });
+    return `Downloads/WebAgent/${name}`;
+  } catch {
+    return null;
+  }
+}
+
+const checkResponsive: AgentTool<{ sizes: string[] }> = {
+  name: 'check_responsive',
+  description:
+    'Show the current page at phone (375×667), tablet (768×1024), laptop (1366×768) and desktop (1920×1080) sizes and report what breaks: sideways scrolling, controls off the screen or overlapping, cut-off text, covered buttons. Saves a report with screenshots.',
+  schema: z.object({
+    sizes: z
+      .array(z.string())
+      .optional()
+      .default([])
+      .describe('Only these, by name: "phone", "tablet", "laptop", "desktop" (all when empty)'),
+  }),
+  risk: 'read',
+  touchesPage: true,
+  label: (a) => (a.sizes.length ? `Checking the page at ${a.sizes.join(', ')} size` : 'Checking the page at phone, tablet, laptop and desktop sizes'),
+  async execute(a, ctx) {
+    const wanted = a.sizes.map((s) => s.toLowerCase().trim());
+    const sizes = SCREEN_SIZES.filter((s) => !wanted.length || wanted.some((w) => s.name.toLowerCase().startsWith(w) || w.includes(s.name.toLowerCase()) || w === `${s.width}x${s.height}`));
+    if (!sizes.length) return { output: `No such size: ${a.sizes.join(', ')}. Use phone, tablet, laptop or desktop.` };
+    const tab = await ctx.browser.currentTab();
+    const shown = await ctx.browser.checkViewports(sizes, ctx.signal);
+    const results = shown.map((r, i) => ({ size: sizes[i], ...r }));
+    const page = { url: tab.url ?? '', title: tab.title ?? '' };
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+    const host = (() => {
+      try {
+        return new URL(page.url).hostname.replace(/^www\./, '');
+      } catch {
+        return 'page';
+      }
+    })();
+    const html = await saveDownload(`responsive-${host}-${stamp}.html`, reportHtml(results, page), 'text/html');
+    const md = await saveDownload(`responsive-${host}-${stamp}.md`, reportMarkdown(results, page), 'text/markdown');
+    const saved = html ? ` The report with screenshots is saved as ${html}${md ? ` (and ${md.split('/').pop()})` : ''} — say so to the user.` : ' The report could not be saved.';
+    const problems = results.filter((r) => r.report.issues.length).length;
+    return { output: `${summary(results)}${saved}`, note: problems ? `Problems at ${problems} of ${results.length} sizes` : `No problems at ${results.length} sizes` };
+  },
+};
+
 export const BROWSER_TOOLS: AgentTool<any>[] = [
-  readPage, findElement, scroll, wait, click, clickText, readTable, readRecords, hover, openMenu, type, clear, selectOption, pressKey, navigate, goBack, goForward, listTabs, openTab, switchTab, closeTab,
+  readPage, findElement, scroll, wait, click, clickText, readTable, checkResponsive, readRecords, hover, openMenu, type, clear, selectOption, pressKey, navigate, goBack, goForward, listTabs, openTab, switchTab, closeTab,
 ];
 
 // Keep the UI catalogue and the implementations in lock-step.
