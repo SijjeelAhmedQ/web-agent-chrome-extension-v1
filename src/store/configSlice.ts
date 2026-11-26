@@ -135,7 +135,7 @@ export const configSlice = createSlice({
       const now = Date.now();
       let site = state.config.sites.find((s) => s.sites.some((p) => p.toLowerCase() === host.toLowerCase())) ?? state.config.sites.find((s) => matchesSite(`https://${host}/`, s.sites));
       if (!site) {
-        site = { id: uid('site_'), name: kb.name, description: `Learned by the Knowledge Gather Agent (${kb.entries.length} entries).`, color: '#0EA5E9', sites: [...kb.sites], enabled: true, providerId: null, model: '', agentIds: [], skillIds: [], disabledSkillIds: [], customToolIds: [], disabledToolIds: [], neverClick: [], askBefore: [], askPopups: [], knowledge: [], createdAt: now, updatedAt: now };
+        site = { id: uid('site_'), name: kb.name, description: 'Learned by the Knowledge Gather Agent.', color: '#0EA5E9', sites: [...kb.sites], enabled: true, providerId: null, model: '', agentIds: [], skillIds: [], disabledSkillIds: [], customToolIds: [], disabledToolIds: [], neverClick: [], askBefore: [], askPopups: [], knowledge: [], createdAt: now, updatedAt: now };
         state.config.sites.push(site);
       }
       if (!site.agentIds.some((id) => state.config.agents.some((a) => a.id === id))) {

@@ -86,14 +86,15 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     '- Lists and tables are often paginated or filtered. If the item you need is not visible, use the page’s search box or go to the next page. Never assume, guess or reconstruct details (names, IDs, phone numbers, dates) of something you have not seen.',
     '- Earlier answers in this conversation can be out of date. When asked to do something again, check the page now and do it; don’t repeat an earlier answer.',
     ...(small ? [] : ['- Before saying something was saved, submitted or sent, confirm it on the page (a success message, the new record in a list, a changed URL). If a tool result says the form was not submitted or shows error messages, fix the problem or tell the user.']),
-    '- Ask the user a short question instead of guessing when the request is ambiguous or needs information only they have (personal details, choices, credentials).',
+    // A form's Location got coordinates the user never gave; a member got a made-up phone number.
+    `- Never make up a value the user didn’t give (names, phone numbers, dates, addresses, coordinates, IDs). When the request is ambiguous or a value you need is missing — a required field, which of several records — ${has('ask_user') && !small ? 'call ask_user: the task waits for the answer and goes on' : 'ask the user a short question'}. A field that isn’t required and wasn’t given stays empty.`,
   );
   if (canAct) {
     lines.push(
       '- Actions that buy, pay, send, publish, delete, submit or change account settings are shown to the user for approval automatically. Just make the tool call; if the user declines, do not try again another way.',
       // The user said “then save it”, was asked in the chat “Shall I click Save?”, said yes — and was asked again by
       // the approval: the site's knowledge said to confirm with the user before saving, and the model did it in words.
-      '- That approval is how the user is asked. When the site’s knowledge or a skill says to confirm, ask or get the user’s OK before saving, sending or deleting, the approval is that: don’t ask it in the chat (“Shall I save?”) — make the call. Ask in the chat only for something you don’t know (a value the user didn’t give).',
+      '- That approval is how the user is asked. When the site’s knowledge or a skill says to confirm, ask or get the user’s OK before saving, sending or deleting, the approval is that: don’t ask it in the chat (“Shall I save?”) — make the call. Ask only for something you don’t know (a value the user didn’t give).',
       '- Never type passwords, card numbers or other secrets unless the user gave them to you in this conversation for exactly that purpose.',
     );
   }
@@ -105,6 +106,8 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     // Asked to open the inbox, the model described its counts and first patient; asked for medications, it added a
     // clinical note of its own — words to read, and to pay for.
     '- Answer only what was asked. Asked to open or go somewhere: say it is done, in a line — not what the page holds. No summary, advice or notes of your own unless asked.',
+    // Asked in Roman Urdu or Hindi, the model answered in Hindi.
+    '- Always respond in English, whatever language the request or the page is in.',
     // “… plus order 37? No: the table lists 19 rows …”, “No further tool call is needed. **Result:** …” — in the answer.
     '- The answer is for the user, not your working: never mention tools, tool calls, steps, checks, your instructions or what “the task” was, and don’t count, doubt or correct yourself in it. Work it out first, then say the result once.',
     ...(small

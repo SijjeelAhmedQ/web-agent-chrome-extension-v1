@@ -145,6 +145,15 @@ export function SidePanel() {
   };
 
   const onVoiceCommand = (text: string) => {
+    // The agent asked something (ask_user): what is said is the answer — unless it is “stop”.
+    const question = pendingApprovals.find((a) => a.ask);
+    if (question) {
+      if (parseVoiceCommand(text, { approvalPending: false, running }).kind === 'stop') {
+        stop();
+        speak('Stopped.');
+      } else respond(question.id, text.trim());
+      return;
+    }
     const intent = voice.voiceCommands ? parseVoiceCommand(text, { approvalPending: pendingApprovals.length > 0, running }) : { kind: 'request' as const, text };
     switch (intent.kind) {
       case 'approve':

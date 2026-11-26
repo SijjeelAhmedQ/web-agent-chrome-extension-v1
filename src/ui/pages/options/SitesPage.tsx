@@ -56,6 +56,31 @@ function SiteMark({ site, size = 34 }: { site: Pick<SiteProfile, 'color' | 'name
 /** The learned knowledge base the agent uses on this site in place of the site's own knowledge (when it has entries).*/
 const learnedFor = (bases: KnowledgeBase[] | undefined, site: SiteProfile) => site.sites[0] ? knowledgeBaseFor({ knowledgeBases: bases ?? [] }, `https://${site.sites[0].replace(/^\*\./, '')}/`) : undefined;
 
+/**
+ * The knowledge and never-click list the agent really uses on a site: its learned knowledge base's while that is on
+ * (sitesFor puts them in place of the site's own), else the site's. `view` is the site with those in it; `save`
+ * writes them back to where they come from — edits to the site's own would be kept but never read.
+ */
+function useSiteKnowledge(site: SiteProfile) {
+  const dispatch = useAppDispatch();
+  const learned = learnedFor(useAppSelector((s) => s.config.config.knowledgeBases), site);
+  const inUse = learned && learned.entries.some((e) => e.enabled) ? learned : undefined;
+  const view: SiteProfile = inUse ? { ...site, knowledge: inUse.entries, neverClick: inUse.neverClick } : site;
+  const save = (patch: { knowledge?: KnowledgeEntry[]; neverClick?: string[] }) => {
+    if (inUse) {
+      dispatch(
+        configActions.upsertKnowledgeBase({
+          ...inUse,
+          ...(patch.knowledge ? { entries: patch.knowledge } : {}),
+          ...(patch.neverClick ? { neverClick: patch.neverClick } : {}),
+          updatedAt: Date.now(),
+        }),
+      );
+    } else dispatch(configActions.upsertSite({ ...site, ...patch }));
+  };
+  return { learned: inUse, view, save };
+}
+
 export function SitesPage() {
   const { sites, agents, knowledgeBases } = useAppSelector((s) => s.config.config);
   const dispatch = useAppDispatch();
@@ -1018,6 +1043,7 @@ function ModelTab({ site, update }: { site: SiteProfile; update: (patch: Partial
 // ---------- Settings ----------
 
 function SettingsTab({ site, update }: { site: SiteProfile; update: (patch: Partial<SiteProfile>) => void }) {
+  const known = useSiteKnowledge(site);
   return (
     <Section>
       <div className="form-stack padded">
@@ -1045,8 +1071,8 @@ function SettingsTab({ site, update }: { site: SiteProfile; update: (patch: Part
           <Select
             mode="tags"
             style={{ width: '100%' }}
-            value={site.neverClick ?? []}
-            onChange={(v: string[]) => update({ neverClick: v.map((x) => x.trim()).filter(Boolean) })}
+            value={known.view.neverClick ?? []}
+            onChange={(v: string[]) => known.save({ neverClick: v.map((x) => x.trim()).filter(Boolean) })}
             tokenSeparators={[',']}
             placeholder="e.g. Pharmac, Delete patient"
             open={false}
@@ -1119,8 +1145,9 @@ function useCopy() {
     );
 }
 
-function PreviewTab({ site }: { site: SiteProfile }) {
+function PreviewTab({ site: own }: { site: SiteProfile }) {
   const { skills, customTools, providers, settings } = useAppSelector((s) => s.config.config);
+  const site = useSiteKnowledge(own).view;
   const copy = useCopy();
   const [request, setRequest] = useState(site.knowledge.find((k) => k.kind === 'workflow' && k.trigger)?.trigger ?? '');
   // The same room the agent gets: from this site's model, or the default connection.
@@ -1129,7 +1156,7 @@ function PreviewTab({ site }: { site: SiteProfile }) {
   const text = useMemo(() => knowledgeSection([site], request, budget).text, [site, request, budget]);
   const siteSkills = site.skillIds.map((id) => skills.find((s) => s.id === id)?.name).filter(Boolean);
   const siteTools = site.customToolIds.map((id) => customTools.find((t) => t.id === id)?.label).filter(Boolean);
-  const editor = useKnowledgeTextEditor(site);
+  const editor = useKnowledgeTextEditor(own);
   return (
     <SectionGroup>
       <Section
@@ -1173,8 +1200,9 @@ function PreviewTab({ site }: { site: SiteProfile }) {
 }
 
 /** The whole knowledge base as editable text: copy it, paste into it, and apply it back as entries. */
-function useKnowledgeTextEditor(site: SiteProfile) {
-  const dispatch = useAppDispatch();
+function useKnowledgeTextEditor(own: SiteProfile) {
+  const known = useSiteKnowledge(own);
+  const site = known.view;
   const { message } = App.useApp();
   const copy = useCopy();
   const current = useMemo(() => knowledgeAsText(site), [site]);
@@ -1207,7 +1235,7 @@ function useKnowledgeTextEditor(site: SiteProfile) {
   const apply = () => {
     const merge = mergeKnowledge(site.knowledge, parsed.entries, removeMissing, () => uid('kb_'));
     const neverClick = parsed.neverClick ?? (removeMissing ? [] : (site.neverClick ?? []));
-    dispatch(configActions.upsertSite({ ...site, knowledge: merge.knowledge, neverClick }));
+    known.save({ knowledge: merge.knowledge, neverClick });
     message.success([`${merge.added} added`, `${merge.updated} updated`, merge.removed ? `${merge.removed} removed` : ''].filter(Boolean).join(' · '));
     setConfirming(false);
     setRemoveMissing(false);

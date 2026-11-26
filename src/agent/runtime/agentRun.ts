@@ -21,6 +21,7 @@ import { ElementMemory, type AgentTool, type ApprovalRequest, type ToolContext, 
 import { APPROVED_DONE, budgetFor, CHECKLIST_HEAD, clipToolOutput, compactMessages, dropEarlierPages, estimateTokens, FIRST_PAGE, isFullRead, isPageRead, PAGE_AFTER, pageIn, retireEarlierPages } from './context';
 import type { ApprovalAnswer, ApprovalPrompt, RunEvent } from './events';
 import { asksUser, followUpOf, historyForModel, withoutStoppedList } from './followUp';
+import { askUserTool } from './askUser';
 import { Checklist, checklistTool } from './checklist';
 import { meteredClient } from './costLog';
 import { pageFilledIn, patientFrom, stepFinishes } from './directTask';
@@ -291,6 +292,15 @@ export class AgentRun {
     this.checklist = new Checklist(followUp?.checklist);
     if (this.checklist.size) this.updateTask({ checklist: this.checklist.items.map((i) => ({ ...i })) });
     toolset.tools.push(checklistTool(this.checklist, (done) => this.checklistChanged(done)));
+    // A value the request left out: asked, and the task waits for it — nothing made up.
+    toolset.tools.push(
+      askUserTool(async (question, options, ctx) => {
+        const site = siteOf((await ctx.browser.currentTab().catch(() => null))?.url) || 'this site';
+        const answer = await this.askApproval({ id: uid('ask_'), stepId: '', site, title: question, detail: '', confirmLabel: 'Send', ask: { options } }, ctx);
+        this.throwIfCancelled();
+        return typeof answer === 'string' ? answer : typeof answer === 'number' ? (options[answer] ?? null) : null;
+      }),
+    );
     this.taskText = followUp ? `${followUp.task}\n${request}` : request;
     this.replying = !!followUp;
     // Back from a wrong click — for agents that click.
@@ -1525,7 +1535,7 @@ This is the ${this.noEffect === 2 ? 'second' : `${this.noEffect}th`} click in th
   }
 }
 
-const BUILT_IN_NAMES = new Set([...BUILT_IN_TOOL_IDS, 'load_skill', 'site_knowledge', 'task_list', 'undo_click']);
+const BUILT_IN_NAMES = new Set([...BUILT_IN_TOOL_IDS, 'load_skill', 'site_knowledge', 'task_list', 'undo_click', 'ask_user']);
 const READ_PAGE = BROWSER_TOOLS.find((t) => t.name === 'read_page')!;
 
 /**

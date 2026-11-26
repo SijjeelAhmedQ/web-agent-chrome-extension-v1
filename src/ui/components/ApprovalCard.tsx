@@ -1,12 +1,74 @@
-import { Button } from 'antd';
-import { ShieldAlert } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { Button, Input } from 'antd';
+import { MessageCircleQuestion, ShieldAlert } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import type { ApprovalAnswer, ApprovalPrompt } from '@/agent/runtime/events';
 
 const CANCELS = /^(cancel|close)\b/i;
 
 /** Asks before consequential actions. Focus lands on Cancel — the safe choice. */
 export function ApprovalCard({ prompt, onRespond }: { prompt: ApprovalPrompt; onRespond: (answer: ApprovalAnswer) => void }) {
+  if (prompt.ask) return <QuestionCard prompt={prompt} onRespond={onRespond} />;
+  return <ConfirmCard prompt={prompt} onRespond={onRespond} />;
+}
+
+/** The agent's question (ask_user): the task waits for the answer — typed, picked, or said. */
+function QuestionCard({ prompt, onRespond }: { prompt: ApprovalPrompt; onRespond: (answer: ApprovalAnswer) => void }) {
+  const [text, setText] = useState('');
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    inputRef.current?.focus({ preventScroll: false });
+  }, [prompt.id]);
+  const options = prompt.ask?.options ?? [];
+  const send = () => text.trim() && onRespond(text.trim());
+
+  return (
+    <section className="approval approval-ask" role="dialog" aria-labelledby={`${prompt.id}-t`}>
+      <div className="approval-icon" aria-hidden>
+        <MessageCircleQuestion size={18} />
+      </div>
+      <div className="approval-body">
+        <div className="approval-title" id={`${prompt.id}-t`}>
+          {prompt.title}
+        </div>
+        {options.length > 0 && (
+          <div className="approval-options" role="group" aria-label="Choices">
+            {options.map((o) => (
+              <Button key={o} size="small" onClick={() => onRespond(o)}>
+                {o}
+              </Button>
+            ))}
+          </div>
+        )}
+        <div className="approval-answer">
+          <Input.TextArea
+            ref={(el) => {
+              inputRef.current = el?.resizableTextArea?.textArea ?? null;
+            }}
+            autoSize={{ minRows: 1, maxRows: 5 }}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                send();
+              }
+            }}
+            placeholder={options.length ? 'Or type the answer…' : 'Type your answer…'}
+            aria-label="Your answer"
+          />
+        </div>
+        <div className="approval-actions">
+          <Button onClick={() => onRespond(false)}>Skip</Button>
+          <Button type="primary" onClick={send} disabled={!text.trim()}>
+            Send
+          </Button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ConfirmCard({ prompt, onRespond }: { prompt: ApprovalPrompt; onRespond: (answer: ApprovalAnswer) => void }) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     cancelRef.current?.focus({ preventScroll: false });

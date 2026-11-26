@@ -886,3 +886,36 @@
 .cost-did {
   color: var(--text);
 }
+
+/* ---------- The agent's question (ask_user) ---------- */
+
+.approval-ask {
+  border-color: color-mix(in srgb, var(--text-muted) 35%, var(--border));
+  box-shadow: var(--shadow-md);
+}
+
+.approval-ask .approval-icon {
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+}
+
+.approval-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.approval-options .ant-btn {
+  max-width: 100%;
+}
+
+.approval-options .ant-btn > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.approval-answer {
+  margin-top: 10px;
+}

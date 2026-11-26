@@ -51,7 +51,9 @@ export function say(text: string, lang = 'en-US'): Promise<void> {
 export const stopSaying = () => globalThis.speechSynthesis?.cancel();
 
 /** An approval as a question to say aloud: “Click “Save”? Say yes or no.” */
-export function approvalQuestion(prompt: { title: string; confirmLabel: string; choices?: { id: number; label: string }[]; target?: number }): string {
+export function approvalQuestion(prompt: { title: string; confirmLabel: string; choices?: { id: number; label: string }[]; target?: number; ask?: unknown }): string {
+  // The agent's own question (ask_user): said as it is — the answer is a value, not yes or no.
+  if (prompt.ask) return prompt.title.trim();
   // A form's buttons to pick from: yes presses the one the agent meant.
   const meant = prompt.choices?.find((c) => c.id === prompt.target)?.label;
   if (meant) return `Press ${spoken(meant)}? Say yes or no.`;

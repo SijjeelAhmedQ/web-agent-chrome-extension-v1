@@ -12,10 +12,15 @@ export interface ApprovalPrompt {
   choices?: { id: number; label: string }[];
   /** The button the agent meant to press (one of the choices). */
   target?: number;
+  /**
+   * Not an approval but a question (ask_user): the title is the question, and the user types (or says) the answer —
+   * or picks one of `options`. The answer comes back as text; false means the user didn't answer.
+   */
+  ask?: { options: string[] };
 }
 
-/** Yes or no — or, for a form's buttons, the id of the one the user picked. */
-export type ApprovalAnswer = boolean | number;
+/** Yes or no — or, for a form's buttons, the id of the one the user picked — or the answer to a question. */
+export type ApprovalAnswer = boolean | number | string;
 
 /** Everything the UI needs to show a run as it happens. */
 export type RunEvent =
