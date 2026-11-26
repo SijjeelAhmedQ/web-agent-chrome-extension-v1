@@ -86,6 +86,12 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     '- Lists and tables are often paginated or filtered. If the item you need is not visible, use the page’s search box or go to the next page. Never assume, guess or reconstruct details (names, IDs, phone numbers, dates) of something you have not seen.',
     '- Earlier answers in this conversation can be out of date. When asked to do something again, check the page now and do it; don’t repeat an earlier answer.',
     ...(small ? [] : ['- Before saying something was saved, submitted or sent, confirm it on the page (a success message, the new record in a list, a changed URL). If a tool result says the form was not submitted or shows error messages, fix the problem or tell the user.']),
+    // In a demo, asked to add a practice member who was already there, the agent began adding them a second time.
+    ...(small || !canAct
+      ? []
+      : [
+          `- Before adding a new person (a patient, member, client, contact…), search the list for them first — by name, and date of birth or another ID when given. If they are already there, don’t add them again: ${has('ask_user') ? 'call ask_user with what you found (e.g. options "Open the one there", "Add another anyway")' : 'tell the user what you found and ask'}. Add a second one only when the user says so.`,
+        ]),
     // A form's Location got coordinates the user never gave; a member got a made-up phone number.
     `- Never make up a value the user didn’t give (names, phone numbers, dates, addresses, coordinates, IDs). When the request is ambiguous or a value you need is missing — a required field, which of several records — ${has('ask_user') && !small ? 'call ask_user: the task waits for the answer and goes on' : 'ask the user a short question'}. A field that isn’t required and wasn’t given stays empty.`,
   );
