@@ -22,12 +22,16 @@ A Chrome side-panel agent that reads and works any website for you: search, fill
 | **Skills** | Reusable instructions, either *always on* or *loaded when relevant* (the agent calls `load_skill`). A skill can be limited to certain sites, for example `localhost:5173` for CareFlow. |
 | **Custom tools** | Connect agents to your own HTTP endpoints (GET/POST, headers, typed parameters, optional approval). |
 | **Models** | Ollama (native API, with a configurable context window), the CareFlow bridge, the **Kaggle GPU notebook** (Qwen 3.5 9B, Ternary Bonsai 2 27B, MedGemma 4B), OpenRouter, OpenAI, Anthropic, LM Studio, llama.cpp, vLLM, or any OpenAI-compatible server. You can test a connection and load its list of models. Models that can't call tools (MedGemma) still work: the agent reads the page and answers. |
-| **Voice input** | **Hands-free (default):** click the microphone once and it keeps listening. Your words appear live while you speak, and each pause (1 s by default) sends what you said as a command, with no more clicks. Say **“confirm”** or **“cancel”** to answer an approval, **“approve all”** for several, and **“stop”** to stop the agent. Commands spoken while the agent is busy queue up and run in order. **Push to talk** is also available. Speech is transcribed on the Kaggle GPU by **Whisper large-v3 turbo** (with your vocabulary for names and terms) or **Omi Med STT v1**. |
+| **Voice input** | **Tap to talk (YouTube style):** tap the microphone and a listening dialog opens; your words appear as you speak (grey while still a guess, bold when sure), and a pause sends them. Nothing heard: *“Didn’t hear that. Try again.”* Short commands need no model: **“open stations”**, **“go to messages”** open that page from the site’s map; **“yes”/“no”** (also *haan/nahi*) answer an approval, which is read aloud for a spoken request; **“stop”** stops the agent. **Hands-free** keeps the microphone on and sends each pause as a command. Engines: **Whisper large-v3 turbo** or **Omi Med STT v1** on the Kaggle GPU, or Chrome’s speech recognition; English, Urdu or Hindi. |
+| **Asks instead of guessing** | When a value you didn’t give is needed (a required field, which of several records), the agent asks on a question card and waits — it never makes one up. Before adding a person it checks the list first, so it doesn’t add someone twice. |
 | **Double-check before answering** | When the agent says it selected, saved, added or scheduled something, it first re-reads the page and checks that claim. If the page doesn't confirm it, the agent does the work for real (search, next page, click) or says it didn't happen, so made-up results never reach you. On by default; per agent under Agents → Model. |
 | **Safety** | Asks before purchases, sending, deleting, submitting forms and entering passwords. Sites can be blocked or made read-only, and text on pages is treated as data, not instructions. |
 | **Activity** | Every task's request, site, status, steps, timing and result, with search and filters. |
 | **Configuration page** | Agents · Skills · Tools · Models · Voice · General · Appearance · Agent behavior · Permissions · Privacy · Advanced (developer view, page-reading limits, import/export, reset) · Activity. |
 | **Design** | Light and dark themes with an emerald accent on slate neutrals (taken from codeiyo.com), Inter and JetBrains Mono, keyboard-friendly, reduced-motion aware. |
+
+
+How it is built — what runs where, where data lives, how a task runs: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
 ---
 
