@@ -13,7 +13,7 @@ import { meteredClient } from '../runtime/costLog';
 import { saveCrawl, type SavedCrawl } from './savedCrawl';
 import { addProposals, hostOf, type ProposedEntry } from './merge';
 import { budgetFor, pagePrompt, parseWritten, sitePrompt, type PageCapture } from './prompts';
-import { controlNames, dangerOf, dummyFor, exampleIn, fieldFormat, formName, isSameScreen, sampleValue } from './risk';
+import { controlNames, dangerOf, mergedControls, dummyFor, exampleIn, fieldFormat, formName, isSameScreen, sampleValue } from './risk';
 import { isLoginUrl, isLogoutUrl, normalizeUrl, pageOfScreen, sameSite, templateOf } from './urls';
 
 /**
@@ -1713,8 +1713,10 @@ export class CrawlRun {
     }
     // The controls' names, not the crawl's own keys for them (“/patients|reset”, “*invite user” reached the knowledge).
     const asked = controlNames([...this.clickedNames.entries()].filter(([, v]) => v.endsWith('not clicked')).map(([k]) => k));
-    if (asked.length) {
-      entries.push({ kind: 'rule', title: 'Controls that change data', content: `These controls delete, save, send or sign out — ask the user before clicking them: ${asked.slice(0, 30).map((a) => `“${a}”`).join(', ')}.` });
+    const old = this.o.existing?.entries.find((e) => e.kind === 'rule' && e.title === 'Controls that change data');
+    const all = mergedControls(old?.content, asked);
+    if (all) {
+      entries.push({ kind: 'rule', title: 'Controls that change data', content: `These controls delete, save, send or sign out — ask the user before clicking them: ${all.slice(0, 40).map((a) => `“${a}”`).join(', ')}.` });
     }
     // Each form's field formats, from what the fields themselves show — written here, not left to the model, which
     // dropped OctansCare's “Location (latitude,longitude)” from a page entry it shortened.

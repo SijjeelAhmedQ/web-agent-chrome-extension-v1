@@ -122,6 +122,23 @@ export function controlNames(keys: string[]): string[] {
 }
 
 /**
+ * The controls the saved rule already lists, then this crawl's new ones: a short crawl adds to the list and never
+ * shortens it (a 1-page “Update it” would otherwise drop the other pages' Deactivate, Save and Sign out).
+ * Null when the crawl found nothing new, so no “update” is proposed.
+ */
+export function mergedControls(oldContent: string | undefined, found: string[]): string[] | null {
+  const before = oldContent ? controlNames([...oldContent.matchAll(/“([^”]+)”/g)].map((m) => m[1])) : [];
+  const out = [...before];
+  const seen = new Set(before.map((n) => n.toLowerCase()));
+  for (const n of found) {
+    if (seen.has(n.toLowerCase())) continue;
+    seen.add(n.toLowerCase());
+    out.push(n);
+  }
+  return !out.length || (oldContent && out.length === before.length) ? null : out;
+}
+
+/**
  * A placeholder that is itself a sample value, with no “e.g.” before it: “-36.8485, 174.7633”, “021 555 0100”,
  * “ABC1235”. Digits and the marks values have, and no word of four letters or more — “Search 50 items” is not one.
  */
