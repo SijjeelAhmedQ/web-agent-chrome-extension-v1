@@ -23,13 +23,13 @@ Four ways, from the simplest:
      `web_agent_qwen38long`).
    - **OpenRouter** (paid, faster): your key. Its list offers `google/gemini-3.8-flash`, `anthropic/claude-haiku-5.5`
      and `typesafe/jev-router`. **Thinking** (on every connection): Off, Low or High — Low suits Flash and Haiku.
-6. Optional, on the agent (Agents → the agent → Model): a **Decision model**, e.g. Jev Router. It decides what to
-   do next and writes it as a short plan ("1. type … into [812] … 2. click [830] Save") — it never clicks. The agent's
-   own **Model** (any: Gemini Flash, Haiku, DeepSeek…) does every action of the plan with its tools, reports back,
-   and the decision model decides again; at the end the agent's model writes the answer. The activity shows
-   "Deciding the next step · Jev Router", "Decided the next steps · Jev Router" (the plan, under Details) and
-   "Doing it · Gemini 3.8 Flash". You still approve every save, delete and complete. Jev Router picks its own model
-   per request: in tests a whole small task cost about $0.07 (Jev's decisions about $0.004 of it).
+6. Optional, on the agent (Agents → the agent → Model): switch the **Decision model** on (Jev Router by default, or
+   any OpenRouter model). For each task it picks the model that does it — the cheapest that will do it right — from
+   **Models → Models the decision model picks from**, a list you edit: add any OpenRouter model, with a note on what
+   it is good for; its price and tool support come from OpenRouter. UI clicks (go to, open, search) go to the
+   cheapest on the list without asking it; data analysis: the cheapest reads and the picked one writes it; a model that
+   gets stuck: it picks another to carry on. The activity shows "Chose DeepSeek Flash · Jev Router"; the side panel
+   bar says "Jev Router picks". You still approve every save, delete and complete. A pick costs about $0.0001.
 
 A stopped or failed task shows **Resume**: it carries on from where it stopped. A finished task shows **Run again**.
 5. Log in to https://pmstraining.vitonta.com, open the extension's side panel and type a request.

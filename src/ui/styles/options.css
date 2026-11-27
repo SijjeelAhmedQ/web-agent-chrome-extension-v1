@@ -1228,6 +1228,70 @@ textarea.mono-area {
   line-height: 1.7;
 }
 
+/* ---------- Models the decision model picks from ---------- */
+
+.pick-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.pick-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 18px;
+}
+
+.pick-row + .pick-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.pick-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.pick-facts {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.pick-side {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.pick-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 18px 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.pick-list > .field-error,
+.pick-list > .field-help {
+  padding: 0 18px 14px;
+}
+
+@media (max-width: 640px) {
+  .pick-row {
+    padding: 12px 14px;
+  }
+  .pick-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .flow-list {
   margin: 0;
   padding: 16px 18px 16px 36px;

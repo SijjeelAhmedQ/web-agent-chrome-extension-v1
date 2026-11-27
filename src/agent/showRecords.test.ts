@@ -113,7 +113,8 @@ describe('the setup that comes with the extension', () => {
     const a = now.agents.find((x) => x.id === agent.id)!;
     const s = now.sites.find((x) => x.id === 'site-smart-inbox')!;
     expect(a.instructions).toContain('only filter the list');
-    expect(a).toMatchObject({ providerId: 'or', model: 'm', autoModels: { small: 's' } });
+    expect(a).toMatchObject({ providerId: 'or', model: 'm', decisionModel: 'c' });
+    expect(now.settings.pickableModels?.map((m) => m.id)).toEqual(['s', 'm', 'b']);
     expect(s.knowledge.length).toBeGreaterThan(20);
     expect(s).toMatchObject({ providerId: 'or', model: 'm', enabled: false });
     expect(now.settings.builtInStamp).toBe(BUILT_IN_STAMP);

@@ -37,8 +37,18 @@ export interface TaskRoute {
   /** The word of the request that said so. */
   word?: string;
   /** clicks: the model that did it. analysis: the one that wrote the analysis. judged: the one that did the steps. */
-  tier: ModelTier;
-  /** The small model got stuck: Jev took over with this one. */
+  model?: string;
+  /** The model that did the clicks and the reading, when another one wrote the analysis. */
+  reader?: string;
+  /** The decision model, when it was asked. */
+  chooser?: string;
+  /** The decision model's answer was not a model on the list (or it gave none): the agent's own model did it. */
+  fallback?: boolean;
+  /** The first model got stuck: the decision model picked this one to carry on. */
+  stuckModel?: string;
+  /** @deprecated Tasks from before the user's model list: the fixed model's size. */
+  tier?: ModelTier;
+  /** @deprecated As `stuckModel`, from before. */
   stuckTier?: ModelTier;
 }
 

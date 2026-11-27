@@ -127,8 +127,10 @@ export function useRuntimeStatus(agent: AgentConfig, config: AppConfig, url = ''
     };
   }, [refresh]);
 
+  // The decision model on: it picks the model per task, so the bar names it, not the agent's own model.
+  const picker = agent.decisionModel?.trim() && provider && /openrouter\.ai/.test(provider.baseUrl) ? agent.decisionModel.trim() : null;
   const actions: RuntimePart | null = provider
-    ? { name: modelLabel(model), id: model, location: locationOf(provider.baseUrl, provider.preset), connection: provider.name, health: actionsHealth, credit: actionsHealth.credit }
+    ? { name: picker ? `${modelLabel(picker)} picks` : modelLabel(model), id: picker ? `${picker} picks the model per task from your list` : model, location: locationOf(provider.baseUrl, provider.preset), connection: provider.name, health: actionsHealth, credit: actionsHealth.credit }
     : null;
   const engine = SPEECH_ENGINES.find((e) => e.id === voice.engine)!;
   const speech: RuntimePart | null = voiceOn

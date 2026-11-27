@@ -76,11 +76,24 @@ export interface TeamConfig {
   tidyUp: boolean;
 }
 
+/** @deprecated The fixed small / medium / big models of before; read only to move an older setup over (see normalizeConfig). */
 export interface AutoModels {
   small: string;
   medium: string;
   big: string;
   chooser: string;
+}
+
+/** A model the decision model may pick for a task: the user's list, in Settings → Models. */
+export interface PickableModel {
+  /** The model's id on OpenRouter, e.g. “anthropic/claude-haiku-5.5”. */
+  id: string;
+  /** What the user says it is good for — the decision model reads it. */
+  note?: string;
+  /** Dollars per million tokens, from OpenRouter's list (filled in when added, and on Refresh prices). */
+  price?: { input: number; output: number };
+  /** Can call tools (click, type…) — OpenRouter's list says. A model without them is never picked to do steps. */
+  tools?: boolean;
 }
 
 export interface AgentConfig {
@@ -95,15 +108,14 @@ export interface AgentConfig {
   /** Empty → the connection's default model. */
   model: string;
   /**
-   * The decision model: it decides each next step (after a tool's result). The model above reads the
-   * request first, double-checks and writes the answer. The user still approves every save. Unset → off.
+   * The decision model (e.g. Jev Router), on an OpenRouter connection: it picks, per task, the model that does it from
+   * the list in Settings → Models. Plain clicks go to the list's cheapest model without asking it. Unset → off: the
+   * model above does every task.
    */
+  decisionModel?: string | null;
+  /** @deprecated A model that decided each step; moved to `decisionModel` (see normalizeConfig). */
   decision?: { providerId: string | null; model: string } | null;
-  /**
-   * Models picked per task, on an OpenRouter connection: plain clicks go to `small` with no chooser; data analysis:
-   * `small` does the clicks and reading, `chooser` picks who writes it; anything else: `chooser` picks the model and
-   * decides each step. Replaces the model and decision model above. Unset → off.
-   */
+  /** @deprecated The fixed models picked per task; moved to `decisionModel` and Settings' `pickableModels`. */
   autoModels?: AutoModels | null;
   temperature: number;
   maxSteps: number;
@@ -396,6 +408,8 @@ export interface Settings {
   ownCompaction?: boolean;
   /** The Knowledge Gather Agent's settings. */
   crawler?: CrawlerSettings;
+  /** The models an agent's decision model picks from (Settings → Models). Unset: the built-in list. */
+  pickableModels?: PickableModel[];
 }
 
 export interface AppConfig {

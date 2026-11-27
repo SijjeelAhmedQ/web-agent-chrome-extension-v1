@@ -3,8 +3,8 @@ import type { ForegroundLock } from '@/extension/browser/foreground';
 import { BUILT_IN_TOOL_IDS } from '@/shared/constants/tools';
 import { upsertTask } from '@/shared/storage/historyStore';
 import { recordCall } from '@/shared/storage/costLedger';
-import type { AgentConfig, AppConfig, ProviderConfig, SiteProfile } from '@/shared/types/config';
-import type { ModelCallRecord, ModelTier, StepRecord, TaskRecord, TaskRoute } from '@/shared/types/history';
+import type { AgentConfig, AppConfig, PickableModel, ProviderConfig, SiteProfile } from '@/shared/types/config';
+import type { ModelCallRecord, StepRecord, TaskRecord, TaskRoute } from '@/shared/types/history';
 import { clip, matchesSite, siteOf, sleep, uid } from '@/shared/utils';
 import { formatCost, summarizeCalls } from '@/shared/utils/cost';
 import { AgentError, isAbort, toAgentError } from '@/shared/utils/errors';
@@ -25,7 +25,7 @@ import { askUserTool } from './askUser';
 import { Checklist, checklistTool } from './checklist';
 import { meteredClient } from './costLog';
 import { pageFilledIn, patientFrom, stepFinishes } from './directTask';
-import { choosePrompt, fallbackTier, kindOfTask, parseTier, tierOfModel, tiersFor } from './modelRoute';
+import { cheapestOf, choosePrompt, DEFAULT_PICKABLE_MODELS, kindOfTask, parsePick, pickLabel, withTools } from './modelRoute';
 import { FILL_FORM, fieldCall, fieldGroup, fillFormSchema, fillFormTool, goOnButtons, stopsFilling } from './fillForm';
 import { addsRecord, afterSave, asksForOne, asksToDo, saveVerdict, userAskedToDo } from './saveOutcome';
 import { cleanAnswer } from './cleanAnswer';
@@ -61,15 +61,6 @@ export function resolveProvider(agent: AgentConfig, config: AppConfig, url = '')
   const model = site?.model.trim() || (siteProvider ? provider.defaultModel.trim() : agent.model.trim() || provider.defaultModel.trim());
   if (!model) throw new AgentError('no_model', `Choose which model to use with ${provider.name}.`);
   return { provider, model };
-}
-
-/** An agent's decision model — it decides each next step: its connection (the default one when unset) and model. Null when off. */
-export function resolveDecision(agent: AgentConfig, config: AppConfig): { provider: ProviderConfig; model: string; label: string } | null {
-  const d = agent.decision;
-  if (!d) return null;
-  const provider = config.providers.find((p) => p.id === d.providerId) ?? config.providers.find((p) => p.id === config.settings.defaultProviderId) ?? config.providers[0];
-  const model = d.model.trim() || provider?.defaultModel.trim() || '';
-  return provider && model ? { provider, model, label: knownModel(model)?.label ?? model } : null;
 }
 
 /**
@@ -270,22 +261,19 @@ export class AgentRun {
     const resolved = resolveProvider(agent, config, url);
     const { provider } = resolved;
     let { model } = resolved;
-    // Models picked per task (see modelRoute): only where these models are, on OpenRouter.
-    const auto = agent.autoModels && /openrouter\.ai/.test(provider.baseUrl) ? agent.autoModels : null;
+    // The decision model picks the model per task (see modelRoute), from the user's list: only on OpenRouter, where those models are.
+    const pickable = withTools(config.settings.pickableModels ?? DEFAULT_PICKABLE_MODELS);
+    const chooserModel = agent.decisionModel?.trim() && /openrouter\.ai/.test(provider.baseUrl) && pickable.length ? agent.decisionModel.trim() : null;
     // Every call goes in the task's log — what it was for, its tokens, its cost — and none starts past the spending limit.
     const log = (call: ModelCallRecord) => {
-      const tier = auto ? tierOfModel(auto, call.model) : undefined;
-      this.updateTask({ calls: [...(this.task.calls ?? []), tier ? { ...call, tier } : call] });
+      this.updateTask({ calls: [...(this.task.calls ?? []), call] });
       // And in the day's spending (the Cost page), kept apart from the history.
       void recordCall(call, this.task.site, this.task.id).catch(() => undefined);
     };
     const client = meteredClient(createClient(provider), 'worker', () => this.knowledgeNow, log, () => this.withinSpendingLimit());
-    // The decision model, when the agent has one, decides each next step; the agent's own model reads the
-    // request first, double-checks and writes the answer.
-    const decision = auto ? null : resolveDecision(agent, config);
-    let decider = decision
-      ? { client: meteredClient(createClient(decision.provider), 'decider', () => this.knowledgeNow, log, () => this.withinSpendingLimit()), model: decision.model, label: decision.label }
-      : null;
+    // A model that decides each next step while the agent's model does them (phase 'decide' below). The decision
+    // model only picks the model now (the user's choice): this stays off, kept for a step-by-step mode.
+    const decider: { client: LlmClient; model: string; label: string } | null = null as { client: LlmClient; model: string; label: string } | null;
     const toolset = buildToolset(agent, config, url);
     // A reply to the question the last answer asked: carry on from there, don't start over.
     const followUp = followUpOf(this.options.history, request);
@@ -341,23 +329,31 @@ export class AgentRun {
     // The patient whose consult is open: it goes with the request, as the task may leave that page.
     const patient = followUp ? null : await this.patientHere(toolset.sites, url, ctx);
 
-    // Who does this task: decided before the first step. Clicks need no chooser at all.
-    const jev = auto
-      ? { client: meteredClient(createClient(provider), 'decider', () => this.knowledgeNow, log, () => this.withinSpendingLimit()), model: auto.chooser, label: knownModel(auto.chooser)?.label ?? auto.chooser }
+    // Who does this task: decided before the first step. Clicks need no decision model at all.
+    const jev = chooserModel
+      ? { client: meteredClient(createClient(provider), 'decider', () => this.knowledgeNow, log, () => this.withinSpendingLimit()), model: chooserModel, label: pickLabel(chooserModel) }
       : null;
     let route: TaskRoute | null = null;
+    const ownModel = model;
     // Analysis: the model that writes it, when another one does the clicks and the reading.
     let writer: { model: string; label: string } | null = null;
-    if (auto && jev) {
+    if (jev) {
       const { kind, word } = kindOfTask(request);
-      const tier = kind === 'clicks' ? 'small' : await this.chooseTier(jev, request, tiersFor(kind), fallbackTier(kind));
-      route = { kind, ...(word ? { word } : {}), tier };
+      const cheapest = cheapestOf(pickable)!.id;
+      if (kind === 'clicks') {
+        model = cheapest;
+        route = { kind, ...(word ? { word } : {}), model };
+      } else {
+        // Its answer not on the list, or no answer: the agent's own model, as with the decision model off.
+        const picked = await this.choosePick(jev, request, pickable, kind === 'analysis' ? 'analysis' : 'judged', model);
+        route = { kind, ...(word ? { word } : {}), model: picked ?? model, chooser: jev.model, ...(picked ? {} : { fallback: true }) };
+        if (kind === 'analysis') {
+          writer = { model: route.model!, label: pickLabel(route.model!) };
+          model = cheapest;
+          route.reader = model;
+        } else model = route.model!;
+      }
       this.updateTask({ route });
-      if (kind === 'analysis') {
-        writer = { model: auto[tier], label: knownModel(auto[tier])?.label ?? auto[tier] };
-        model = auto.small;
-      } else model = auto[tier];
-      if (kind === 'judged') decider = jev;
     }
     // Only clicks: only what clicks need goes with each call, and a page's text is cut to what they need. (Stuck, it all comes back.)
     let small = route?.kind === 'clicks';
@@ -489,8 +485,9 @@ export class AgentRun {
       // The system prompt stays the same through the task, so the server's prompt cache serves it (and the
       // tools) at a fraction of the price on every call after the first. What changes — the checklist — goes
       // at the end, when it changes (`noteChecklist`).
-      // The small model stuck: once, Jev picks a bigger one and decides from here.
-      if (auto && jev && route && !decider && !tookOver && this.isStuck(recent, step, stepLimit)) {
+      // The first model stuck: once, the decision model picks another from the list to carry on.
+      const others = pickable.filter((m) => m.id !== model);
+      if (jev && route && others.length && !tookOver && this.isStuck(recent, step, stepLimit)) {
         tookOver = true;
         if (small) {
           small = false;
@@ -499,13 +496,14 @@ export class AgentRun {
           system = systemFor();
           await renewContext(this.hereSites.length ? this.hereSites : toolset.sites);
         }
-        const tier = await this.chooseTier(jev, request, ['medium', 'big'], 'medium');
-        model = auto[tier];
-        workerLabel = knownModel(model)?.label ?? model;
-        decider = jev;
-        phase = 'decide';
+        // No usable answer: the agent's own model, or else the dearest on the list (the likeliest to get unstuck).
+        const dearest = [...others].sort((a, b) => (b.price?.input ?? 0) - (a.price?.input ?? 0))[0].id;
+        const picked = await this.choosePick(jev, request, others, 'stuck', ownModel !== model ? ownModel : dearest);
+        model = picked ?? (ownModel !== model ? ownModel : dearest);
+        workerLabel = pickLabel(model);
+        // The new model needs room for the rest of the task: the first one had nearly used it up.
         stepLimit *= 2;
-        route = { ...route, stuckTier: tier };
+        route = { ...route, stuckModel: model };
         this.updateTask({ route });
       }
       messages[0] = { role: 'system', content: `${system}${decider ? `\n\n${WORKER_ROLE}` : writer ? `\n\n${GATHER_ROLE}` : ''}` };
@@ -914,27 +912,36 @@ export class AgentRun {
     }
   }
 
-  /** Jev's pick of a model for this task, shown in the activity. Its answer unusable, or Jev out of reach: `fallback`. */
-  private async chooseTier(jev: { client: LlmClient; model: string; label: string }, request: string, tiers: ModelTier[], fallback: ModelTier): Promise<ModelTier> {
+  /**
+   * The decision model's pick from `models` for this task, shown in the activity. Null when its answer names none of
+   * them or it can't be reached: the caller uses `fallback`.
+   */
+  private async choosePick(
+    jev: { client: LlmClient; model: string; label: string },
+    request: string,
+    models: PickableModel[],
+    job: Parameters<typeof choosePrompt>[2],
+    fallback: string,
+  ): Promise<string | null> {
     this.emit({ type: 'thinking', taskId: this.id, active: true, label: `Choosing the model · ${jev.label}` });
     const started = Date.now();
     const reply = await jev.client
-      .chat({ model: jev.model, purpose: 'Choosing the model', messages: [{ role: 'user', content: choosePrompt(request, tiers) }], tools: [], temperature: 0, signal: this.abort.signal })
+      .chat({ model: jev.model, purpose: 'Choosing the model', messages: [{ role: 'user', content: choosePrompt(request, models, job) }], tools: [], temperature: 0, signal: this.abort.signal })
       .then((res) => res.content)
       .catch((err: unknown) => {
         if (this.abort.signal.aborted || isAbort(err) || (err instanceof AgentError && err.code === 'cost_limit')) throw err;
         return '';
       });
-    const picked = parseTier(reply, tiers);
+    const picked = parsePick(reply, models)?.id ?? null;
     this.upsertStep({
       id: uid('step_'),
-      label: picked ? `Chose the ${picked} model · ${jev.label}` : `Used the ${fallback} model · ${jev.label} gave no answer`,
+      label: picked ? `Chose ${pickLabel(picked)} · ${jev.label}` : `Used ${pickLabel(fallback)} · ${jev.label} named no model on your list`,
       status: 'done',
       tool: 'decision',
       startedAt: started,
       durationMs: Date.now() - started,
     });
-    return picked ?? fallback;
+    return picked;
   }
 
   /** The same step three times, three steps in a row that failed, or close to the step limit. */

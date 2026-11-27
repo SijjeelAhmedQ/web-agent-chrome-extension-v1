@@ -2,10 +2,9 @@ import { AutoComplete, Button, Checkbox, Drawer, Input, InputNumber, Select, Sli
 import { RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/agent/llm';
-import { DEFAULT_AUTO_MODELS } from '@/agent/runtime/modelRoute';
 import { AGENT_COLORS, AGENT_ICONS } from '@/shared/constants/defaults';
 import { BUILT_IN_TOOLS, CUSTOM_PREFIX, TOOL_CATEGORIES, type ToolCategory } from '@/shared/constants/tools';
-import { knownModel, presetById } from '@/shared/constants/providers';
+import { DEFAULT_DECISION_MODEL, DEFAULT_PICKABLE_MODELS, knownModel, OPENROUTER_MODELS, presetById } from '@/shared/constants/providers';
 import type { AgentConfig, ConfirmationPolicy } from '@/shared/types/config';
 import { toAgentError } from '@/shared/utils/errors';
 import { useAppSelector } from '@/store';
@@ -73,6 +72,7 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
     }
   };
 
+  const pickCount = (settings.pickableModels ?? DEFAULT_PICKABLE_MODELS).filter((m) => m.id.trim()).length;
   const categories = Object.keys(TOOL_CATEGORIES) as ToolCategory[];
   const toolCount = draft.toolIds.length;
   const valid = draft.name.trim().length > 0;
@@ -225,52 +225,36 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
                   )}
                 </div>
                 <div>
-                  <FieldLabel hint="Optional">Pick the model per task</FieldLabel>
-                  <Switch checked={!!draft.autoModels} onChange={(on) => set({ autoModels: on ? DEFAULT_AUTO_MODELS : null })} aria-label="Pick the model per task" />
-                  {draft.autoModels &&
-                    (['small', 'medium', 'big', 'chooser'] as const).map((tier) => (
-                      <div key={tier} style={{ marginTop: 8 }}>
-                        <FieldLabel>{tier === 'chooser' ? 'Chooser (picks and decides)' : `${tier[0].toUpperCase()}${tier.slice(1)} model`}</FieldLabel>
-                        <Input value={draft.autoModels![tier]} onChange={(e) => set({ autoModels: { ...draft.autoModels!, [tier]: e.target.value } })} aria-label={`${tier} model`} />
-                      </div>
-                    ))}
-                  <div className="field-help">
-                    On an OpenRouter connection. UI clicks (go to, click, search): the small model, without Jev. Data analysis (summary, trend, issues): the small model clicks and reads, and Jev picks who writes it. Changing a record: Jev picks the model and decides each step. The small model stuck: Jev takes over. The log says which and what each cost. Replaces the model and decision model here.
-                  </div>
-                </div>
-                <div>
                   <FieldLabel hint="Optional">Decision model</FieldLabel>
                   <div className="row-gap">
-                    <Select
-                      style={{ flex: 1 }}
-                      value={draft.decision ? (draft.decision.providerId ?? '__default') : '__off'}
-                      onChange={(v) => set({ decision: v === '__off' ? null : { providerId: v === '__default' ? null : v, model: draft.decision?.model ?? '' } })}
-                      options={[
-                        { value: '__off', label: 'Off' },
-                        { value: '__default', label: `Default${providers.length ? ` — ${(providers.find((p) => p.id === settings.defaultProviderId) ?? providers[0])?.name}` : ''}` },
-                        ...providers.map((p) => ({ value: p.id, label: p.name })),
-                      ]}
-                      aria-label="Decision model connection"
-                    />
-                    {draft.decision && (
+                    <Switch checked={draft.decisionModel != null} onChange={(on) => set({ decisionModel: on ? DEFAULT_DECISION_MODEL : null })} aria-label="Decision model on or off" />
+                    {draft.decisionModel != null && (
                       <AutoComplete
                         style={{ flex: 1 }}
-                        value={draft.decision.model}
-                        onChange={(v) => set({ decision: { ...draft.decision!, model: v } })}
-                        options={(() => {
-                          const p = providers.find((x) => x.id === draft.decision!.providerId) ?? provider;
-                          return (p ? presetById(p.preset).models ?? [] : []).map((m) => ({ value: m.id, label: `${m.label} — ${m.id}` }));
-                        })()}
+                        value={draft.decisionModel}
+                        onChange={(v) => set({ decisionModel: v })}
+                        onBlur={() => {
+                          if (!draft.decisionModel?.trim()) set({ decisionModel: DEFAULT_DECISION_MODEL });
+                        }}
+                        options={[...new Set([...OPENROUTER_MODELS.map((m) => m.id), ...models])].map((m) => ({ value: m, label: knownModel(m) ? `${knownModel(m)!.label} — ${m}` : m }))}
                         filterOption={(input, option) => (option?.value ?? '').toLowerCase().includes(input.toLowerCase())}
-                        placeholder={(providers.find((x) => x.id === draft.decision!.providerId) ?? provider)?.defaultModel || 'Model name'}
-                        allowClear
+                        placeholder={DEFAULT_DECISION_MODEL}
                         aria-label="Decision model"
                       />
                     )}
                   </div>
                   <div className="field-help">
-                    Decides each next step (“Deciding the next step”) — what to click, type or open. The model above reads your request first, double-checks the result and writes the answer. Off: the model above does everything. You still approve every save, delete and complete. For example Gemini Flash above and Jev Router here, or the same model in both.
+                    On: for each task it picks the model that does it — the cheapest that will do it right — from the {pickCount} model{pickCount === 1 ? '' : 's'} in{' '}
+                    <a href="#/models" onClick={onClose}>
+                      Models → Models the decision model picks from
+                    </a>
+                    . UI clicks (go to, open, search) go to the cheapest on the list without asking it. Data analysis: the cheapest reads, the picked one writes it. A model that gets stuck: it picks another to carry on. Off: the model above does every task. You still approve every save.
                   </div>
+                  {draft.decisionModel != null && provider && !/openrouter\.ai/.test(provider.baseUrl) && (
+                    <div className="inline-note warning" style={{ marginTop: 8 }}>
+                      Works on an OpenRouter connection only. This agent uses {provider.name}, so the model above will do every task.
+                    </div>
+                  )}
                 </div>
                 <div>
                   <FieldLabel hint={draft.temperature.toFixed(1)}>Creativity</FieldLabel>

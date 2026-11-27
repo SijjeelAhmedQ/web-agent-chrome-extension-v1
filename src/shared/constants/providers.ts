@@ -1,4 +1,4 @@
-import type { ProviderKind, ThinkingLevel } from '../types/config';
+import type { PickableModel, ProviderKind, ThinkingLevel } from '../types/config';
 
 /** A model a preset's server is known to offer. */
 export interface ModelOption {
@@ -59,6 +59,16 @@ export const OPENROUTER_MODELS: ModelOption[] = [
   { id: '~deepseek/deepseek-flash-latest', label: 'DeepSeek Flash', note: 'Cheapest here, with tools: good for clicks and going to pages. The whole conversation is cached.', tools: true },
   { id: 'anthropic/claude-haiku-5.5', label: 'Claude Haiku 5.5', note: 'Fast, follows workflows closely. Thinking Off is cheapest; Low for harder tasks.', tools: true },
   { id: 'typesafe/jev-router', label: 'Jev Router', note: 'Picks a model and its thinking for each request — use it as an agent’s Decision model. Its price varies by request.', tools: true },
+];
+
+/** The decision model an agent starts with when it is switched on. */
+export const DEFAULT_DECISION_MODEL = 'typesafe/jev-router';
+
+/** The list a new setup starts with: OpenRouter's fast models with tools, the cheapest first. */
+export const DEFAULT_PICKABLE_MODELS: PickableModel[] = [
+  { id: '~deepseek/deepseek-flash-latest', note: 'Good for clicks, going to pages and simple reading.', tools: true },
+  { id: 'anthropic/claude-haiku-5.5', note: 'Follows workflows closely: forms, adding and saving records.', tools: true },
+  { id: 'google/gemini-3.8-flash', note: 'Good at data analysis, summaries and comparing records.', tools: true },
 ];
 
 /** Starting points for a new connection. Every field stays editable. */

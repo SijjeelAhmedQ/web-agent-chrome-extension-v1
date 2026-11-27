@@ -12,7 +12,7 @@ import { AgentError, toAgentError } from '@/shared/utils/errors';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { configActions } from '@/store/configSlice';
 import { FieldLabel, PageHeader, Section } from './parts';
-import { FitList } from './layout';
+import { PickableModels } from './PickableModels';
 
 type TestState = { status: 'idle' | 'testing' | 'ok' | 'error'; message?: string };
 
@@ -108,7 +108,7 @@ export function ModelsPage() {
           <PresetGrid onPick={startFromPreset} />
         </Section>
       ) : (
-        <FitList className="list-card" label="Connections" estimate={70}>
+        <div className="list-card" aria-label="Connections">
           {providers.map((p) => {
             const preset = presetById(p.preset);
             const test = tests[p.id] ?? { status: 'idle' };
@@ -169,8 +169,10 @@ export function ModelsPage() {
               </div>
             );
           })}
-        </FitList>
+        </div>
       )}
+
+      {providers.length > 0 && <PickableModels />}
 
       <p className="footnote">
         API keys are stored only in this browser&apos;s extension storage. Page content goes to a model only while it works on a task you gave it.

@@ -1,4 +1,4 @@
-import { REFERENCE_PRICE } from '../constants/providers';
+import { modelLabel, REFERENCE_PRICE } from '../constants/providers';
 import type { ModelCallRecord, ModelTier, TaskRoute } from '../types/history';
 import { formatDuration } from './index';
 
@@ -78,6 +78,7 @@ const TIER_NAME: Record<ModelTier | 'chooser', string> = { small: 'Small model',
 export function describeRoute(route: TaskRoute | undefined, calls: ModelCallRecord[] = []): string[] {
   if (!route) return [];
   const said = route.word ? ` (“${route.word}”)` : '';
+  if (!route.tier) return describePicked(route, said, calls);
   const head = {
     code: `Small task${said}: the code did it with no model, so 0 tokens and $0.0000.`,
     clicks: `Small task, only UI clicks${said}: the small model did it, without Jev.`,
@@ -95,10 +96,38 @@ export function describeRoute(route: TaskRoute | undefined, calls: ModelCallReco
   return [`${head}${stuck}`, ...parts];
 }
 
+/** The same, for a model picked from the user's list: then each model's part, the decision model's apart. */
+function describePicked(route: TaskRoute, said: string, calls: ModelCallRecord[]): string[] {
+  const name = (id?: string) => (id ? modelLabel(id) : 'the model');
+  const chooser = route.chooser ? `the decision model (${name(route.chooser)})` : 'the decision model';
+  const head = {
+    code: `Small task${said}: the code did it with no model, so 0 tokens and $0.0000.`,
+    clicks: `Small task, only UI clicks${said}: the cheapest model on your list (${name(route.model)}) did it, without asking the decision model.`,
+    analysis: route.fallback
+      ? `Data analysis${said}: ${name(route.reader)} did the clicks and the reading; ${chooser} named no model on your list, so the agent's own model (${name(route.model)}) wrote the analysis.`
+      : `Data analysis${said}: ${name(route.reader)} did the clicks and the reading; ${chooser} chose ${name(route.model)} to write the analysis.`,
+    judged: route.fallback
+      ? `Changes a record or needs care${said}: ${chooser} named no model on your list, so the agent's own model (${name(route.model)}) did it.`
+      : `Changes a record or needs care${said}: ${chooser} chose ${name(route.model)} to do it.`,
+  }[route.kind];
+  const stuck = route.stuckModel ? ` ${name(route.kind === 'analysis' ? route.reader : route.model)} got stuck, so ${chooser} chose ${name(route.stuckModel)} to carry on.` : '';
+  const groups = new Map<string, ModelCallRecord[]>();
+  for (const c of calls) {
+    const key = c.role === 'decider' ? `Decision model · ${c.model}` : modelLabel(c.model) === c.model ? c.model : `${modelLabel(c.model)} · ${c.model}`;
+    groups.set(key, [...(groups.get(key) ?? []), c]);
+  }
+  const parts = [...groups].map(([key, own]) => {
+    const s = summarizeCalls(own);
+    const cost = s.priced ? formatCost(s.cost) : 'cost not reported';
+    return `${key} · ${s.calls} call${s.calls === 1 ? '' : 's'} · ${s.inputTokens} in (${s.cachedTokens} cached) · ${s.outputTokens} out · ${cost}`;
+  });
+  return [`${head}${stuck}`, ...parts];
+}
+
 /** One line of the log, as text: for Copy steps and reports. */
 export function describeCall(c: ModelCallRecord, i: number): string {
   const served = c.servedBy && c.servedBy !== c.model ? `${c.model} → ${c.servedBy}` : c.model;
-  const model = c.tier ? `${TIER_NAME[c.tier]} ${served}` : served;
+  const model = c.tier ? `${TIER_NAME[c.tier]} ${served}` : c.role === 'decider' ? `Decision model ${served}` : served;
   const tokens = [
     `in ${c.inputTokens ?? '?'}${c.estimated ? ' (estimated)' : ''}`,
     c.cachedTokens ? `cached ${c.cachedTokens}` : '',

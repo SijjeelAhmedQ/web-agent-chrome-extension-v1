@@ -1,5 +1,6 @@
 import { BUILT_IN_AGENTS, BUILT_IN_SITES, BUILT_IN_SKILLS, BUILT_IN_STAMP } from '../constants/builtIn';
 import { defaultConfig, DEFAULT_SETTINGS } from '../constants/defaults';
+import { DEFAULT_DECISION_MODEL, DEFAULT_PICKABLE_MODELS } from '../constants/providers';
 import { BUILT_IN_TOOL_IDS, BUILT_IN_TOOLS, LEGACY_TOOL_IDS } from '../constants/tools';
 import type { AppConfig, KnowledgeBase, SiteProfile } from '../types/config';
 import { getItem, setItem, watchItem } from './storage';
@@ -113,6 +114,7 @@ export function normalizeConfig(raw: Partial<AppConfig> | undefined, builtIns = 
     });
   }
   config.settings.knownToolIds = BUILT_IN_TOOL_IDS;
+  moveOldDecisionModels(config);
   if (!config.agents.some((a) => a.id === config.settings.defaultAgentId)) {
     config.settings.defaultAgentId = config.agents[0].id;
   }
@@ -120,6 +122,25 @@ export function normalizeConfig(raw: Partial<AppConfig> | undefined, builtIns = 
     config.settings.defaultProviderId = config.providers[0]?.id ?? null;
   }
   return builtIns ? withBuiltIns(config) : config;
+}
+
+/**
+ * Older setups: an agent's fixed small / medium / big models (“Pick the model per task”) and its step-by-step decision
+ * model become one decision model, and those models the list it picks from — once, so the user's choice is kept.
+ */
+function moveOldDecisionModels(config: AppConfig) {
+  let list = config.settings.pickableModels;
+  config.agents = config.agents.map((a) => {
+    if (!a.autoModels && !a.decision) return a;
+    const { autoModels, decision, ...rest } = a;
+    if (autoModels && !list) {
+      list = [...new Set([autoModels.small, autoModels.medium, autoModels.big].map((m) => m.trim()).filter(Boolean))].map(
+        (id) => DEFAULT_PICKABLE_MODELS.find((m) => m.id === id) ?? { id },
+      );
+    }
+    return { ...rest, decisionModel: rest.decisionModel ?? (autoModels?.chooser.trim() || decision?.model.trim() || DEFAULT_DECISION_MODEL) };
+  });
+  if (list) config.settings.pickableModels = list;
 }
 
 /** A site profile with every field present (older or hand-edited files may miss some). */
