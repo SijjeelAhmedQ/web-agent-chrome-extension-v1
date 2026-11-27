@@ -13,7 +13,7 @@ import { meteredClient } from '../runtime/costLog';
 import { saveCrawl, type SavedCrawl } from './savedCrawl';
 import { addProposals, hostOf, type ProposedEntry } from './merge';
 import { budgetFor, pagePrompt, parseWritten, sitePrompt, type PageCapture } from './prompts';
-import { dangerOf, dummyFor, exampleIn, isSameScreen, sampleValue } from './risk';
+import { controlNames, dangerOf, dummyFor, exampleIn, fieldFormat, formName, isSameScreen, sampleValue } from './risk';
 import { isLoginUrl, isLogoutUrl, normalizeUrl, pageOfScreen, sameSite, templateOf } from './urls';
 
 /**
@@ -267,6 +267,8 @@ export class CrawlRun {
   private templates = new Set<string>();
   /** Controls clicked anywhere and what they did — a menu on every page is tried once. */
   private clickedNames = new Map<string, string>();
+  /** Each form's field formats (form → field → line), written as a rule of its own at the end. */
+  private formats = new Map<string, Map<string, string>>();
   private skipAll = new Set<string>();
   /** Screens seen (title and headings without dates): one seen again is not a new page. */
   private screens = new Set<string>();
@@ -663,6 +665,9 @@ export class CrawlRun {
     }
 
     await this.waitForContent();
+    // A pop-up left open (an earlier crawl's drawer, still filled with test values) is closed first: read with the
+    // page, its controls were taken for the page's own and its “Close drawer” emptied the rest of the visit.
+    await this.closeLeftOpen(url);
     // The whole page, not only what shows: scrolled to the end (the page and each box that scrolls — a sidebar, a
     // table), so lazy lists load and every row is seen; then read.
     const scrolled = await this.scrollThrough();
@@ -861,6 +866,9 @@ export class CrawlRun {
       const fill = !readOnly?.(el) && !el.disabled && !el.readonly;
       const label = el.label || el.name || el.placeholder || el.role;
       const required = `${el.required ? ' (required)' : ''}${el.hint ? ` (help: ${el.hint})` : ''}`;
+      // What the field takes, as it shows it (an example, a date pattern, coordinates) — kept for the form's rule.
+      const format = fieldFormat(el);
+      if (format) this.noteFormat(popup, capture, label, format, !!el.required);
       let acted = false;
       // Tick boxes, switches and radio buttons: only in a pop-up form (on a page they often save at once — settings,
       // a list's row selection), and not a table's “select all”.
@@ -957,6 +965,7 @@ export class CrawlRun {
               await this.browser.send({ kind: 'type', id: el.id, text: example, clear: true, highlight: false }).catch(() => undefined);
               typed = example;
             }
+            this.noteFormat(popup, capture, label, `${format ? `${format}; ` : ''}a word such as “${value}” is refused: “${refused}”`, !!el.required);
           }
         }
         capture.fields.push(
@@ -1305,6 +1314,15 @@ export class CrawlRun {
       );
       if (shown) await this.fillForms(shown, capture, ownField, undefined, top.title || UNTITLED);
     }
+  }
+
+  /** A field's format, under its form: the pop-up's own name (“New practice member”), or the page's. */
+  private noteFormat(popup: string | undefined, capture: PageCapture, label: string, says: string, required: boolean) {
+    const form = formName(popup && popup !== UNTITLED ? popup : '', capture.title || pathOf(capture.url));
+    const lines = this.formats.get(form) ?? new Map<string, string>();
+    const name = label.replace(/\s*\*\s*$/, '').trim();
+    lines.set(name.toLowerCase(), `- "${name}"${required ? ' (required)' : ''}: ${says}`);
+    this.formats.set(form, lines);
   }
 
   /** The text of the tab panel showing in the pop-up in front ('' when it has none). */
@@ -1693,9 +1711,21 @@ export class CrawlRun {
         content: `${this.notes.filter((n) => n.startsWith('The session ended')).join('\n')}\nWhen the sign-in page shows, stop and ask the user to sign in again, then carry on where you were.`,
       });
     }
-    const asked = [...this.clickedNames.entries()].filter(([, v]) => v.endsWith('not clicked')).map(([k]) => k);
+    // The controls' names, not the crawl's own keys for them (“/patients|reset”, “*invite user” reached the knowledge).
+    const asked = controlNames([...this.clickedNames.entries()].filter(([, v]) => v.endsWith('not clicked')).map(([k]) => k));
     if (asked.length) {
       entries.push({ kind: 'rule', title: 'Controls that change data', content: `These controls delete, save, send or sign out — ask the user before clicking them: ${asked.slice(0, 30).map((a) => `“${a}”`).join(', ')}.` });
+    }
+    // Each form's field formats, from what the fields themselves show — written here, not left to the model, which
+    // dropped OctansCare's “Location (latitude,longitude)” from a page entry it shortened.
+    // Forms with the same fields (New and Edit practice member) share one rule.
+    const byContent = new Map<string, string[]>();
+    for (const [form, lines] of this.formats) {
+      const content = [...lines.values()].join('\n');
+      byContent.set(content, [...(byContent.get(content) ?? []), form]);
+    }
+    for (const [content, forms] of byContent) {
+      entries.push({ kind: 'rule', title: `${forms.join(' / ')} — field formats`, content: `What these fields take (from the form's own examples and messages):\n${content}` });
     }
     if (entries.length) this.addWritten(entries, [], this.state.startUrl);
   }

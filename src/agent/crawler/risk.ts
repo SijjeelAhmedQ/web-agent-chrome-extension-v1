@@ -84,6 +84,44 @@ export function dummyFor(el: ElementInfo, s: CrawlerSettings): string | null {
 }
 
 /**
+ * What a field takes, as the field itself shows it: coordinates (“latitude,longitude, e.g. -36.861476,174.765594”),
+ * a date pattern (“DD/MM/YYYY”), its example (“e.g. ABC1235”), or help that states a format. Null when it shows none.
+ */
+export function fieldFormat(el: Pick<ElementInfo, 'name' | 'label' | 'placeholder' | 'hint'>): string | null {
+  const ph = (el.placeholder ?? '').trim();
+  const hint = (el.hint ?? '').trim();
+  const words = `${el.name ?? ''} ${el.label ?? ''} ${ph} ${hint}`.toLowerCase();
+  const example = exampleIn(ph) ?? exampleIn(hint) ?? sampleValue(ph);
+  const pair = /^-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+$/.test(example ?? '');
+  if (pair || /latitude|longitude|co-?ordinates|\bgps\b|geo ?location/.test(words)) return `latitude,longitude${example ? `, e.g. ${example}` : ''}`;
+  const date = `${ph} ${hint}`.match(/\b(?:dd|mm|yyyy|yy)(?:\s*[/.\-]\s*(?:dd|mm|yyyy|yy)){1,2}\b/i)?.[0];
+  if (date) return date.toUpperCase().replace(/\s+/g, '');
+  if (example) return `e.g. ${example}`;
+  if (hint && hint.length <= 160 && /\b(format|digits?|characters?|letters?|must|only)\b/i.test(hint)) return hint;
+  return null;
+}
+
+/** A pop-up's own name from its title (“Practice membersNew practice member” → “New practice member”), else the page's. */
+export function formName(popupTitle: string, pageTitle: string): string {
+  const parts = popupTitle.replace(/(\p{Ll})(\p{Lu})/gu, '$1 › $2').split(/\s*[›>]\s*/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length) return parts[parts.length - 1];
+  return pageTitle.split(/\s+[·|–—-]\s+/)[0].trim() || 'Page';
+}
+
+/** Controls' names from the crawl's keys for them (“/patients|reset”, “*invite user”): each once, readable. */
+export function controlNames(keys: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const k of keys) {
+    const name = k.replace(/^\*/, '').replace(/^.*\|/, '').trim();
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    out.push(name.charAt(0).toUpperCase() + name.slice(1));
+  }
+  return out;
+}
+
+/**
  * A placeholder that is itself a sample value, with no “e.g.” before it: “-36.8485, 174.7633”, “021 555 0100”,
  * “ABC1235”. Digits and the marks values have, and no word of four letters or more — “Search 50 items” is not one.
  */

@@ -28,3 +28,22 @@ describe('test values the form asks for', () => {
     expect(dummyFor(field({ name: 'Notes', placeholder: 'Anything else?' }), DEFAULT_CRAWLER)).toBe(DEFAULT_CRAWLER.text);
   });
 });
+
+describe('field formats kept for the knowledge', () => {
+  it('reads what a field takes from the field itself', async () => {
+    const { fieldFormat } = await import('./crawler/risk');
+    expect(fieldFormat({ name: 'Location', placeholder: '-36.861476,174.765594' })).toBe('latitude,longitude, e.g. -36.861476,174.765594');
+    expect(fieldFormat({ name: 'Location', hint: 'Use latitude,longitude' })).toBe('latitude,longitude');
+    expect(fieldFormat({ name: 'Date of Birth', placeholder: 'DD/MM/YYYY' })).toBe('DD/MM/YYYY');
+    expect(fieldFormat({ name: 'NHI Number', placeholder: 'e.g. ABC1235' })).toBe('e.g. ABC1235');
+    expect(fieldFormat({ name: 'Postal Code', hint: 'Must be 4 digits' })).toBe('Must be 4 digits');
+    expect(fieldFormat({ name: 'First Name', placeholder: 'First name' })).toBeNull();
+  });
+
+  it('names a pop-up’s form and the controls by their own names', async () => {
+    const { controlNames, formName } = await import('./crawler/risk');
+    expect(formName('Practice membersNew practice member', 'Practice members · Octans')).toBe('New practice member');
+    expect(formName('', 'Practice members · Octans')).toBe('Practice members');
+    expect(controlNames(['/patients|reset', '*reset', '/|invite user', '*invite user', '/patients|book appointment'])).toEqual(['Reset', 'Invite user', 'Book appointment']);
+  });
+});
