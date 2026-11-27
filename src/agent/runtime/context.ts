@@ -274,3 +274,25 @@ export function budgetFor(contextTokens: number | undefined): number {
 export function clipToolOutput(text: string): string {
   return text.length > MAX_TOOL_CHARS ? `${text.slice(0, MAX_TOOL_CHARS)}\n[…output truncated]` : text;
 }
+
+/** Tools whose results are what a task reads as data (records, tables), not steps along the way. */
+export const DATA_TOOLS = new Set(['read_records', 'read_table']);
+/** A part of the site's knowledge about how to write an answer — what the writer of an analysis keeps of it. */
+const ABOUT_ANSWERS = /\b(answer|reply|summar\w*|analys[ie]s|report\w*|trends?)\b/i;
+
+/**
+ * What the model that writes an analysis gets: what was read, not how the site is worked. The site's knowledge
+ * (its pages, menus, workflows: ~4k tokens) is cut to the parts about answers; with a table or records read, the
+ * page reads go (the data is in those). A Stations count was written from 10k tokens, 4k of them knowledge.
+ */
+export function forTheWriter(messages: ChatMessage[], contextHead: string): ChatMessage[] {
+  const hasData = messages.some((m) => m.role === 'tool' && DATA_TOOLS.has(m.toolName ?? ''));
+  return messages.map((m) => {
+    if (m.role === 'user' && m.content.startsWith(contextHead)) {
+      const parts = m.content.split(/\n(?=### )/);
+      const kept = parts.slice(1).filter((p) => ABOUT_ANSWERS.test(p.split('\n')[0]) || ABOUT_ANSWERS.test(p.slice(0, 600)));
+      return { ...m, content: [`${contextHead} [the site's knowledge: only what it says about answers]`, ...kept].join('\n') };
+    }
+    return hasData && isFullRead(m) ? withoutPage(m) : m;
+  });
+}

@@ -115,8 +115,8 @@ export function SidePanel() {
   /** The last request came by voice: its approval questions are asked aloud too. */
   const byVoice = useRef(false);
 
-  /** “Open stations”: straight to the page the site's map knows, with no model — shown in the chat like any request. */
-  const goByVoice = (text: string): boolean => {
+  /** “Open stations”, said or typed: straight to the page the site's map knows, with no model (0 tokens) — shown in the chat like any request. */
+  const goDirect = (text: string): boolean => {
     const kb = knowledgeBaseFor(config, tab.url);
     if (!kb || tab.id == null || tab.restricted || siteMode === 'blocked') return false;
     const target = matchNavigation(text, navTargets(kb));
@@ -140,7 +140,7 @@ export function SidePanel() {
       }),
     );
     setView('chat');
-    speak(`Opening ${target.label}.`);
+    if (byVoice.current) speak(`Opening ${target.label}.`);
     return true;
   };
 
@@ -176,7 +176,7 @@ export function SidePanel() {
       default:
         byVoice.current = true;
         if (running) setQueued((q) => [...q, intent.text]);
-        else if (!goByVoice(intent.text)) onSend(intent.text);
+        else if (!goDirect(intent.text)) onSend(intent.text);
     }
   };
 
@@ -306,7 +306,7 @@ export function SidePanel() {
             </button>
           </div>
         )}
-        <Composer ref={composer} tab={tab} running={running} disabled={crawler.active} siteMode={siteMode} voice={settings.voice} onSend={(t) => { byVoice.current = false; onSend(t); }} onStop={stop} onVoiceCommand={onVoiceCommand} approvalPending={pendingApprovals.length > 0} />
+        <Composer ref={composer} tab={tab} running={running} disabled={crawler.active} siteMode={siteMode} voice={settings.voice} onSend={(t) => { byVoice.current = false; if (!running && goDirect(t)) return; onSend(t); }} onStop={stop} onVoiceCommand={onVoiceCommand} approvalPending={pendingApprovals.length > 0} />
       </footer>
     </div>
   );

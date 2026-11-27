@@ -18,7 +18,7 @@ import { buildSystemPrompt, buildTaskContext, TASK_CONTEXT } from '../planner/sy
 import { activeKnowledge, formatEntry, knowledgeBudget, knowledgeSection, PAGE_KNOWLEDGE, pageEntriesAt, partForHere } from '../planner/siteKnowledge';
 import { buildToolset, sitesFor, toolSpecs } from '../tools/registry';
 import { ElementMemory, type AgentTool, type ApprovalRequest, type ToolContext, type ToolOutcome } from '../tools/types';
-import { APPROVED_DONE, budgetFor, CHECKLIST_HEAD, clipToolOutput, compactMessages, dropEarlierPages, estimateTokens, FIRST_PAGE, isFullRead, isPageRead, PAGE_AFTER, pageIn, retireEarlierPages } from './context';
+import { APPROVED_DONE, budgetFor, CHECKLIST_HEAD, clipToolOutput, compactMessages, DATA_TOOLS, dropEarlierPages, forTheWriter, estimateTokens, FIRST_PAGE, isFullRead, isPageRead, PAGE_AFTER, pageIn, retireEarlierPages } from './context';
 import type { ApprovalAnswer, ApprovalPrompt, RunEvent } from './events';
 import { asksUser, followUpOf, historyForModel, withoutStoppedList } from './followUp';
 import { askUserTool } from './askUser';
@@ -966,7 +966,7 @@ export class AgentRun {
         purpose,
         messages: [
           { role: 'system', content: system },
-          { role: 'user', content: decisionTranscript(compactMessages(messages, room), this.checklist.section(), `${WRITE_ANALYSIS}${draft ? `\n\nWhat the model that did the steps said:\n${draft}` : ''}`) },
+          { role: 'user', content: decisionTranscript(compactMessages(forTheWriter(messages, TASK_CONTEXT), room), this.checklist.section(), `${WRITE_ANALYSIS}${draft ? `\n\nWhat the model that did the steps said:\n${draft}` : ''}`) },
         ],
         tools: [],
         temperature,
@@ -1704,8 +1704,6 @@ export function decisionTranscript(messages: ChatMessage[], checklist = '', clos
 }
 /** Characters of an older step's result the decision model reads. */
 const DECIDER_OLD_RESULT = 800;
-/** Tools whose results are what the task gathers (records, tables), not steps along the way. */
-const DATA_TOOLS = new Set(['read_records', 'read_table']);
 
 /** To the agent's model, when the decision model has decided to answer: it writes the answer, it takes no step. */
 const ANSWER_PROMPT =

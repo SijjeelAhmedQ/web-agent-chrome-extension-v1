@@ -204,3 +204,26 @@ Tried on a real add and a real edit (a test member, Hana Whitfield, with a valid
 T6 filled all seven as asked, did not save, and said Date of Birth (required) was not given. Still slow and left for
 later: a click that shows no change is given 3–4 s in case the app answers late (“Unselect “SMS”” took 4.3 s) —
 kept for slow apps such as Indici.
+
+## The decision model's tasks — 27 Nov 2026
+
+With the agent's Decision model on (Jev Router picking from Models → Models the decision model picks from), three
+tasks were measured, then again after three changes:
+
+- **The writer of an analysis gets what was read, not how the site is worked.** It was sent the site's knowledge
+  (4,096 tokens of pages, menus and workflows), the browser rules and every page read: 10,209 tokens for “19”. Now the
+  knowledge is cut to what it says about answers, and with a table or records read the page reads go. The decision
+  model is also told that a count or a value the data shows needs only the cheapest model.
+- **Typed navigation with no model.** “Open stations”, typed as well as said, goes straight to the page the site's
+  map knows — what voice already did.
+- **No duplicate search when nothing is saved.** “Fill the form, do not save it” searched for the person first,
+  closing and reopening the form.
+
+| Task | Before | After |
+|---|---|---|
+| Open Stations, how many in Steiner Wing (analysis) | 5 calls, $0.011 (writing the answer $0.0087) | 5 calls, **$0.0033** (writing it $0.00025) — right: 19 |
+| Open practice members (typed) | 2 calls, $0.0028 | **no call, $0** |
+| Add practice member form, fill Token Bench, don't save | 7 calls, $0.0045 | **4 calls, $0.0030** |
+
+The decision model's own pick costs $0.00004–0.00026 a task. With Claude Haiku as the decision model in place of Jev
+Router, the Tags count was right (24 active) and the pick cost $0.00004.

@@ -90,7 +90,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     ...(small || !canAct
       ? []
       : [
-          `- Before adding a new person (a patient, member, client, contact…), search the list for them first — by name, and date of birth or another ID when given. If they are already there, don’t add them again: ${has('ask_user') ? 'call ask_user with what you found (e.g. options "Open the one there", "Add another anyway")' : 'tell the user what you found and ask'}. Add a second one only when the user says so.`,
+          `- Before adding a new person (a patient, member, client, contact…), search the list for them first — by name, and date of birth or another ID when given. If they are already there, don’t add them again: ${has('ask_user') ? 'call ask_user with what you found (e.g. options "Open the one there", "Add another anyway")' : 'tell the user what you found and ask'}. Add a second one only when the user says so. Only fill the form, without saving (the user said not to save): no search — nothing is added.`,
         ]),
     // A form's Location got coordinates the user never gave; a member got a made-up phone number.
     `- Never make up a value the user didn’t give (names, phone numbers, dates, addresses, coordinates, IDs). When the request is ambiguous or a value you need is missing — a required field, which of several records — ${has('ask_user') && !small ? 'call ask_user: the task waits for the answer and goes on' : 'ask the user a short question'}. A field that isn’t required and wasn’t given stays empty.`,

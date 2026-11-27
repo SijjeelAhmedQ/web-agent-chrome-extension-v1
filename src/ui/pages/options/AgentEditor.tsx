@@ -2,6 +2,8 @@ import { AutoComplete, Button, Checkbox, Drawer, Input, InputNumber, Select, Sli
 import { RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/agent/llm';
+import { fetchOpenRouterModels, type OpenRouterModel } from '@/agent/llm/openRouterModels';
+import { describePrice } from '@/agent/runtime/modelRoute';
 import { AGENT_COLORS, AGENT_ICONS } from '@/shared/constants/defaults';
 import { BUILT_IN_TOOLS, CUSTOM_PREFIX, TOOL_CATEGORIES, type ToolCategory } from '@/shared/constants/tools';
 import { DEFAULT_DECISION_MODEL, DEFAULT_PICKABLE_MODELS, knownModel, OPENROUTER_MODELS, presetById } from '@/shared/constants/providers';
@@ -12,6 +14,15 @@ import { AgentAvatar } from '../../components/Brand';
 import { NamedIcon } from '../../components/icons';
 import { Accordion, FitList, useFitMode } from './layout';
 import { FieldLabel } from './parts';
+
+/** The decision model's choices: the known ones first, then every OpenRouter model with its price. */
+function decisionOptions(listed: OpenRouterModel[], loaded: string[]) {
+  const known = OPENROUTER_MODELS.map((m) => ({ value: m.id, label: `${m.label} — ${m.id}` }));
+  const rest = listed.length
+    ? listed.map((m) => ({ value: m.id, label: `${m.name} — ${m.id} · ${describePrice(m.price)}` }))
+    : loaded.map((m) => ({ value: m, label: m }));
+  return [...known, ...rest.filter((r) => !known.some((k) => k.value === r.value))];
+}
 
 interface Props {
   agent: AgentConfig | null;
@@ -39,6 +50,8 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
   const [models, setModels] = useState<string[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
+  // Every OpenRouter model, with its price, for the decision model: any can decide, not only Jev Router.
+  const [routerModels, setRouterModels] = useState<OpenRouterModel[]>([]);
   const fit = useFitMode();
 
   useEffect(() => {
@@ -72,6 +85,7 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
     }
   };
 
+  const onRouter = !!provider && /openrouter\.ai/.test(provider.baseUrl);
   const pickCount = (settings.pickableModels ?? DEFAULT_PICKABLE_MODELS).filter((m) => m.id.trim()).length;
   const categories = Object.keys(TOOL_CATEGORIES) as ToolCategory[];
   const toolCount = draft.toolIds.length;
@@ -236,15 +250,18 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
                         onBlur={() => {
                           if (!draft.decisionModel?.trim()) set({ decisionModel: DEFAULT_DECISION_MODEL });
                         }}
-                        options={[...new Set([...OPENROUTER_MODELS.map((m) => m.id), ...models])].map((m) => ({ value: m, label: knownModel(m) ? `${knownModel(m)!.label} — ${m}` : m }))}
-                        filterOption={(input, option) => (option?.value ?? '').toLowerCase().includes(input.toLowerCase())}
+                        options={decisionOptions(routerModels, models)}
+                        onFocus={() => {
+                          if (onRouter && !routerModels.length) void fetchOpenRouterModels(provider!).then(setRouterModels, () => undefined);
+                        }}
+                        filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
                         placeholder={DEFAULT_DECISION_MODEL}
                         aria-label="Decision model"
                       />
                     )}
                   </div>
                   <div className="field-help">
-                    On: for each task it picks the model that does it — the cheapest that will do it right — from the {pickCount} model{pickCount === 1 ? '' : 's'} in{' '}
+                    Jev Router by default — any OpenRouter model can decide instead: clear the box to see them all, with their prices. On: for each task it picks the model that does it — the cheapest that will do it right — from the {pickCount} model{pickCount === 1 ? '' : 's'} in{' '}
                     <a href="#/models" onClick={onClose}>
                       Models → Models the decision model picks from
                     </a>

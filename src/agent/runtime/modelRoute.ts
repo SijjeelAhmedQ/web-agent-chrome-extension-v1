@@ -48,7 +48,8 @@ export function describePrice(price: PickableModel['price']): string {
 }
 
 const JOB: Record<'analysis' | 'judged' | 'stuck', string> = {
-  analysis: 'The page data is already read by another model; the one you pick writes the analysis from it (summaries, trends, comparing, explaining). Pick one strong enough to get it right.',
+  analysis:
+    'The page data is already read by another model; the one you pick only writes the answer from it — it takes no steps. A count, a total or a value the data already shows (e.g. “how many”, “what is”) needs little: pick the cheapest. Summaries, trends, comparing records or explaining results need a strong one.',
   judged: 'The model you pick does the whole task in a web app with tools (read the page, click, type, fill forms, save). Pick the cheapest one that will do it right: going to pages and simple reading need little; filling forms and saving records need care.',
   stuck: 'The model that started this task got stuck. The one you pick carries on from where it is: pick one stronger than it.',
 };
