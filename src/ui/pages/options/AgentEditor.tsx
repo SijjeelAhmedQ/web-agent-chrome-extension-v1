@@ -15,12 +15,18 @@ import { NamedIcon } from '../../components/icons';
 import { Accordion, FitList, useFitMode } from './layout';
 import { FieldLabel } from './parts';
 
-/** The decision model's choices: the known ones first, then every OpenRouter model with its price. */
-function decisionOptions(listed: OpenRouterModel[], loaded: string[]) {
-  const known = OPENROUTER_MODELS.map((m) => ({ value: m.id, label: `${m.label} — ${m.id}` }));
-  const rest = listed.length
-    ? listed.map((m) => ({ value: m.id, label: `${m.name} — ${m.id} · ${describePrice(m.price)}` }))
-    : loaded.map((m) => ({ value: m, label: m }));
+/**
+ * A model field's choices: the ones we know first, then every model the server lists — on OpenRouter each with its
+ * price (from OpenRouter's list), so the cheaper one can be chosen.
+ */
+function modelOptions(knownIds: string[], listed: OpenRouterModel[], loaded: string[]) {
+  // A model OpenRouter lists with no price (Jev Router: “-1”) costs what the model it routes to costs.
+  const price = (id: string) => {
+    const found = listed.find((m) => m.id === id);
+    return !found ? '' : ` · ${found.price ? describePrice(found.price) : 'price varies by request'}`;
+  };
+  const known = knownIds.map((id) => ({ value: id, label: `${knownModel(id) ? `${knownModel(id)!.label} — ` : ''}${id}${price(id)}` }));
+  const rest = listed.length ? listed.map((m) => ({ value: m.id, label: `${m.name} — ${m.id}${price(m.id)}` })) : loaded.map((m) => ({ value: m, label: m }));
   return [...known, ...rest.filter((r) => !known.some((k) => k.value === r.value))];
 }
 
@@ -66,6 +72,20 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
     return providers.find((p) => p.id === draft.providerId) ?? providers.find((p) => p.id === settings.defaultProviderId) ?? providers[0];
   }, [draft, providers, settings.defaultProviderId]);
 
+  // On OpenRouter: every model it lists, with its price, for the Model and Decision model fields.
+  const routerUrl = provider && /openrouter\.ai/.test(provider.baseUrl) ? provider.baseUrl : null;
+  useEffect(() => {
+    if (!agent || !routerUrl) return;
+    let gone = false;
+    void fetchOpenRouterModels({ baseUrl: routerUrl }).then(
+      (list) => !gone && setRouterModels(list),
+      () => undefined,
+    );
+    return () => {
+      gone = true;
+    };
+  }, [agent, routerUrl]);
+
   if (!draft) return <Drawer open={false} />;
 
   const set = (patch: Partial<AgentConfig>) => setDraft((d) => (d ? { ...d, ...patch } : d));
@@ -85,7 +105,6 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
     }
   };
 
-  const onRouter = !!provider && /openrouter\.ai/.test(provider.baseUrl);
   const pickCount = (settings.pickableModels ?? DEFAULT_PICKABLE_MODELS).filter((m) => m.id.trim()).length;
   const categories = Object.keys(TOOL_CATEGORIES) as ToolCategory[];
   const toolCount = draft.toolIds.length;
@@ -218,11 +237,8 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
                       style={{ flex: 1 }}
                       value={draft.model}
                       onChange={(v) => set({ model: v })}
-                      options={[...new Set([...(provider ? presetById(provider.preset).models?.map((m) => m.id) ?? [] : []), ...models])].map((m) => ({
-                        value: m,
-                        label: knownModel(m) ? `${knownModel(m)!.label} — ${m}` : m,
-                      }))}
-                      filterOption={(input, option) => (option?.value ?? '').toLowerCase().includes(input.toLowerCase())}
+                      options={modelOptions(provider ? (presetById(provider.preset).models ?? []).map((m) => m.id) : [], routerModels, models)}
+                      filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
                       placeholder={provider?.defaultModel || 'Model name'}
                       allowClear
                     />
@@ -250,10 +266,7 @@ export function AgentEditor({ agent, isNew, onClose, onSave }: Props) {
                         onBlur={() => {
                           if (!draft.decisionModel?.trim()) set({ decisionModel: DEFAULT_DECISION_MODEL });
                         }}
-                        options={decisionOptions(routerModels, models)}
-                        onFocus={() => {
-                          if (onRouter && !routerModels.length) void fetchOpenRouterModels(provider!).then(setRouterModels, () => undefined);
-                        }}
+                        options={modelOptions(OPENROUTER_MODELS.map((m) => m.id), routerModels, models)}
                         filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
                         placeholder={DEFAULT_DECISION_MODEL}
                         aria-label="Decision model"
