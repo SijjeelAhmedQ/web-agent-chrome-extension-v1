@@ -62,9 +62,12 @@ export function dummyFor(el: ElementInfo, s: CrawlerSettings): string | null {
   if (el.value && el.value.trim()) return null;
   // The field shows an example of what it takes — in it (“e.g. ABC1235”) or in its help under it (“Use latitude,
   // longitude, e.g. -36.8485,174.7633”): that is the test value, not a word it would refuse.
-  const example = exampleIn(el.placeholder ?? '') ?? exampleIn(el.hint ?? '');
+  const example = exampleIn(el.placeholder ?? '') ?? exampleIn(el.hint ?? '') ?? sampleValue(el.placeholder ?? '');
   if (example && el.type !== 'password') return example;
   const words = `${el.name} ${el.label ?? ''} ${el.placeholder ?? ''}`.toLowerCase();
+  // Coordinates asked for by name or help (“Location — latitude,longitude”): a real pair, never a word — OctansCare's
+  // Location field refused “Test” on every crawl.
+  if (/latitude|longitude|\blat\b[^a-z]{0,3}\b(long|lng|lon)\b|co-?ordinates|\bgps\b|geo ?location/.test(`${words} ${(el.hint ?? '').toLowerCase()}`)) return '-36.8485,174.7633';
   const type = (el.type ?? '').toLowerCase();
   // The field's type says it first (any language); then its words.
   if (type === 'email' || /e-?mail/.test(words)) return s.email;
@@ -78,6 +81,17 @@ export function dummyFor(el: ElementInfo, s: CrawlerSettings): string | null {
   if (/\b(first|last|full|sur|user)?\s*name\b/.test(words)) return s.name;
   if (/\b(age|qty|quantity|amount|count|number)\b/.test(words)) return s.number;
   return s.text;
+}
+
+/**
+ * A placeholder that is itself a sample value, with no “e.g.” before it: “-36.8485, 174.7633”, “021 555 0100”,
+ * “ABC1235”. Digits and the marks values have, and no word of four letters or more — “Search 50 items” is not one.
+ */
+export function sampleValue(placeholder: string): string | null {
+  const t = placeholder.trim();
+  if (!t || t.length > 40 || !/\d/.test(t)) return null;
+  if (!/^[\p{L}\d\s.,:;+\-–/()#@_]+$/u.test(t) || /\p{L}{4,}/u.test(t)) return null;
+  return t;
 }
 
 /**

@@ -59,6 +59,19 @@ neverClick: only buttons that are destructive and irreversible here (e.g. "Delet
 const clip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
 const section = (title: string, lines: string[], max: number) => (lines.length ? `${title}:\n${clip(lines.join('\n'), max)}\n` : '');
 
+/**
+ * Lines that share the room: each kept whole while all fit, else each cut to its share — the first ones don't
+ * crowd out the rest (a page's 17 pop-up lines: the “New practice member” drawer's tabs came last and were cut off).
+ */
+const fairSection = (title: string, lines: string[], max: number) => {
+  if (!lines.length) return '';
+  const whole = lines.join('\n');
+  if (whole.length <= max) return `${title}:\n${whole}\n`;
+  const short = lines.filter((l) => l.length <= max / lines.length);
+  const room = Math.max(160, Math.floor((max - short.reduce((n, l) => n + l.length + 1, 0)) / Math.max(1, lines.length - short.length)));
+  return `${title}:\n${lines.map((l) => (l.length <= max / lines.length ? l : clip(l, room))).join('\n')}\n`;
+};
+
 /** The page as the model reads it, within `budget` characters. */
 export function describePage(p: PageCapture, budget: number): string {
   const b = Math.max(3000, budget);
@@ -73,7 +86,7 @@ export function describePage(p: PageCapture, budget: number): string {
     section('Saving forms with test values (what each form requires)', p.dialogs.filter((d) => d.startsWith('Saving ')), b * 0.1),
     section('Calls to the server (what the site saves, and what it refuses)', p.api ?? [], b * 0.08),
     section('Form fields (dropdowns with their choices)', [...new Set(p.fields)], b * 0.2),
-    section('Pop-ups', p.dialogs.filter((d) => !d.startsWith('Saving ')), b * 0.12),
+    fairSection('Pop-ups', p.dialogs.filter((d) => !d.startsWith('Saving ')), b * 0.12),
     section('Controls', p.controls, b * 0.22),
     section('What clicking showed', p.clicks, b * 0.14),
     p.text ? `Text on the page:\n${clip(p.text, b * 0.14)}` : '',

@@ -13,7 +13,7 @@ import { meteredClient } from '../runtime/costLog';
 import { saveCrawl, type SavedCrawl } from './savedCrawl';
 import { addProposals, hostOf, type ProposedEntry } from './merge';
 import { budgetFor, pagePrompt, parseWritten, sitePrompt, type PageCapture } from './prompts';
-import { dangerOf, dummyFor, exampleIn, isSameScreen } from './risk';
+import { dangerOf, dummyFor, exampleIn, isSameScreen, sampleValue } from './risk';
 import { isLoginUrl, isLogoutUrl, normalizeUrl, pageOfScreen, sameSite, templateOf } from './urls';
 
 /**
@@ -942,7 +942,26 @@ export class CrawlRun {
       try {
         this.set({ doing: `Typing a test value into “${label}”` });
         await this.browser.send({ kind: 'type', id: el.id, text: value, clear: false, highlight: this.o.config.settings.highlightActions });
-        capture.fields.push(`${el.type === 'password' ? 'password' : el.role} “${label}”${required} — test value typed: ${el.type === 'password' ? '••••' : value}`);
+        const asks = [el.placeholder && `placeholder “${el.placeholder}”`, el.hint && `help “${el.hint}”`].filter(Boolean).join('; ');
+        // The plain “Test” refused (“Use latitude,longitude, e.g. …” under OctansCare's Location): what the field
+        // says is kept — the form's format — and its own example is typed in place of the word.
+        let refused = '';
+        let typed = value;
+        if (value === this.s.text) {
+          await sleep(300, this.abort.signal);
+          const after = (await this.read().catch(() => null))?.elements.find((e) => e.id === el.id);
+          if (after?.invalid || (after?.hint && after.hint !== el.hint)) {
+            refused = after.hint || 'marked wrong';
+            const example = exampleIn(after.hint ?? '') ?? sampleValue(el.placeholder ?? '');
+            if (example) {
+              await this.browser.send({ kind: 'type', id: el.id, text: example, clear: true, highlight: false }).catch(() => undefined);
+              typed = example;
+            }
+          }
+        }
+        capture.fields.push(
+          `${el.type === 'password' ? 'password' : el.role} “${label}”${required}${asks ? ` (${asks})` : ''} — test value typed: ${el.type === 'password' ? '••••' : typed}${refused ? ` (it refused “${value}”: ${refused})` : ''}`,
+        );
         filled++;
         await this.closeStray(popup, capture, `“${label}”`);
       } catch {
@@ -1201,6 +1220,9 @@ export class CrawlRun {
           return `opens the pop-up “${top.title || 'untitled'}”; it saves even when empty`;
         }
         if (inside) await this.fillForms(inside, capture, ownField, undefined, top.title || UNTITLED);
+        // The pop-up's own tabs (Profile · Tags · Notes…): each opened and read too — only the one showing was, and
+        // the “New practice member” drawer's Tags tab never reached the knowledge.
+        if (inside) await this.popupTabs(top, inside, ownField, capture);
         const saved = this.s.trySaving && inside && depth === 0 ? await this.trySave(top, inside, capture) : null;
         if (saved) capture.dialogs.push(saved);
         if (saved?.includes('it closed')) return `opens the pop-up “${top.title || 'untitled'}”; saving it with test values worked`;
@@ -1235,6 +1257,69 @@ export class CrawlRun {
     } finally {
       watcher.stop();
     }
+  }
+
+  /**
+   * A pop-up's other tabs: each clicked, what it shows read (its fields, buttons and text), and its fields filled with
+   * test values as the first tab's were — never saved. A tab whose name asks first (delete, send…) is left alone.
+   */
+  private async popupTabs(top: DialogInfo, inside: PageSnapshot, ownField: (e: ElementInfo) => boolean, capture: PageCapture) {
+    const title = top.title || 'Pop-up';
+    const allTabs = inside.elements.filter((e) => e.role === 'tab' && ownField(e) && e.name.trim());
+    const tabs = allTabs.filter((e) => !e.selected && !e.disabled).slice(0, 6);
+    // Each tab's text without what every tab shows (the pop-up's header, its row of tab names): only its own.
+    const run = allTabs.map((t) => t.name.trim()).join(' ');
+    const ownText = (text: string) => {
+      const flat = text.replace(/\s+/g, ' ').trim();
+      const at = run ? flat.indexOf(run) : -1;
+      return (at >= 0 ? flat.slice(at + run.length) : flat).trim();
+    };
+    for (const tab of tabs) {
+      if (this.stopping) return;
+      const why = dangerOf(tab, this.s.askWords);
+      if (why) {
+        capture.clicks.push(`“${title}” › tab “${tab.name}”: ${why} — not clicked`);
+        continue;
+      }
+      await this.gate();
+      this.set({ doing: `Opening the “${tab.name}” tab of “${title}”` });
+      const id = await this.idFor(tab);
+      if (id === null) continue;
+      const clicked = await this.browser.send({ kind: 'click', id, highlight: this.o.config.settings.highlightActions }).then(() => true).catch(() => false);
+      if (!clicked) continue;
+      await sleep(500, this.abort.signal);
+      const { dialogs } = await this.browser.send({ kind: 'dialogs', waitMs: 200 }).catch(() => ({ dialogs: [] as DialogInfo[] }));
+      const now = dialogs.find((d) => d.onTop) ?? dialogs[dialogs.length - 1];
+      // The tab closed the pop-up (or went elsewhere): nothing more to read in it.
+      if (!now || (top.title && now.title !== top.title)) return;
+      const shown = await this.read().catch(() => null);
+      const own = (shown?.elements ?? []).filter(ownField);
+      const controls = own
+        .filter((e) => e.role !== 'tab' && e.name.trim())
+        .slice(0, 25)
+        .map((e) => `${e.role} “${e.name.trim()}”`);
+      // The tab's own panel, read whole: the pop-up's text comes clipped, mostly its header.
+      const panel = await this.tabPanelText().catch(() => '');
+      capture.dialogs.push(
+        `“${title}” › “${tab.name.trim()}” tab: ${(panel || ownText(now.text || '')).slice(0, 500) || '(nothing but the pop-up’s own buttons)'}${now.form?.length ? `\n  fields: ${now.form.slice(0, 15).join('; ')}` : ''}${controls.length ? `\n  controls: ${controls.join(', ')}` : ''}`,
+      );
+      if (shown) await this.fillForms(shown, capture, ownField, undefined, top.title || UNTITLED);
+    }
+  }
+
+  /** The text of the tab panel showing in the pop-up in front ('' when it has none). */
+  private async tabPanelText(): Promise<string> {
+    const tab = await this.browser.currentTab();
+    const [r] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id!, frameIds: [0] },
+      func: () => {
+        const shown = Array.from(document.querySelectorAll('dialog[open],[role=dialog],[role=alertdialog],[aria-modal=true],.modal.show,.modal.in,.ui-dialog')).filter((d) => d.getClientRects().length);
+        const dialog = shown[shown.length - 1];
+        const panel = Array.from((dialog ?? document).querySelectorAll('[role=tabpanel]')).find((p) => p.getClientRects().length && !(p as HTMLElement).hidden);
+        return panel ? ((panel as HTMLElement).innerText ?? '').replace(/\s+/g, ' ').trim().slice(0, 800) : '';
+      },
+    });
+    return (r?.result as string) ?? '';
   }
 
   /** A menu's items that are not links: each one tried (links are visited as pages anyway). */
